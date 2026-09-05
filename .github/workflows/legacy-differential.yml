@@ -9,9 +9,13 @@ on:
       - tests/legacy-binary/hotkeySKG.ahk.gpg.asc
       - .github/workflows/legacy-differential.yml
       - tools/analyze-legacy-compatibility.py
+      - tools/apply-scenario-coverage.py
+      - tools/validate-scenario-inventory-links.py
       - tests/compatibility/coverage-rules.json
       - config/hotkeySKG.behavior.json
       - tests/iKeyd.Compatibility.Tests/Scenarios/**
+      - tests/iKeyd.Compatibility.Tests/ScenarioInventoryLinks.json
+      - tests/iKeyd.Windows.Tests/LegacyDifferentialComparison.cs
       - tests/iKeyd.Windows.Tests/HostedTModeLegacyRunner.cs
       - tests/iKeyd.Windows.Tests/HostedLegacyDifferentialTests.cs
       - tests/iKeyd.Windows.Tests/HostedAutoHotkeySourceRunner.cs
@@ -118,12 +122,27 @@ jobs:
           $ErrorActionPreference = 'Stop'
           $outputDir = Join-Path $PWD 'TestResults\compatibility-inventory'
           New-Item -ItemType Directory -Force -Path $outputDir | Out-Null
+          $matrix = Join-Path $outputDir 'compatibility-matrix.json'
+          $markdown = Join-Path $outputDir 'compatibility-matrix.md'
           python tools/analyze-legacy-compatibility.py $env:IKEYD_LEGACY_AHK `
             --coverage tests/compatibility/coverage-rules.json `
             --profile config/hotkeySKG.behavior.json `
             --scenarios tests/iKeyd.Compatibility.Tests/Scenarios `
-            --json (Join-Path $outputDir 'compatibility-matrix.json') `
-            --markdown (Join-Path $outputDir 'compatibility-matrix.md')
+            --json $matrix `
+            --markdown $markdown
+
+          python tools/apply-scenario-coverage.py `
+            --matrix $matrix `
+            --scenarios tests/iKeyd.Compatibility.Tests/Scenarios `
+            --links tests/iKeyd.Compatibility.Tests/ScenarioInventoryLinks.json `
+            --markdown $markdown
+
+          python tools/validate-scenario-inventory-links.py `
+            --matrix $matrix `
+            --scenarios tests/iKeyd.Compatibility.Tests/Scenarios `
+            --links tests/iKeyd.Compatibility.Tests/ScenarioInventoryLinks.json `
+            --json (Join-Path $outputDir 'scenario-inventory-links.json') `
+            --markdown (Join-Path $outputDir 'scenario-inventory-links.md')
 
       - name: Download pinned AutoHotkey v1.1.16.05 interpreter
         id: ahk
