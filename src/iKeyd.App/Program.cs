@@ -22,8 +22,10 @@ internal static class Program
 
         try
         {
-            var configPath = GetOption(args, "--config") ?? Path.Combine(AppContext.BaseDirectory, "iKeyd.json");
-            var configuration = IKeydConfiguration.Load(configPath);
+            var explicitConfigPath = GetOption(args, "--config");
+            var configuration = explicitConfigPath is null
+                ? LoadDefaultConfiguration()
+                : IKeydConfiguration.Load(explicitConfigPath);
 
             var modeOverride = GetOption(args, "--mode");
             if (!string.IsNullOrWhiteSpace(modeOverride))
@@ -55,6 +57,19 @@ internal static class Program
                 // The mutex was not owned, for example after an early startup failure.
             }
         }
+    }
+
+    private static IKeydConfiguration LoadDefaultConfiguration()
+    {
+#if IKEYD_EMBEDDED_CONFIG
+        const string resourceName = "iKeyd.Embedded.json";
+        using var stream = typeof(Program).Assembly.GetManifestResourceStream(resourceName)
+            ?? throw new InvalidDataException($"Embedded configuration resource '{resourceName}' was not found.");
+        using var reader = new StreamReader(stream);
+        return IKeydConfiguration.Parse(reader.ReadToEnd());
+#else
+        return IKeydConfiguration.Load(Path.Combine(AppContext.BaseDirectory, "iKeyd.json"));
+#endif
     }
 
     private static string? GetOption(IReadOnlyList<string> args, string option)
