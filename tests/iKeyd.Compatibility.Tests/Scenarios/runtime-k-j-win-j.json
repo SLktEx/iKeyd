@@ -1,0 +1,21 @@
+{
+  "id": "runtime-k-j-win-j",
+  "description": "Kana toggles K layer and the next J emits Win+J.",
+  "initialState": { "mode": "S", "ime": "off", "modifiers": [] },
+  "input": [
+    { "atMs": 0, "kind": "keyDown", "key": "KANA" },
+    { "atMs": 20, "kind": "keyUp", "key": "KANA" },
+    { "atMs": 60, "kind": "keyDown", "key": "J" },
+    { "atMs": 80, "kind": "keyUp", "key": "J" }
+  ],
+  "expected": {
+    "text": "",
+    "events": [
+      { "kind": "keyDown", "key": "LWIN" },
+      { "kind": "keyDown", "key": "J" },
+      { "kind": "keyUp", "key": "J" },
+      { "kind": "keyUp", "key": "LWIN" }
+    ]
+  },
+  "tags": ["hosted-legacy", "hosted-legacy-runtime", "layer-K", "long-tail"]
+}
