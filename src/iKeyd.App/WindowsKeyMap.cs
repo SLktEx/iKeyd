@@ -76,14 +76,13 @@ internal static class WindowsKeyMap
     public static bool TryResolveNamedKey(string name, out KeyboardKey key)
     {
         var normalized = name.Trim().ToUpperInvariant();
-        ushort virtualKey;
+        if (TryResolveVirtualKeyToken(normalized, out key))
+            return true;
 
-        if (TryResolveVirtualKeyToken(normalized, out virtualKey))
-        {
-        }
-        else if (normalized.Length > 1 && normalized[0] == 'F' &&
-                 int.TryParse(normalized[1..], NumberStyles.None, CultureInfo.InvariantCulture, out var functionNumber) &&
-                 functionNumber is >= 1 and <= 12)
+        ushort virtualKey;
+        if (normalized.Length > 1 && normalized[0] == 'F' &&
+            int.TryParse(normalized[1..], NumberStyles.None, CultureInfo.InvariantCulture, out var functionNumber) &&
+            functionNumber is >= 1 and <= 12)
         {
             virtualKey = (ushort)(F1 + functionNumber - 1);
         }
@@ -162,15 +161,28 @@ internal static class WindowsKeyMap
         return true;
     }
 
-    private static bool TryResolveVirtualKeyToken(string normalized, out ushort virtualKey)
+    private static bool TryResolveVirtualKeyToken(string normalized, out KeyboardKey key)
     {
-        virtualKey = 0;
+        key = default;
         if (!normalized.StartsWith("VK", StringComparison.Ordinal) || normalized.Length < 4)
             return false;
 
         var scanIndex = normalized.IndexOf("SC", 2, StringComparison.Ordinal);
-        var hex = scanIndex >= 0 ? normalized[2..scanIndex] : normalized[2..];
-        return ushort.TryParse(hex, NumberStyles.AllowHexSpecifier, CultureInfo.InvariantCulture, out virtualKey) && virtualKey != 0;
+        var virtualKeyHex = scanIndex >= 0 ? normalized[2..scanIndex] : normalized[2..];
+        if (!ushort.TryParse(virtualKeyHex, NumberStyles.AllowHexSpecifier, CultureInfo.InvariantCulture, out var virtualKey) || virtualKey == 0)
+            return false;
+
+        ushort scanCode = 0;
+        if (scanIndex >= 0)
+        {
+            var scanHex = normalized[(scanIndex + 2)..];
+            if (scanHex.Length == 0 ||
+                !ushort.TryParse(scanHex, NumberStyles.AllowHexSpecifier, CultureInfo.InvariantCulture, out scanCode))
+                return false;
+        }
+
+        key = new KeyboardKey(virtualKey, scanCode, IsExtended(virtualKey));
+        return true;
     }
 
     private static bool IsExtended(ushort virtualKey)
