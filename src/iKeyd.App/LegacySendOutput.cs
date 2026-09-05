@@ -44,6 +44,13 @@ internal sealed class LegacySendOutput : IMacroOutput
                 index++;
             }
 
+            if (index >= legacySendText.Length)
+            {
+                FlushPlain();
+                _keyboard.SendText(legacySendText[modifierStart..]);
+                break;
+            }
+
             if (modifiers.Count == 0 && legacySendText[index] != '{')
             {
                 plain.Append(legacySendText[index]);
@@ -52,12 +59,6 @@ internal sealed class LegacySendOutput : IMacroOutput
             }
 
             FlushPlain();
-
-            if (index >= legacySendText.Length)
-            {
-                _keyboard.SendText(legacySendText[modifierStart..]);
-                break;
-            }
 
             if (legacySendText[index] == '{')
             {
