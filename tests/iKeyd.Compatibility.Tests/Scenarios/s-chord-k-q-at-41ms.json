@@ -1,0 +1,20 @@
+{
+  "id": "s-chord-k-q-at-41ms",
+  "description": "S mode K+Q no longer forms a chord after the 40ms window and falls back to the two single-stroke outputs.",
+  "initialState": {
+    "mode": "S",
+    "ime": "on",
+    "modifiers": []
+  },
+  "input": [
+    { "atMs": 0, "kind": "keyDown", "key": "K" },
+    { "atMs": 5, "kind": "keyUp", "key": "K" },
+    { "atMs": 41, "kind": "keyDown", "key": "Q" },
+    { "atMs": 46, "kind": "keyUp", "key": "Q" }
+  ],
+  "expected": {
+    "text": "i-",
+    "events": []
+  },
+  "tags": ["legacy", "chord", "boundary", "fallback"]
+}

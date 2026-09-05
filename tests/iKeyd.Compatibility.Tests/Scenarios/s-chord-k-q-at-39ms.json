@@ -1,0 +1,20 @@
+{
+  "id": "s-chord-k-q-at-39ms",
+  "description": "S mode K+Q resolves as the legacy fa chord inside the 40ms window.",
+  "initialState": {
+    "mode": "S",
+    "ime": "on",
+    "modifiers": []
+  },
+  "input": [
+    { "atMs": 0, "kind": "keyDown", "key": "K" },
+    { "atMs": 5, "kind": "keyUp", "key": "K" },
+    { "atMs": 39, "kind": "keyDown", "key": "Q" },
+    { "atMs": 44, "kind": "keyUp", "key": "Q" }
+  ],
+  "expected": {
+    "text": "fa",
+    "events": []
+  },
+  "tags": ["legacy", "chord", "boundary"]
+}

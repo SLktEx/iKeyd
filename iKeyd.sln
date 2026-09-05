@@ -12,6 +12,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "iKeyd.Windows.Tests", "test
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "iKeyd.LegacySpec.Tests", "tests\\iKeyd.LegacySpec.Tests\\iKeyd.LegacySpec.Tests.csproj", "{16CF9706-436B-42FB-94C8-99E50457A819}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "iKeyd.Compatibility.Tests", "tests\\iKeyd.Compatibility.Tests\\iKeyd.Compatibility.Tests.csproj", "{A33B2474-EAB7-4C60-9FB5-1F6EA4D8488D}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -38,5 +40,9 @@ Global
 		{16CF9706-436B-42FB-94C8-99E50457A819}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{16CF9706-436B-42FB-94C8-99E50457A819}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{16CF9706-436B-42FB-94C8-99E50457A819}.Release|Any CPU.Build.0 = Release|Any CPU
+		{A33B2474-EAB7-4C60-9FB5-1F6EA4D8488D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A33B2474-EAB7-4C60-9FB5-1F6EA4D8488D}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A33B2474-EAB7-4C60-9FB5-1F6EA4D8488D}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A33B2474-EAB7-4C60-9FB5-1F6EA4D8488D}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal

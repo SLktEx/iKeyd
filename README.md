@@ -26,6 +26,25 @@ python tools/extract-legacy-spec.py path/to/hotkeySKG.ahk \
   tests/iKeyd.LegacySpec.Tests/Fixtures/hotkeySKG.behavior.json
 ```
 
+## Compatibility scenarios
+
+`tests/iKeyd.Compatibility.Tests/Scenarios` contains implementation-independent input scenarios for differential and Windows E2E testing.
+
+Each scenario records:
+
+- initial mode / IME / modifier state
+- timestamped `keyDown` / `keyUp` input events
+- expected externally observable text and key events
+- tags that can later be used to select E2E suites
+
+The same scenario contract is intended to be consumed by separate runners for:
+
+- `hotkeySKG.ahk` on AutoHotkey v1
+- the compiled legacy `hotkeySKG.exe`
+- iKeyd
+
+AHK source and compiled EXE results are kept as separate observations because they may not always behave identically.
+
 Run tests with:
 
 ```bash
