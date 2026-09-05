@@ -1,0 +1,33 @@
+{
+  "id": "s-high-speed-chord-burst",
+  "description": "S mode resolves five back-to-back chords at 8ms intervals without cross-chord state leakage.",
+  "initialState": { "mode": "S", "ime": "on", "modifiers": [] },
+  "input": [
+    { "atMs": 0, "kind": "keyDown", "key": "K" },
+    { "atMs": 0, "kind": "keyDown", "key": "Q" },
+    { "atMs": 1, "kind": "keyUp", "key": "K" },
+    { "atMs": 1, "kind": "keyUp", "key": "Q" },
+
+    { "atMs": 8, "kind": "keyDown", "key": "D" },
+    { "atMs": 8, "kind": "keyDown", "key": "J" },
+    { "atMs": 9, "kind": "keyUp", "key": "D" },
+    { "atMs": 9, "kind": "keyUp", "key": "J" },
+
+    { "atMs": 16, "kind": "keyDown", "key": "L" },
+    { "atMs": 16, "kind": "keyDown", "key": "V" },
+    { "atMs": 17, "kind": "keyUp", "key": "L" },
+    { "atMs": 17, "kind": "keyUp", "key": "V" },
+
+    { "atMs": 24, "kind": "keyDown", "key": "S" },
+    { "atMs": 24, "kind": "keyDown", "key": "N" },
+    { "atMs": 25, "kind": "keyUp", "key": "S" },
+    { "atMs": 25, "kind": "keyUp", "key": "N" },
+
+    { "atMs": 32, "kind": "keyDown", "key": "K" },
+    { "atMs": 32, "kind": "keyDown", "key": "W" },
+    { "atMs": 33, "kind": "keyUp", "key": "K" },
+    { "atMs": 33, "kind": "keyUp", "key": "W" }
+  ],
+  "expected": { "text": "faarowago", "events": [] },
+  "tags": ["legacy", "chord", "high-speed", "realtime-safe", "windows", "hosted-legacy"]
+}
