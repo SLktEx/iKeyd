@@ -1,0 +1,36 @@
+name: Windows package
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - run: dotnet restore iKeyd.sln
+      - run: dotnet test iKeyd.sln --no-restore --configuration Release
+      - name: Publish win-x64
+        run: >-
+          dotnet publish src/iKeyd.App/iKeyd.App.csproj
+          --configuration Release
+          --runtime win-x64
+          --self-contained true
+          -p:PublishSingleFile=true
+          -p:DebugType=None
+          -p:DebugSymbols=false
+          --output artifacts/iKeyd-win-x64
+      - uses: actions/upload-artifact@v4
+        with:
+          name: iKeyd-win-x64
+          path: artifacts/iKeyd-win-x64
+          if-no-files-found: error

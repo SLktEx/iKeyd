@@ -7,15 +7,96 @@ The first target is Windows without an AutoHotkey runtime. After the Windows imp
 1. Wayland
 2. X11
 
+Current roadmap: #1.
+
+## Windows v1 quick start
+
+The Windows application is a tray-resident `iKeyd.exe`. AutoHotkey is not required.
+
+### Build locally
+
+```powershell
+dotnet restore iKeyd.sln
+dotnet build iKeyd.sln --configuration Release
+dotnet run --project src/iKeyd.App/iKeyd.App.csproj --configuration Release
+```
+
+The application loads `iKeyd.json` from the executable directory by default. The repository's canonical default configuration is:
+
+```text
+config/hotkeySKG.behavior.json
+```
+
+The build copies that file beside the executable as `iKeyd.json`.
+
+### Download an Actions artifact
+
+Run **Windows package** from the GitHub Actions tab, or push a `v*` tag. The workflow creates a self-contained `win-x64` package named:
+
+```text
+iKeyd-win-x64
+```
+
+The artifact contains the self-contained Windows executable and its default `iKeyd.json`, so a separate .NET or AutoHotkey installation is not required.
+
+### Tray controls
+
+Right-click the tray icon to use:
+
+- **Mode → S / K / T / R** — switch the input mode.
+- **Clipboard History...** — choose from the 20-entry clipboard history and paste the selection.
+- **Macro...** — edit and execute a legacy-style macro.
+- **Cancel Macro** — cancel a running macro, including a macro waiting in `{wait ...}`.
+- **Exit** — stop the keyboard hook and exit iKeyd.
+
+Double-clicking the tray icon also opens Clipboard History.
+
+Only one iKeyd process is allowed per Windows user session.
+
+### Command-line options
+
+Use a different keymap/config file:
+
+```powershell
+iKeyd.exe --config C:\path\to\my-iKeyd.json
+```
+
+Override the startup mode:
+
+```powershell
+iKeyd.exe --mode K
+```
+
+Supported startup modes are `S`, `K`, `T`, and `R`.
+
+## Windows v1 behavior
+
+The Windows runtime currently wires together the shared Core and Windows backends for:
+
+- the legacy S/K single-stroke and chord maps with the 40 ms inclusive chord window,
+- automatic single-stroke resolution after the chord window expires,
+- IME-aware S/K routing and T/R modes,
+- M/H/S/K/A layer state and the representative modifier/function actions captured by the regression spec,
+- window minimize/maximize/half placement/topmost/opacity/title-bar operations,
+- SM mouse movement/click/scroll and media controls,
+- 20-entry clipboard history and picker UI,
+- macro `{wait ...}`, `{calc ...}`, `{hk ...}`, repeat/increment behavior, editing, and cancellation,
+- protection against iKeyd re-capturing its own `SendInput` events.
+
+The runtime intentionally preserves compatibility quirks recorded by the regression spec instead of silently fixing them.
+
+### Known Windows v1 limitations
+
+- The regression-covered legacy behavior is the compatibility target. Long-tail `hotkeySKG` function branches that are not yet represented by the current runtime spec may still require additional wiring.
+- The Windows v1 legacy Send interpreter supports the named keyboard tokens used by the current config/macro UI (`F1`-`F12`, arrows, Home/End, PageUp/PageDown, Tab, Backspace, Delete, Enter, Insert, Escape, AppsKey, Space) plus `^`/`!`/`+`/`#` modifier prefixes. Unknown AHK Send tokens are left as literal text rather than pretending to support the complete AHK v1 Send grammar.
+- `T` mode intentionally inherits the previously active S/K map. Switching through `R` clears that active map, matching the captured legacy behavior.
+- Wayland and X11 backends are not part of Windows v1. Wayland is the next Linux target, followed by X11.
+
 ## Migration strategy
 
 The existing `hotkeySKG` behavior is treated as the compatibility baseline. Legacy behavior is captured as regression fixtures before it is reimplemented so that accidental behavior changes can be detected explicitly.
 
-Current roadmap: #1.
-
-## Regression spec
-
-`tests/iKeyd.LegacySpec.Tests/Fixtures/hotkeySKG.behavior.json` records the effective S/K single-stroke maps, all declared S/K chord maps, the 40 ms chord window, and known legacy quirks.
+`config/hotkeySKG.behavior.json` is both the production default keymap and the effective regression snapshot for S/K single-stroke/chord behavior. Tests link the same file into their fixture directory instead of maintaining a separate copy.
 
 The snapshot intentionally preserves odd or conflicting legacy behavior. Fixing those behaviors is a separate decision from reproducing them.
 
@@ -23,7 +104,7 @@ To regenerate the snapshot from an AHK v1 source file:
 
 ```bash
 python tools/extract-legacy-spec.py path/to/hotkeySKG.ahk \
-  tests/iKeyd.LegacySpec.Tests/Fixtures/hotkeySKG.behavior.json
+  config/hotkeySKG.behavior.json
 ```
 
 ## Compatibility scenarios

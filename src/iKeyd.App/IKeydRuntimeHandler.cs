@@ -1,0 +1,465 @@
+using iKeyd.Core.Chords;
+using iKeyd.Core.Desktop;
+using iKeyd.Core.Input;
+using iKeyd.Core.Keymaps;
+using iKeyd.Core.Layers;
+using iKeyd.Core.Macros;
+using iKeyd.Core.Modes;
+using iKeyd.Windows.Input;
+
+namespace iKeyd.App;
+
+internal sealed class IKeydRuntimeHandler : IKeyboardEventHandler, IMacroActionDispatcher, IDisposable
+{
+    private readonly object _gate = new();
+    private readonly IKeydConfiguration _configuration;
+    private readonly IInputMethod _inputMethod;
+    private readonly KeyboardState _keyboardState;
+    private readonly LegacySendOutput _send;
+    private readonly IDesktopBackend _desktop;
+    private readonly DesktopActionService _desktopActions;
+    private readonly ChordEngine<string> _sEngine;
+    private readonly ChordEngine<string> _kEngine;
+    private readonly HashSet<ushort> _suppressedKeys = [];
+    private readonly Timer _chordTimer;
+
+    private InputModeState _mode;
+    private LayerRuntimeState _layers = LayerRuntimeState.Empty;
+    private KeymapMode? _timerMode;
+    private long _timerDueAt;
+    private bool _disposed;
+
+    public IKeydRuntimeHandler(
+        IKeydConfiguration configuration,
+        IInputMethod inputMethod,
+        KeyboardState keyboardState,
+        LegacySendOutput send,
+        IDesktopBackend desktop)
+    {
+        _configuration = configuration ?? throw new ArgumentNullException(nameof(configuration));
+        _inputMethod = inputMethod ?? throw new ArgumentNullException(nameof(inputMethod));
+        _keyboardState = keyboardState ?? throw new ArgumentNullException(nameof(keyboardState));
+        _send = send ?? throw new ArgumentNullException(nameof(send));
+        _desktop = desktop ?? throw new ArgumentNullException(nameof(desktop));
+        _desktopActions = new DesktopActionService(desktop);
+        _sEngine = new ChordEngine<string>(configuration.SKeymap, configuration.ChordWindowMs);
+        _kEngine = new ChordEngine<string>(configuration.KKeymap, configuration.ChordWindowMs);
+        _mode = InputModeState.Initial.SwitchTo(configuration.StartupMode);
+        _chordTimer = new Timer(OnChordTimeout, null, Timeout.Infinite, Timeout.Infinite);
+    }
+
+    public InputModeState Mode
+    {
+        get
+        {
+            lock (_gate)
+                return _mode;
+        }
+    }
+
+    public void SetMode(InputMode mode)
+    {
+        lock (_gate)
+        {
+            ThrowIfDisposed();
+            FlushAllPending();
+            _mode = _mode.SwitchTo(mode);
+        }
+    }
+
+    public KeyboardDisposition OnKeyboardEvent(KeyboardEvent keyboardEvent)
+    {
+        if (keyboardEvent.Origin != KeyEventOrigin.Physical)
+            return KeyboardDisposition.PassThrough;
+
+        lock (_gate)
+        {
+            if (_disposed)
+                return KeyboardDisposition.PassThrough;
+
+            if (TryHandleLayerKey(keyboardEvent))
+                return KeyboardDisposition.Suppress;
+
+            if (keyboardEvent.Kind == KeyEventKind.Up)
+                return _suppressedKeys.Remove(keyboardEvent.Key.VirtualKey)
+                    ? KeyboardDisposition.Suppress
+                    : KeyboardDisposition.PassThrough;
+
+            var keyId = WindowsKeyMap.TryResolveKeyId(keyboardEvent.Key.VirtualKey);
+
+            if (_layers.Layers.Count != 0)
+            {
+                var handled = keyId is not null && DispatchLayeredKey(keyId.Value, keyboardEvent.Key.VirtualKey);
+                _layers = _layers.MarkConsumed();
+                if (handled)
+                {
+                    _suppressedKeys.Add(keyboardEvent.Key.VirtualKey);
+                    return KeyboardDisposition.Suppress;
+                }
+
+                return KeyboardDisposition.PassThrough;
+            }
+
+            var route = _mode.Route(_inputMethod);
+            if (route.Kind != InputRouteKind.ChordEngine || route.Keymap is null || keyId is null)
+            {
+                FlushAllPending();
+                return KeyboardDisposition.PassThrough;
+            }
+
+            var keymap = _configuration.GetKeymap(route.Keymap.Value);
+            if (!keymap.TryGetSingle(keyId.Value, out _))
+            {
+                FlushAllPending();
+                return KeyboardDisposition.PassThrough;
+            }
+
+            var engine = GetEngine(route.Keymap.Value);
+            SendOutputs(engine.AdvanceTo(keyboardEvent.TimestampMs));
+            SendOutputs(engine.OnKeyDown(keyId.Value, keyboardEvent.TimestampMs));
+
+            if (engine.State == ChordEngineState.PendingSingle)
+                ScheduleTimeout(route.Keymap.Value);
+            else
+                CancelTimeout();
+
+            _suppressedKeys.Add(keyboardEvent.Key.VirtualKey);
+            return KeyboardDisposition.Suppress;
+        }
+    }
+
+    public ValueTask DispatchAsync(MacroHotkey hotkey, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        lock (_gate)
+        {
+            ThrowIfDisposed();
+            if (!DispatchFunctionKey(new KeyId(hotkey.Key.ToString()), hotkey.State))
+                throw new NotSupportedException($"Macro hotkey '{{hk {hotkey.State}{hotkey.Key}}}' is not mapped by the Windows v1 runtime.");
+        }
+
+        return ValueTask.CompletedTask;
+    }
+
+    public void Dispose()
+    {
+        lock (_gate)
+        {
+            if (_disposed)
+                return;
+            _disposed = true;
+            CancelTimeout();
+            _sEngine.Cancel();
+            _kEngine.Cancel();
+            _suppressedKeys.Clear();
+        }
+        _chordTimer.Dispose();
+    }
+
+    private bool TryHandleLayerKey(KeyboardEvent keyboardEvent)
+    {
+        var altPressed = _keyboardState.IsVirtualKeyPressed(WindowsKeyMap.Alt);
+        LayerEvent? layerEvent = keyboardEvent.Key.VirtualKey switch
+        {
+            WindowsKeyMap.NonConvert => keyboardEvent.Kind == KeyEventKind.Down ? LayerEvent.MDown : LayerEvent.MUp,
+            WindowsKeyMap.Convert when altPressed => keyboardEvent.Kind == KeyEventKind.Down ? LayerEvent.AltHDown : LayerEvent.AltHUp,
+            WindowsKeyMap.Convert => keyboardEvent.Kind == KeyEventKind.Down ? LayerEvent.HDown : LayerEvent.HUp,
+            WindowsKeyMap.Space when altPressed => keyboardEvent.Kind == KeyEventKind.Down ? LayerEvent.AltSpaceDown : LayerEvent.AltSpaceUp,
+            WindowsKeyMap.Space => keyboardEvent.Kind == KeyEventKind.Down ? LayerEvent.SpaceDown : LayerEvent.SpaceUp,
+            WindowsKeyMap.Kana when keyboardEvent.Kind == KeyEventKind.Down && altPressed => LayerEvent.AltKanaDown,
+            WindowsKeyMap.Kana when keyboardEvent.Kind == KeyEventKind.Down => LayerEvent.KanaDown,
+            _ => null
+        };
+
+        if (keyboardEvent.Key.VirtualKey == WindowsKeyMap.Kana && keyboardEvent.Kind == KeyEventKind.Up)
+            return true;
+        if (layerEvent is null)
+            return false;
+
+        FlushAllPending();
+        var transition = LayerStateMachine.Apply(_layers, layerEvent.Value);
+        _layers = transition.State;
+        foreach (var action in transition.Actions)
+            SendLayerAction(action);
+        return true;
+    }
+
+    private bool DispatchLayeredKey(KeyId key, ushort virtualKey)
+    {
+        var state = _layers.Layers.ToString();
+        switch (state)
+        {
+            case "H":
+                _send.SendChord(WindowsKeyMap.Control, virtualKey);
+                return true;
+            case "S":
+                _send.SendChord(WindowsKeyMap.Shift, virtualKey);
+                return true;
+            case "HS":
+                _send.SendChord(WindowsKeyMap.Control, WindowsKeyMap.Shift, virtualKey);
+                return true;
+            case "K":
+                _send.SendChord(WindowsKeyMap.LeftWin, virtualKey);
+                _layers = _layers with { Layers = _layers.Layers.Release(LayerKey.K), Consumed = true };
+                return true;
+            case "A":
+                _send.SendChord(WindowsKeyMap.Alt, virtualKey);
+                _layers = _layers with { Layers = _layers.Layers.Release(LayerKey.A), Consumed = true };
+                return true;
+            case "KH":
+                _send.SendChord(WindowsKeyMap.LeftWin, WindowsKeyMap.Control, virtualKey);
+                return true;
+            case "KS":
+                _send.SendChord(WindowsKeyMap.LeftWin, WindowsKeyMap.Shift, virtualKey);
+                return true;
+            case "AH":
+                _send.SendChord(WindowsKeyMap.Alt, WindowsKeyMap.Control, virtualKey);
+                return true;
+            case "AS":
+                _send.SendChord(WindowsKeyMap.Alt, WindowsKeyMap.Shift, virtualKey);
+                return true;
+            case "SM":
+                return DispatchMouseMedia(key);
+            default:
+                return DispatchFunctionKey(key, state);
+        }
+    }
+
+    private bool DispatchFunctionKey(KeyId key, string state)
+    {
+        var name = key.Value;
+
+        if (name == "Q")
+        {
+            if (state == "M") { _send.Send("("); return true; }
+            if (state == "MH") { _send.Send("\""); return true; }
+            if (state == "HM") { _send.Send("'"); return true; }
+        }
+
+        if (name == "W")
+        {
+            if (state == "M") { _send.SendChord(WindowsKeyMap.Alt, 0x73); return true; }
+            if (state == "MH") { _send.SendChord(WindowsKeyMap.Control, 0x73); return true; }
+        }
+
+        if (name == "J")
+        {
+            if (state == "M") { _send.SendKey(WindowsKeyMap.Left); return true; }
+            if (state == "MH") { _send.SendChord(WindowsKeyMap.Shift, WindowsKeyMap.Left); return true; }
+            if (state == "HM") { _send.SendChord(WindowsKeyMap.Control, WindowsKeyMap.Left); return true; }
+            if (state == "MS") { _send.SendChord(WindowsKeyMap.Control, WindowsKeyMap.Shift, WindowsKeyMap.Left); return true; }
+        }
+
+        if (name == "M" && state == "M")
+        {
+            _send.SendKey(WindowsKeyMap.Delete);
+            return true;
+        }
+
+        if (name == "COMMA")
+        {
+            if (state == "M") { _send.SendKey(WindowsKeyMap.Space); return true; }
+            if (state == "MH") { _send.SendKey(WindowsKeyMap.Tab); return true; }
+            if (state == "HM") { _send.SendKey(WindowsKeyMap.Enter); return true; }
+        }
+
+        if (name == "E")
+        {
+            if (state == "M") { _desktopActions.MinimizeActive(); return true; }
+            if (state == "MH") { _desktopActions.PlaceActive(DesktopPlacement.TopHalf); return true; }
+            if (state == "HM") { _desktopActions.PlaceActive(DesktopPlacement.BottomHalf); return true; }
+        }
+
+        if (name == "R")
+        {
+            if (state == "M") { _desktopActions.ToggleMaximizeActive(); return true; }
+            if (state == "MH") { _desktopActions.PlaceActive(DesktopPlacement.RightHalf); return true; }
+            if (state == "HM") { _desktopActions.PlaceActive(DesktopPlacement.LeftHalf); return true; }
+            if (state == "MS") { _send.SendChord(WindowsKeyMap.LeftWin, (ushort)'R'); return true; }
+        }
+
+        if (name == "T")
+        {
+            if (state == "M") { _desktopActions.ToggleTopMostActive(); return true; }
+            if (state == "MH") { _desktopActions.AdjustOpacityActive(-30); return true; }
+            if (state == "HM") { _desktopActions.AdjustOpacityActive(30); return true; }
+            if (state == "MS") { _desktopActions.ToggleCaptionActive(); return true; }
+        }
+
+        if (name == "G")
+        {
+            if (state == "MH") { _send.SendChord(WindowsKeyMap.Control, WindowsKeyMap.Tab); return true; }
+            if (state == "HM") { _send.SendChord(WindowsKeyMap.Control, WindowsKeyMap.Shift, WindowsKeyMap.Tab); return true; }
+        }
+
+        if (name == "B")
+        {
+            if (state == "MH") { _send.SendChord(WindowsKeyMap.Alt, WindowsKeyMap.Escape); return true; }
+            if (state == "HM") { _send.SendChord(WindowsKeyMap.Alt, WindowsKeyMap.Shift, WindowsKeyMap.Escape); return true; }
+        }
+
+        return false;
+    }
+
+    private bool DispatchMouseMedia(KeyId key)
+    {
+        var amount = GetMouseMoveAmount();
+        switch (key.Value)
+        {
+            case "D":
+            case "E":
+            case "C":
+                return true;
+            case "J":
+                _desktop.MovePointerBy(-amount, 0);
+                return true;
+            case "K":
+                _desktop.MovePointerBy(0, amount);
+                return true;
+            case "L":
+                _desktop.MovePointerBy(amount, 0);
+                return true;
+            case "I":
+                _desktop.MovePointerBy(0, -amount);
+                return true;
+            case "U":
+                _desktop.Click(DesktopMouseButton.Left);
+                return true;
+            case "O":
+                _desktop.Click(DesktopMouseButton.Right);
+                return true;
+            case "COMMA":
+                _desktop.Click(DesktopMouseButton.Middle);
+                return true;
+            case "P":
+                _desktop.ScrollVertical(120);
+                return true;
+            case "SCOLON":
+                _desktop.ScrollVertical(-120);
+                return true;
+            case "AT":
+                _desktop.ScrollVertical(120, controlModifier: true);
+                return true;
+            case "COLON":
+                _desktop.ScrollVertical(-120, controlModifier: true);
+                return true;
+            case "Q":
+                _desktop.SendMediaCommand(DesktopMediaCommand.VolumeUp);
+                return true;
+            case "A":
+                _desktop.SendMediaCommand(DesktopMediaCommand.VolumeMute);
+                return true;
+            case "Z":
+                _desktop.SendMediaCommand(DesktopMediaCommand.VolumeDown);
+                return true;
+            case "R":
+                _desktop.SendMediaCommand(DesktopMediaCommand.NextTrack);
+                return true;
+            case "F":
+                _desktop.SendMediaCommand(DesktopMediaCommand.PlayPause);
+                return true;
+            case "V":
+                _desktop.SendMediaCommand(DesktopMediaCommand.PreviousTrack);
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    private int GetMouseMoveAmount()
+    {
+        if (_keyboardState.IsVirtualKeyPressed((ushort)'D'))
+            return 30;
+        if (_keyboardState.IsVirtualKeyPressed((ushort)'E'))
+            return 10;
+        if (_keyboardState.IsVirtualKeyPressed((ushort)'C'))
+            return Math.Max(1, _desktop.GetPrimaryWorkArea().Width / 4);
+        return 100;
+    }
+
+    private void SendLayerAction(LayerAction action)
+    {
+        switch (action)
+        {
+            case LayerAction.Tab: _send.SendKey(WindowsKeyMap.Tab); break;
+            case LayerAction.ShiftTab: _send.SendChord(WindowsKeyMap.Shift, WindowsKeyMap.Tab); break;
+            case LayerAction.ShiftEnter: _send.SendChord(WindowsKeyMap.Shift, WindowsKeyMap.Enter); break;
+            case LayerAction.ShiftSpace: _send.SendChord(WindowsKeyMap.Shift, WindowsKeyMap.Space); break;
+            case LayerAction.Ctrl: _send.SendKey(WindowsKeyMap.Control); break;
+            case LayerAction.Space: _send.SendKey(WindowsKeyMap.Space); break;
+            case LayerAction.Enter: _send.SendKey(WindowsKeyMap.Enter); break;
+            case LayerAction.CtrlSpace: _send.SendChord(WindowsKeyMap.Control, WindowsKeyMap.Space); break;
+            case LayerAction.CtrlEnter: _send.SendChord(WindowsKeyMap.Control, WindowsKeyMap.Enter); break;
+            case LayerAction.AltEnter: _send.SendChord(WindowsKeyMap.Alt, WindowsKeyMap.Enter); break;
+            case LayerAction.AltSpace: _send.SendChord(WindowsKeyMap.Alt, WindowsKeyMap.Space); break;
+            case LayerAction.CtrlEsc: _send.SendChord(WindowsKeyMap.Control, WindowsKeyMap.Escape); break;
+            case LayerAction.Muhenkan: _send.SendKey(WindowsKeyMap.NonConvert); break;
+            case LayerAction.Henkan: _send.SendKey(WindowsKeyMap.Convert); break;
+            case LayerAction.EndEnter:
+                _send.SendKey(WindowsKeyMap.End);
+                _send.SendKey(WindowsKeyMap.Enter);
+                break;
+            case LayerAction.UpEndEnter:
+                _send.SendKey(WindowsKeyMap.Up);
+                _send.SendKey(WindowsKeyMap.End);
+                _send.SendKey(WindowsKeyMap.Enter);
+                break;
+            default:
+                throw new ArgumentOutOfRangeException(nameof(action));
+        }
+    }
+
+    private ChordEngine<string> GetEngine(KeymapMode mode)
+        => mode == KeymapMode.S ? _sEngine : _kEngine;
+
+    private void SendOutputs(IReadOnlyList<string> outputs)
+    {
+        foreach (var output in outputs)
+            _send.Send(output);
+    }
+
+    private void FlushAllPending()
+    {
+        SendOutputs(_sEngine.Flush());
+        SendOutputs(_kEngine.Flush());
+        CancelTimeout();
+    }
+
+    private void ScheduleTimeout(KeymapMode mode)
+    {
+        _timerMode = mode;
+        _timerDueAt = Environment.TickCount64 + _configuration.ChordWindowMs + 1L;
+        _chordTimer.Change(_configuration.ChordWindowMs + 1, Timeout.Infinite);
+    }
+
+    private void CancelTimeout()
+    {
+        _timerMode = null;
+        _timerDueAt = 0;
+        _chordTimer.Change(Timeout.Infinite, Timeout.Infinite);
+    }
+
+    private void OnChordTimeout(object? state)
+    {
+        lock (_gate)
+        {
+            if (_disposed || _timerMode is null)
+                return;
+
+            var remaining = _timerDueAt - Environment.TickCount64;
+            if (remaining > 0)
+            {
+                _chordTimer.Change((int)Math.Min(int.MaxValue, remaining), Timeout.Infinite);
+                return;
+            }
+
+            var mode = _timerMode.Value;
+            _timerMode = null;
+            _timerDueAt = 0;
+            SendOutputs(GetEngine(mode).Flush());
+        }
+    }
+
+    private void ThrowIfDisposed()
+        => ObjectDisposedException.ThrowIf(_disposed, this);
+}

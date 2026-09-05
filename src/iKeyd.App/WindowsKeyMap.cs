@@ -1,0 +1,141 @@
+using iKeyd.Core.Chords;
+using iKeyd.Core.Input;
+
+namespace iKeyd.App;
+
+internal static class WindowsKeyMap
+{
+    public const ushort Shift = 0x10;
+    public const ushort Control = 0x11;
+    public const ushort Alt = 0x12;
+    public const ushort Pause = 0x13;
+    public const ushort CapsLock = 0x14;
+    public const ushort Kana = 0x15;
+    public const ushort Escape = 0x1B;
+    public const ushort Convert = 0x1C;
+    public const ushort NonConvert = 0x1D;
+    public const ushort Space = 0x20;
+    public const ushort PageUp = 0x21;
+    public const ushort PageDown = 0x22;
+    public const ushort End = 0x23;
+    public const ushort Home = 0x24;
+    public const ushort Left = 0x25;
+    public const ushort Up = 0x26;
+    public const ushort Right = 0x27;
+    public const ushort Down = 0x28;
+    public const ushort Insert = 0x2D;
+    public const ushort Delete = 0x2E;
+    public const ushort LeftWin = 0x5B;
+    public const ushort Apps = 0x5D;
+    public const ushort Numpad0 = 0x60;
+    public const ushort F1 = 0x70;
+    public const ushort F12 = 0x7B;
+    public const ushort Backspace = 0x08;
+    public const ushort Tab = 0x09;
+    public const ushort Enter = 0x0D;
+    public const ushort OemSemicolon = 0xBA;
+    public const ushort OemPlus = 0xBB;
+    public const ushort OemComma = 0xBC;
+    public const ushort OemMinus = 0xBD;
+    public const ushort OemPeriod = 0xBE;
+    public const ushort OemSlash = 0xBF;
+    public const ushort OemAt = 0xC0;
+
+    public static KeyId? TryResolveKeyId(ushort virtualKey)
+    {
+        if (virtualKey is >= 0x41 and <= 0x5A)
+            return new KeyId(((char)virtualKey).ToString());
+        if (virtualKey is >= 0x30 and <= 0x39)
+            return new KeyId(((char)virtualKey).ToString());
+        if (virtualKey is >= F1 and <= F12)
+            return new KeyId($"F{virtualKey - F1 + 1}");
+
+        return virtualKey switch
+        {
+            OemSemicolon => new KeyId("SColon"),
+            OemPlus => new KeyId("Colon"),
+            OemComma => new KeyId("Comma"),
+            OemPeriod => new KeyId("Dot"),
+            OemSlash => new KeyId("Slash"),
+            OemAt => new KeyId("AT"),
+            _ => null
+        };
+    }
+
+    public static KeyboardKey Keyboard(ushort virtualKey)
+        => new(virtualKey, 0, IsExtended(virtualKey));
+
+    public static bool TryResolveNamedKey(string name, out KeyboardKey key)
+    {
+        var normalized = name.Trim().ToUpperInvariant();
+        ushort virtualKey;
+
+        if (normalized.Length > 1 && normalized[0] == 'F' &&
+            int.TryParse(normalized[1..], out var functionNumber) &&
+            functionNumber is >= 1 and <= 12)
+        {
+            virtualKey = (ushort)(F1 + functionNumber - 1);
+        }
+        else
+        {
+            virtualKey = normalized switch
+            {
+                "UP" => Up,
+                "DOWN" => Down,
+                "LEFT" => Left,
+                "RIGHT" => Right,
+                "HOME" => Home,
+                "END" => End,
+                "PGUP" or "PAGEUP" => PageUp,
+                "PGDN" or "PAGEDOWN" => PageDown,
+                "TAB" => Tab,
+                "BS" or "BACKSPACE" => Backspace,
+                "DEL" or "DELETE" => Delete,
+                "ENTER" or "RETURN" => Enter,
+                "INS" or "INSERT" => Insert,
+                "ESC" or "ESCAPE" => Escape,
+                "APPSKEY" or "APPS" => Apps,
+                "SPACE" => Space,
+                _ => 0
+            };
+        }
+
+        if (virtualKey == 0)
+        {
+            key = default;
+            return false;
+        }
+
+        key = Keyboard(virtualKey);
+        return true;
+    }
+
+    public static bool TryResolveCharacter(char character, out KeyboardKey key)
+    {
+        var upper = char.ToUpperInvariant(character);
+        ushort virtualKey = upper switch
+        {
+            >= 'A' and <= 'Z' => upper,
+            >= '0' and <= '9' => upper,
+            ';' or ':' => OemSemicolon,
+            ',' => OemComma,
+            '.' => OemPeriod,
+            '/' => OemSlash,
+            '@' => OemAt,
+            '-' => OemMinus,
+            _ => 0
+        };
+
+        if (virtualKey == 0)
+        {
+            key = default;
+            return false;
+        }
+
+        key = Keyboard(virtualKey);
+        return true;
+    }
+
+    private static bool IsExtended(ushort virtualKey)
+        => virtualKey is Left or Right or Up or Down or Home or End or PageUp or PageDown or Insert or Delete or LeftWin or Apps;
+}
