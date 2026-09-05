@@ -7,10 +7,10 @@ namespace iKeyd.Wayland.Desktop;
 
 public sealed class WaylandDesktopBackend : IDesktopBackend, IBackendCapabilityProvider
 {
-    private readonly LinuxUInputDevice _uinput;
+    private readonly IWaylandVirtualInput _uinput;
     private readonly HashSet<DesktopMouseButton> _buttonsDown = [];
 
-    public WaylandDesktopBackend(LinuxUInputDevice uinput)
+    public WaylandDesktopBackend(IWaylandVirtualInput uinput)
     {
         _uinput = uinput ?? throw new ArgumentNullException(nameof(uinput));
         Capabilities = new BackendCapabilities([
