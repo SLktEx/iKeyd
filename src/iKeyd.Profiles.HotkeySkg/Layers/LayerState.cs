@@ -20,23 +20,25 @@ public enum LayerKey
     A
 }
 
-public sealed class LayerState : IEquatable<LayerState>
+/// <summary>
+/// Allocation-free ordered layer state. At most five distinct layer keys can be
+/// pressed, so their order fits in 15 bits using three bits per key.
+/// </summary>
+public readonly struct LayerState : IEquatable<LayerState>
 {
-    private readonly LayerKey[] _order;
+    private readonly ushort _orderBits;
 
-    private LayerState(LayerKey[] order)
+    private LayerState(ushort orderBits, byte count, LayerModifiers modifiers)
     {
-        _order = order;
-        var modifiers = LayerModifiers.None;
-        foreach (var key in order)
-            modifiers |= ToModifier(key);
+        _orderBits = orderBits;
+        Count = count;
         Modifiers = modifiers;
     }
 
-    public static LayerState Empty { get; } = new([]);
+    public static LayerState Empty => default;
 
     public LayerModifiers Modifiers { get; }
-    public int Count => _order.Length;
+    public byte Count { get; }
 
     public static LayerState FromSequence(params LayerKey[] keys)
     {
@@ -49,14 +51,24 @@ public sealed class LayerState : IEquatable<LayerState>
 
     public bool Contains(LayerKey key) => (Modifiers & ToModifier(key)) != 0;
 
+    public bool IsExact(LayerKey first)
+        => Count == 1 && GetAt(0) == first;
+
+    public bool IsExact(LayerKey first, LayerKey second)
+        => Count == 2 && GetAt(0) == first && GetAt(1) == second;
+
+    public bool IsExact(LayerKey first, LayerKey second, LayerKey third)
+        => Count == 3 && GetAt(0) == first && GetAt(1) == second && GetAt(2) == third;
+
     public bool IsExact(params LayerKey[] keys)
     {
-        if (keys.Length != _order.Length)
+        ArgumentNullException.ThrowIfNull(keys);
+        if (keys.Length != Count)
             return false;
 
         for (var i = 0; i < keys.Length; i++)
         {
-            if (_order[i] != keys[i])
+            if (GetAt(i) != keys[i])
                 return false;
         }
 
@@ -67,37 +79,74 @@ public sealed class LayerState : IEquatable<LayerState>
     {
         if (Contains(key))
             return this;
+        if (Count >= 5)
+            throw new InvalidOperationException("All layer keys are already represented in the state.");
 
-        var next = new LayerKey[_order.Length + 1];
-        Array.Copy(_order, next, _order.Length);
-        next[^1] = key;
-        return new LayerState(next);
+        var token = (ushort)((int)key + 1);
+        var nextBits = (ushort)(_orderBits | (token << (Count * 3)));
+        return new LayerState(nextBits, (byte)(Count + 1), Modifiers | ToModifier(key));
     }
+
+    public LayerState Release(LayerKey first)
+        => ReleaseCore(ToModifier(first));
+
+    public LayerState Release(LayerKey first, LayerKey second)
+        => ReleaseCore(ToModifier(first) | ToModifier(second));
+
+    public LayerState Release(LayerKey first, LayerKey second, LayerKey third)
+        => ReleaseCore(ToModifier(first) | ToModifier(second) | ToModifier(third));
 
     public LayerState Release(params LayerKey[] keys)
     {
         ArgumentNullException.ThrowIfNull(keys);
-        if (keys.Length == 0 || _order.Length == 0)
-            return this;
-
-        var remove = new HashSet<LayerKey>(keys);
-        var next = _order.Where(key => !remove.Contains(key)).ToArray();
-        return next.Length == _order.Length ? this : new LayerState(next);
+        var remove = LayerModifiers.None;
+        foreach (var key in keys)
+            remove |= ToModifier(key);
+        return ReleaseCore(remove);
     }
 
-    public override string ToString() => string.Concat(_order.Select(ToLegacyCode));
+    public override string ToString()
+    {
+        if (Count == 0)
+            return string.Empty;
 
-    public bool Equals(LayerState? other)
-        => other is not null && _order.SequenceEqual(other._order);
+        Span<char> buffer = stackalloc char[5];
+        for (var i = 0; i < Count; i++)
+            buffer[i] = ToLegacyCode(GetAt(i));
+        return new string(buffer[..Count]);
+    }
+
+    public bool Equals(LayerState other)
+        => _orderBits == other._orderBits && Count == other.Count;
 
     public override bool Equals(object? obj) => obj is LayerState other && Equals(other);
+    public override int GetHashCode() => HashCode.Combine(_orderBits, Count);
 
-    public override int GetHashCode()
+    public static bool operator ==(LayerState left, LayerState right) => left.Equals(right);
+    public static bool operator !=(LayerState left, LayerState right) => !left.Equals(right);
+
+    private LayerState ReleaseCore(LayerModifiers remove)
     {
-        var hash = new HashCode();
-        foreach (var key in _order)
-            hash.Add(key);
-        return hash.ToHashCode();
+        if (remove == LayerModifiers.None || Count == 0 || (Modifiers & remove) == 0)
+            return this;
+
+        var next = Empty;
+        for (var i = 0; i < Count; i++)
+        {
+            var key = GetAt(i);
+            if ((remove & ToModifier(key)) == 0)
+                next = next.Press(key);
+        }
+        return next;
+    }
+
+    private LayerKey GetAt(int index)
+    {
+        if ((uint)index >= Count)
+            throw new ArgumentOutOfRangeException(nameof(index));
+
+        var token = (_orderBits >> (index * 3)) & 0b111;
+        return (LayerKey)(token - 1);
     }
 
     private static LayerModifiers ToModifier(LayerKey key) => key switch
@@ -110,13 +159,13 @@ public sealed class LayerState : IEquatable<LayerState>
         _ => throw new ArgumentOutOfRangeException(nameof(key))
     };
 
-    private static string ToLegacyCode(LayerKey key) => key switch
+    private static char ToLegacyCode(LayerKey key) => key switch
     {
-        LayerKey.M => "M",
-        LayerKey.H => "H",
-        LayerKey.S => "S",
-        LayerKey.K => "K",
-        LayerKey.A => "A",
+        LayerKey.M => 'M',
+        LayerKey.H => 'H',
+        LayerKey.S => 'S',
+        LayerKey.K => 'K',
+        LayerKey.A => 'A',
         _ => throw new ArgumentOutOfRangeException(nameof(key))
     };
 }
