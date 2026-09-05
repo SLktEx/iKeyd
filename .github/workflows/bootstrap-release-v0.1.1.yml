@@ -1,0 +1,71 @@
+name: Bootstrap v0.1.1 release
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/bootstrap-release-v0.1.1.yml'
+
+permissions:
+  contents: write
+
+env:
+  RELEASE_TAG: v0.1.1
+  TARGET_SHA: 446ffa7f165fa43302a60caf69c5f21e92880a14
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TARGET_SHA }}
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - run: dotnet restore iKeyd.sln
+      - run: dotnet test iKeyd.sln --no-restore --configuration Release
+      - name: Publish win-x64
+        run: >-
+          dotnet publish src/iKeyd.App/iKeyd.App.csproj
+          --configuration Release
+          --runtime win-x64
+          --self-contained true
+          -p:PublishSingleFile=true
+          -p:DebugType=None
+          -p:DebugSymbols=false
+          --output artifacts/iKeyd-win-x64
+      - name: Publish win-x64 embedded config
+        run: >-
+          dotnet publish src/iKeyd.App/iKeyd.App.csproj
+          --configuration Release
+          --runtime win-x64
+          --self-contained true
+          -p:PublishSingleFile=true
+          -p:DebugType=None
+          -p:DebugSymbols=false
+          -p:EmbedDefaultConfig=true
+          -p:AssemblyName=iKeyd-embedded
+          --output artifacts/iKeyd-win-x64-embedded
+      - name: Verify embedded package is standalone
+        shell: pwsh
+        run: |
+          if (-not (Test-Path artifacts/iKeyd-win-x64-embedded/iKeyd-embedded.exe)) { throw 'embedded executable missing' }
+          if (Test-Path artifacts/iKeyd-win-x64-embedded/iKeyd.json) { throw 'embedded package unexpectedly contains iKeyd.json' }
+      - name: Create release archive
+        shell: pwsh
+        run: Compress-Archive -Path artifacts/iKeyd-win-x64/* -DestinationPath artifacts/iKeyd-win-x64.zip -Force
+      - name: Create GitHub Release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          gh release create $env:RELEASE_TAG
+          artifacts/iKeyd-win-x64.zip
+          artifacts/iKeyd-win-x64/iKeyd.exe
+          artifacts/iKeyd-win-x64/iKeyd.json
+          artifacts/iKeyd-win-x64-embedded/iKeyd-embedded.exe
+          --target $env:TARGET_SHA
+          --generate-notes
+          --title "iKeyd $env:RELEASE_TAG"
