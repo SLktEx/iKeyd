@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, issue-46-hotkeyskg-full-compat]
   pull_request:
 
 jobs:
