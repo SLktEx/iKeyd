@@ -16,22 +16,24 @@ public sealed class WaylandClipboardService : IClipboardService, IBackendCapabil
     public WaylandClipboardService(
         WaylandBackendOptions? options = null,
         IWaylandCommandRunner? runner = null,
-        TimeSpan? pollInterval = null)
+        TimeSpan? pollInterval = null,
+        bool? isWaylandSession = null)
     {
         var resolved = options ?? WaylandBackendOptions.Detect();
         _runner = runner ?? new SystemWaylandCommandRunner();
         _wlCopy = resolved.WlCopyCommand;
         _wlPaste = resolved.WlPasteCommand;
 
-        var isWayland = string.Equals(Environment.GetEnvironmentVariable("XDG_SESSION_TYPE"), "wayland", StringComparison.OrdinalIgnoreCase) ||
-                        !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("WAYLAND_DISPLAY"));
+        var wayland = isWaylandSession ??
+                      string.Equals(Environment.GetEnvironmentVariable("XDG_SESSION_TYPE"), "wayland", StringComparison.OrdinalIgnoreCase) ||
+                      !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("WAYLAND_DISPLAY"));
         var supported = new List<BackendCapability>();
-        if (isWayland && _runner.Exists(_wlPaste))
+        if (wayland && _runner.Exists(_wlPaste))
         {
             supported.Add(BackendCapability.ClipboardRead);
             supported.Add(BackendCapability.ClipboardWatch);
         }
-        if (isWayland && _runner.Exists(_wlCopy))
+        if (wayland && _runner.Exists(_wlCopy))
             supported.Add(BackendCapability.ClipboardWrite);
         Capabilities = new BackendCapabilities(supported);
 
