@@ -74,7 +74,7 @@ public readonly struct KeyId : IEquatable<KeyId>, IComparable<KeyId>
 
     public KeyId(KeyCode code)
     {
-        if (!IsCompact(code))
+        if (!IsCompactCode(code))
             throw new ArgumentOutOfRangeException(nameof(code), code, "A KeyId constructed from KeyCode must use a compact key code.");
 
         Code = code;
@@ -166,7 +166,7 @@ public readonly struct KeyId : IEquatable<KeyId>, IComparable<KeyId>
     public static implicit operator KeyId(string value) => new(value);
     public static implicit operator KeyId(KeyCode code) => new(code);
 
-    private static bool IsCompact(KeyCode code)
+    private static bool IsCompactCode(KeyCode code)
         => code is >= KeyCode.A and <= KeyCode.At;
 
     private static bool TryParseCompactNormalized(string normalized, out KeyCode code)
