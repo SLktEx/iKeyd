@@ -6,6 +6,7 @@ namespace iKeyd.Windows.Tests;
 public sealed class HostedAutoHotkeySourceDifferentialTests
 {
     private const string HostedLegacyTag = "hosted-legacy";
+    private const string RuntimeTag = "hosted-legacy-runtime";
     private static string ScenarioDirectory => Path.Combine(AppContext.BaseDirectory, "Scenarios");
 
     [Fact]
@@ -15,13 +16,12 @@ public sealed class HostedAutoHotkeySourceDifferentialTests
         if (!OperatingSystem.IsWindows())
             return;
 
-        var sourceRunner = new HostedAutoHotkeySourceRunner();
-        if (!sourceRunner.IsAvailable)
+        var baseSourceRunner = new HostedAutoHotkeySourceRunner();
+        if (!baseSourceRunner.IsAvailable)
             return;
 
         var scenarios = CompatibilityScenarioCatalog.LoadDirectory(ScenarioDirectory)
-            .Where(item => item.Tags.Any(tag =>
-                string.Equals(tag, HostedLegacyTag, StringComparison.OrdinalIgnoreCase)))
+            .Where(item => HasTag(item, HostedLegacyTag))
             .OrderBy(item => item.Id, StringComparer.OrdinalIgnoreCase)
             .ToArray();
 
@@ -32,9 +32,18 @@ public sealed class HostedAutoHotkeySourceDifferentialTests
         {
             try
             {
+                var runtimeScenario = HasTag(scenario, RuntimeTag);
+                ICompatibilityScenarioRunner iKeydRunner = runtimeScenario
+                    ? new HotkeySkgRuntimeScenarioRunner()
+                    : new WindowsScenarioRunner();
+                ICompatibilityScenarioRunner sourceRunner = runtimeScenario
+                    ? new RuntimeEventCaptureRunner(
+                        new RuntimeInputInjectionRunner(new HostedAutoHotkeySourceRunner()))
+                    : new HostedAutoHotkeySourceRunner();
+
                 var report = await LegacyDifferentialComparison.RunAsync(
                     scenario,
-                    new WindowsScenarioRunner(),
+                    iKeydRunner,
                     sourceRunner);
                 var reportPath = LegacyDifferentialComparison.WriteReport(report);
 
@@ -65,6 +74,9 @@ public sealed class HostedAutoHotkeySourceDifferentialTests
             HostedAutoHotkeySourceRunner.ReferenceSourceSha256);
         Assert.Contains("hotkeySKG.ahk", new HostedAutoHotkeySourceRunner().Name, StringComparison.Ordinal);
     }
+
+    private static bool HasTag(CompatibilityScenario scenario, string tag)
+        => scenario.Tags.Any(item => string.Equals(item, tag, StringComparison.OrdinalIgnoreCase));
 
     private static string BuildFailureMessage(LegacyDifferentialReport report, string reportPath)
     {
