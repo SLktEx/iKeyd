@@ -79,6 +79,17 @@ public sealed class HostedLegacyDifferentialTests
         Assert.Equal(0, scenario.Input[0].AtMs);
     }
 
+    [Theory]
+    [InlineData(@"C:\runner\hotkeySKG.exe", "hotkeySKG")]
+    [InlineData(@"C:\runner\compiled-hotkeySKG.exe", "compiled-hotkeySKG")]
+    [InlineData(null, "hotkeySKG")]
+    public void Hosted_adapter_tracks_the_configured_legacy_process_name(
+        string? executablePath,
+        string expected)
+    {
+        Assert.Equal(expected, HostedTModeLegacyRunner.ResolveLegacyProcessName(executablePath));
+    }
+
     private static string BuildFailureMessage(LegacyDifferentialReport report, string reportPath)
     {
         static string Describe(IReadOnlyList<string> differences)
