@@ -30,7 +30,7 @@ public sealed class ClipboardHistoryTests
     }
 
     [Fact]
-    public void Recopying_existing_text_moves_it_to_front_without_duplicate()
+    public void Recopying_existing_text_keeps_the_legacy_duplicate_entry()
     {
         var history = new ClipboardHistory();
         history.Record("one");
@@ -39,21 +39,21 @@ public sealed class ClipboardHistoryTests
 
         Assert.True(history.Record("one"));
 
-        Assert.Equal(["one", "three", "two"], history.Items);
+        Assert.Equal(["one", "three", "two", "one"], history.Items);
     }
 
     [Fact]
-    public void Recording_current_front_item_is_a_noop()
+    public void Recording_current_front_item_also_creates_a_legacy_duplicate()
     {
         var history = new ClipboardHistory();
         history.Record("one");
 
-        Assert.False(history.Record("one"));
-        Assert.Equal(["one"], history.Items);
+        Assert.True(history.Record("one"));
+        Assert.Equal(["one", "one"], history.Items);
     }
 
     [Fact]
-    public void Picker_selection_can_promote_exact_index()
+    public void Picker_selection_promotes_the_exact_index()
     {
         var history = new ClipboardHistory();
         history.Record("one");
@@ -64,6 +64,20 @@ public sealed class ClipboardHistoryTests
 
         Assert.Equal("one", selected);
         Assert.Equal(["one", "three", "two"], history.Items);
+    }
+
+    [Fact]
+    public void Picker_selection_does_not_collapse_equal_entries_at_other_indices()
+    {
+        var history = new ClipboardHistory();
+        history.Record("same");
+        history.Record("middle");
+        history.Record("same");
+
+        var selected = history.Promote(2);
+
+        Assert.Equal("same", selected);
+        Assert.Equal(["same", "same", "middle"], history.Items);
     }
 
     [Fact]
