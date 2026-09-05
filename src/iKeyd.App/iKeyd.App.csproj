@@ -8,7 +8,7 @@
     <AssemblyName>iKeyd</AssemblyName>
     <RootNamespace>iKeyd.App</RootNamespace>
     <ProfileSource>$(MSBuildProjectDirectory)\..\..\config\hotkeySKG.behavior.json</ProfileSource>
-    <GeneratedProfileSource>$(IntermediateOutputPath)GeneratedProfile.g.cs</GeneratedProfileSource>
+    <GeneratedProfileSource>$(MSBuildProjectDirectory)\obj\$(Configuration)\$(TargetFramework)\GeneratedProfile.g.cs</GeneratedProfileSource>
     <ProfileCompilerAssembly>$(MSBuildProjectDirectory)\..\..\tools\iKeyd.ProfileCompiler\bin\$(Configuration)\net8.0\iKeyd.ProfileCompiler.dll</ProfileCompilerAssembly>
   </PropertyGroup>
   <ItemGroup>
