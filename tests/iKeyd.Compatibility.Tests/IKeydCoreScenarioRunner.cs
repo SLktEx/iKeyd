@@ -53,7 +53,7 @@ public sealed class IKeydCoreScenarioRunner : ICompatibilityScenarioRunner
     }
 }
 
-internal static class LegacyKeymapLoader
+public static class LegacyKeymapLoader
 {
     public static Keymap<string> Load(string mode)
     {
