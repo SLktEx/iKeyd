@@ -2,16 +2,6 @@ name: Legacy differential
 
 on:
   workflow_dispatch:
-    inputs:
-      legacy_exe_url:
-        description: Public download URL for the pinned hotkeySKG.exe
-        required: true
-        type: string
-      expected_sha256:
-        description: Expected SHA-256 for hotkeySKG.exe
-        required: true
-        default: 5492198ce403d796c8588b17419bce82a0e6de3961bb40896a875ee5dee359ea
-        type: string
 
 permissions:
   contents: read
@@ -65,21 +55,44 @@ jobs:
           Write-Host 'User language list:'
           Get-WinUserLanguageList | Format-List *
 
-      - name: Download pinned legacy executable
+      - name: Install GnuPG
+        shell: powershell
+        run: choco install gnupg -y --no-progress
+
+      - name: Decrypt pinned legacy executable
         id: legacy
         shell: powershell
         env:
-          LEGACY_EXE_URL: ${{ inputs.legacy_exe_url }}
-          EXPECTED_SHA256: ${{ inputs.expected_sha256 }}
+          LEGACY_EXE_GPG_PASSPHRASE: ${{ secrets.LEGACY_EXE_GPG_PASSPHRASE }}
         run: |
           $ErrorActionPreference = 'Stop'
-          $path = Join-Path $env:RUNNER_TEMP 'hotkeySKG.exe'
 
-          Invoke-WebRequest -Uri $env:LEGACY_EXE_URL -OutFile $path -MaximumRedirection 10
+          if ([string]::IsNullOrWhiteSpace($env:LEGACY_EXE_GPG_PASSPHRASE)) {
+            throw 'Repository secret LEGACY_EXE_GPG_PASSPHRASE is not configured.'
+          }
+
+          $encrypted = Join-Path $PWD 'tests\legacy-binary\hotkeySKG.exe.gpg'
+          if (-not (Test-Path -LiteralPath $encrypted -PathType Leaf)) {
+            throw "Encrypted legacy executable was not found: $encrypted"
+          }
+
+          $path = Join-Path $env:RUNNER_TEMP 'hotkeySKG.exe'
+          & gpg.exe `
+            --batch `
+            --yes `
+            --pinentry-mode loopback `
+            --passphrase $env:LEGACY_EXE_GPG_PASSPHRASE `
+            --output $path `
+            --decrypt $encrypted
+
+          if ($LASTEXITCODE -ne 0) {
+            throw "GnuPG failed to decrypt the legacy executable (exit code $LASTEXITCODE)."
+          }
 
           $actual = (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant()
-          $expected = $env:EXPECTED_SHA256.Trim().ToLowerInvariant()
+          $expected = '5492198ce403d796c8588b17419bce82a0e6de3961bb40896a875ee5dee359ea'
           if ($actual -ne $expected) {
+            Remove-Item -LiteralPath $path -Force -ErrorAction SilentlyContinue
             throw "Legacy executable SHA-256 mismatch. Expected $expected, actual $actual."
           }
 
@@ -91,12 +104,10 @@ jobs:
 
       - name: Run direct legacy differential
         shell: powershell
-        env:
-          EXPECTED_SHA256: ${{ inputs.expected_sha256 }}
         run: |
           .\tools\run-legacy-differential.ps1 `
             -LegacyExe '${{ steps.legacy.outputs.path }}' `
-            -ExpectedSha256 $env:EXPECTED_SHA256 `
+            -ExpectedSha256 '5492198ce403d796c8588b17419bce82a0e6de3961bb40896a875ee5dee359ea' `
             -ReportDirectory (Join-Path $PWD 'TestResults\legacy-differential')
 
       - name: Upload differential reports

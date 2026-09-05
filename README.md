@@ -74,16 +74,29 @@ A report separately records:
 
 `.github/workflows/legacy-differential.yml` runs the same direct comparison on GitHub-hosted `windows-latest`; no self-hosted runner is required.
 
-Start **Legacy differential** from the Actions tab and provide a public download URL for the reference `hotkeySKG.exe`. The workflow:
+The reference executable is stored in the repository only in encrypted form as:
+
+```text
+tests/legacy-binary/hotkeySKG.exe.gpg
+```
+
+The workflow decrypts that file using the repository Actions secret:
+
+```text
+LEGACY_EXE_GPG_PASSPHRASE
+```
+
+Start **Legacy differential** from the Actions tab. The workflow:
 
 1. checks out iKeyd and installs .NET 8,
 2. ensures the Japanese `Language.Basic` Windows capability is present and configures `ja-JP`,
-3. downloads `hotkeySKG.exe`,
-4. rejects it unless its SHA-256 matches the pinned reference value,
-5. runs the iKeyd ↔ legacy EXE differential suite, and
-6. uploads `legacy-differential-reports` as a GitHub Actions artifact even when the comparison fails.
+3. installs GnuPG,
+4. decrypts `tests/legacy-binary/hotkeySKG.exe.gpg` using `LEGACY_EXE_GPG_PASSPHRASE`,
+5. rejects the decrypted executable unless its SHA-256 matches the pinned reference value,
+6. runs the iKeyd ↔ legacy EXE differential suite, and
+7. uploads `legacy-differential-reports` as a GitHub Actions artifact even when the comparison fails.
 
-The executable URL is only transport; the SHA-256 pin identifies the actual compatibility oracle.
+Only the passphrase lives in Actions Secrets; the encrypted binary may remain in the public repository.
 
 To invoke only the legacy executable runner without the direct iKeyd-vs-EXE comparison:
 
