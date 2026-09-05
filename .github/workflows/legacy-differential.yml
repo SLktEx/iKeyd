@@ -8,6 +8,9 @@ on:
       - tests/legacy-binary/hotkeySKG.exe.gpg
       - tests/legacy-binary/hotkeySKG.ahk.gpg.asc
       - .github/workflows/legacy-differential.yml
+      - tools/analyze-legacy-compatibility.py
+      - tests/compatibility/coverage-rules.json
+      - config/hotkeySKG.behavior.json
       - tests/iKeyd.Compatibility.Tests/Scenarios/**
       - tests/iKeyd.Windows.Tests/HostedTModeLegacyRunner.cs
       - tests/iKeyd.Windows.Tests/HostedLegacyDifferentialTests.cs
@@ -32,6 +35,10 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 8.0.x
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
 
       - name: Resolve bundled GnuPG
         id: gpg
@@ -102,6 +109,21 @@ jobs:
           }
           "path=$path" >> $env:GITHUB_OUTPUT
           Write-Host "Verified hotkeySKG.ahk SHA-256: $actual"
+
+      - name: Generate compatibility inventory
+        shell: powershell
+        env:
+          IKEYD_LEGACY_AHK: ${{ steps.source.outputs.path }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $outputDir = Join-Path $PWD 'TestResults\compatibility-inventory'
+          New-Item -ItemType Directory -Force -Path $outputDir | Out-Null
+          python tools/analyze-legacy-compatibility.py $env:IKEYD_LEGACY_AHK `
+            --coverage tests/compatibility/coverage-rules.json `
+            --profile config/hotkeySKG.behavior.json `
+            --scenarios tests/iKeyd.Compatibility.Tests/Scenarios `
+            --json (Join-Path $outputDir 'compatibility-matrix.json') `
+            --markdown (Join-Path $outputDir 'compatibility-matrix.md')
 
       - name: Download pinned AutoHotkey v1.1.16.05 interpreter
         id: ahk
@@ -177,5 +199,14 @@ jobs:
         with:
           name: legacy-differential-reports
           path: TestResults/legacy-differential
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: Upload compatibility inventory
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: compatibility-inventory
+          path: TestResults/compatibility-inventory
           if-no-files-found: warn
           retention-days: 30
