@@ -7,6 +7,8 @@ public sealed record LegacyDifferentialReport
 {
     public required string ScenarioId { get; init; }
     public required DateTimeOffset GeneratedAtUtc { get; init; }
+    public required ScenarioInitialState InitialState { get; init; }
+    public required IReadOnlyList<ScenarioInputEvent> Input { get; init; }
     public required ScenarioExpected Expected { get; init; }
     public required ScenarioRunResult IKeyd { get; init; }
     public required ScenarioRunResult LegacyExe { get; init; }
@@ -44,6 +46,8 @@ public static class LegacyDifferentialComparison
         {
             ScenarioId = scenario.Id,
             GeneratedAtUtc = DateTimeOffset.UtcNow,
+            InitialState = scenario.InitialState,
+            Input = scenario.Input.ToArray(),
             Expected = scenario.Expected,
             IKeyd = iKeyd,
             LegacyExe = legacy,
