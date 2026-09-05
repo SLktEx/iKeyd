@@ -5,6 +5,7 @@ using iKeyd.Core.Keymaps;
 using iKeyd.Core.Layers;
 using iKeyd.Core.Macros;
 using iKeyd.Core.Modes;
+using iKeyd.Profiles.HotkeySkg.Runtime;
 using iKeyd.Windows.Input;
 
 namespace iKeyd.App;
@@ -18,6 +19,8 @@ internal sealed class IKeydRuntimeHandler : IKeyboardEventHandler, IMacroActionD
     private readonly LegacySendOutput _send;
     private readonly IDesktopBackend _desktop;
     private readonly DesktopActionService _desktopActions;
+    private readonly WindowGroupController _windowGroup;
+    private readonly IHotkeySkgInteractiveActions? _interactiveActions;
     private readonly ChordEngine<string> _sEngine;
     private readonly ChordEngine<string> _kEngine;
     private readonly HashSet<ushort> _suppressedKeys = [];
@@ -34,7 +37,8 @@ internal sealed class IKeydRuntimeHandler : IKeyboardEventHandler, IMacroActionD
         IInputMethod inputMethod,
         KeyboardState keyboardState,
         LegacySendOutput send,
-        IDesktopBackend desktop)
+        IDesktopBackend desktop,
+        IHotkeySkgInteractiveActions? interactiveActions = null)
     {
         _configuration = configuration ?? throw new ArgumentNullException(nameof(configuration));
         _inputMethod = inputMethod ?? throw new ArgumentNullException(nameof(inputMethod));
@@ -42,6 +46,8 @@ internal sealed class IKeydRuntimeHandler : IKeyboardEventHandler, IMacroActionD
         _send = send ?? throw new ArgumentNullException(nameof(send));
         _desktop = desktop ?? throw new ArgumentNullException(nameof(desktop));
         _desktopActions = new DesktopActionService(desktop);
+        _windowGroup = new WindowGroupController(desktop);
+        _interactiveActions = interactiveActions;
         _sEngine = new ChordEngine<string>(configuration.SKeymap, configuration.ChordWindowMs);
         _kEngine = new ChordEngine<string>(configuration.KKeymap, configuration.ChordWindowMs);
         _mode = InputModeState.Initial.SwitchTo(configuration.StartupMode);
@@ -135,7 +141,7 @@ internal sealed class IKeydRuntimeHandler : IKeyboardEventHandler, IMacroActionD
         {
             ThrowIfDisposed();
             if (!DispatchFunctionKey(new KeyId(hotkey.Key.ToString()), hotkey.State))
-                throw new NotSupportedException($"Macro hotkey '{{hk {hotkey.State}{hotkey.Key}}}' is not mapped by the Windows v1 runtime.");
+                throw new NotSupportedException($"Macro hotkey '{{hk {hotkey.State}{hotkey.Key}}}' is not mapped by the hotkeySKG compatibility runtime.");
         }
 
         return ValueTask.CompletedTask;
@@ -218,6 +224,10 @@ internal sealed class IKeydRuntimeHandler : IKeyboardEventHandler, IMacroActionD
             case "AS":
                 _send.SendChord(WindowsKeyMap.Alt, WindowsKeyMap.Shift, virtualKey);
                 return true;
+            case "SH":
+            case "KSH":
+            case "ASH":
+                return DispatchShiftHomeKey(key, state);
             case "SM":
                 return DispatchMouseMedia(key);
             default:
@@ -225,111 +235,247 @@ internal sealed class IKeydRuntimeHandler : IKeyboardEventHandler, IMacroActionD
         }
     }
 
+    private bool DispatchShiftHomeKey(KeyId key, string state)
+    {
+        var output = key.Value.ToUpperInvariant() switch
+        {
+            "Q" => "#1",
+            "W" => "#2",
+            "E" => "#3",
+            "R" => "#4",
+            "T" => "#5",
+            "Y" => "#6",
+            "U" => "#7",
+            "I" => "#8",
+            "O" => "#9",
+            "P" => "#0",
+            "AT" => "{F11}",
+            "A" => "1",
+            "S" => "2",
+            "D" => "3",
+            "F" => "4",
+            "G" => "5",
+            "H" => "6",
+            "J" => "7",
+            "K" => "8",
+            "L" => "9",
+            "SCOLON" => "0",
+            "COLON" => "{F12}",
+            "Z" or "1" => "{F1}",
+            "X" or "2" => "{F2}",
+            "C" or "3" => "{F3}",
+            "V" or "4" => "{F4}",
+            "B" or "5" => "{F5}",
+            "N" or "6" => "{F6}",
+            "M" or "7" => "{F7}",
+            "COMMA" or "8" => "{F8}",
+            "DOT" or "9" => "{F9}",
+            "SLASH" or "0" => "{F10}",
+            _ => null
+        };
+
+        if (output is null)
+            return false;
+
+        var prefix = state switch
+        {
+            "KSH" => "^",
+            "ASH" => "!",
+            _ => string.Empty
+        };
+        _send.Send(prefix + output);
+        return true;
+    }
+
     private bool DispatchFunctionKey(KeyId key, string state)
     {
-        var name = key.Value;
+        var name = key.Value.ToUpperInvariant();
 
-        if (name == "Q")
+        switch (name)
         {
-            if (state == "M") { _send.Send("("); return true; }
-            if (state == "MH") { _send.Send("\""); return true; }
-            if (state == "HM") { _send.Send("'"); return true; }
+            case "Q":
+                return SendWithFuncKey(state, "(", "\"", "'");
+            case "W":
+                return SendWithFuncKey(state, "!{F4}", "^{F4}");
+            case "U":
+                return SendWithFuncKey(state, "{HOME}", "+{HOME}", "^{HOME}", "^+{HOME}");
+            case "I":
+                return SendWithFuncKey(state, "{UP}", "+{UP}", "^{UP}", "^+{UP}");
+            case "O":
+                return SendWithFuncKey(state, "{END}", "+{END}", "^{END}", "^+{END}");
+            case "P":
+                return SendWithFuncKey(state, "{PGUP}", "+{PGUP}", "^{PGUP}", "^+{PGUP}");
+            case "AT":
+                return SendWithFuncKey(state, "{ESC}", "{AppsKey}", "!{Space}");
+            case "A":
+                return SendWithFuncKey(state, "[]{LEFT}", "{{}", "{{}{ENTER}{ENTER}{}}{UP}{END}");
+            case "S":
+                return SendWithFuncKey(state, "(){LEFT}", "{}}", "{{}{}}{LEFT}");
+            case "D":
+                return SendWithFuncKey(state, "-", "=", "%", "~");
+            case "J":
+                return SendWithFuncKey(state, "{LEFT}", "+{LEFT}", "^{LEFT}", "^+{LEFT}");
+            case "K":
+                return SendWithFuncKey(state, "{DOWN}", "+{DOWN}", "^{DOWN}", "^+{DOWN}");
+            case "L":
+                return SendWithFuncKey(state, "{RIGHT}", "+{RIGHT}", "^{RIGHT}", "^+{RIGHT}");
+            case "SCOLON":
+                return SendWithFuncKey(state, "{PGDN}", "+{PGDN}", "^{PGDN}", "^+{PGDN}");
+            case "COLON":
+                return SendWithFuncKey(state, "$", "{#}", "&", "{^}");
+            case "Z":
+                return SendWithFuncKey(state, "\\", "/", "|");
+            case "X":
+                return SendWithFuncKey(state, "\"\"{LEFT}", "''{LEFT}", "%%{LEFT}");
+            case "C":
+                return SendWithFuncKey(state, "_", ">", "<");
+            case "N":
+                return SendWithFuncKey(state, "{BS}", "!{RIGHT}", "!{LEFT}", "^+n");
+            case "M":
+                return SendWithFuncKey(state, "{DEL}", "{END}{SHIFT DOWN}{HOME}{LEFT}{SHIFT UP}", "{HOME}+{END}", "#m");
+            case "COMMA":
+                return SendWithFuncKey(state, "{SPACE}", "{TAB}", "{ENTER}");
+            case "DOT":
+                return SendWithFuncKey(state, ")", "<>{LEFT}", "</>{LEFT}");
+            case "SLASH":
+                return SendWithFuncKey(state, "{!}", "/*  */{LEFT 3}", "{END}+{HOME}^x\\begin{{}^v{}}{ENTER 2}\\end{{}^v{}}{UP}");
+            case "E":
+                if (state == "M") { _desktopActions.MinimizeActive(); return true; }
+                if (state == "MH") { _desktopActions.PlaceActive(DesktopPlacement.TopHalf); return true; }
+                if (state == "HM") { _desktopActions.PlaceActive(DesktopPlacement.BottomHalf); return true; }
+                return false;
+            case "R":
+                if (state == "M") { _desktopActions.ToggleMaximizeActive(); return true; }
+                if (state == "MH") { _desktopActions.PlaceActive(DesktopPlacement.RightHalf); return true; }
+                if (state == "HM") { _desktopActions.PlaceActive(DesktopPlacement.LeftHalf); return true; }
+                if (state == "MS") { _send.Send("#r"); return true; }
+                return false;
+            case "T":
+                if (state == "M") { _desktopActions.ToggleTopMostActive(); return true; }
+                if (state == "MH") { _desktopActions.AdjustOpacityActive(-30); return true; }
+                if (state == "HM") { _desktopActions.AdjustOpacityActive(30); return true; }
+                if (state == "MS") { _desktopActions.ToggleCaptionActive(); return true; }
+                return false;
+            case "Y":
+            case "H":
+                return DispatchMacroKey(name[0], state);
+            case "F":
+                if (state == "M") { _send.Send("{vkF3sc029}"); return true; }
+                if (state == "MH") { _send.SendKey(WindowsKeyMap.CapsLock); return true; }
+                if (state == "HM") { _send.Send("{Ins}"); return true; }
+                return false;
+            case "G":
+                if (state == "M") { _windowGroup.ActivateNext(); return true; }
+                if (state == "MH") { _send.Send("^{TAB}"); return true; }
+                if (state == "HM") { _send.Send("^+{TAB}"); return true; }
+                if (state == "MS") { _windowGroup.ToggleActiveWindow(); return true; }
+                return false;
+            case "V":
+                if (state == "M") { _interactiveActions?.ShowClipboardHistory(); return true; }
+                if (state == "MH") { _interactiveActions?.CaptureLatestClipboard(); return true; }
+                if (state == "HM") { _interactiveActions?.PasteCapturedClipboard(); return true; }
+                return false;
+            case "B":
+                if (state == "M") { _desktopActions.ActivateBottomWindowOfActiveClass(); return true; }
+                if (state == "MH") { _send.Send("!{ESC}"); return true; }
+                if (state == "HM") { _send.Send("!+{ESC}"); return true; }
+                if (state == "MS") { _windowGroup.ResetAndAdvance(); return true; }
+                return false;
+            case "1":
+                _mode = _mode.SwitchTo(InputMode.S);
+                return true;
+            case "2":
+                _mode = _mode.SwitchTo(InputMode.R);
+                return true;
+            case "3":
+                _mode = _mode.SwitchTo(InputMode.T);
+                return true;
+            case "4":
+                _mode = _mode.SwitchTo(InputMode.K);
+                return true;
+            case "5":
+            case "6":
+            case "7":
+            case "8":
+            case "9":
+            case "0":
+                return SendWithFuncKey(state, string.Empty, string.Empty, string.Empty, string.Empty);
+            default:
+                return false;
         }
+    }
 
-        if (name == "W")
+    private bool DispatchMacroKey(char slot, string state)
+    {
+        if (state == "M")
         {
-            if (state == "M") { _send.SendChord(WindowsKeyMap.Alt, 0x73); return true; }
-            if (state == "MH") { _send.SendChord(WindowsKeyMap.Control, 0x73); return true; }
-        }
-
-        if (name == "J")
-        {
-            if (state == "M") { _send.SendKey(WindowsKeyMap.Left); return true; }
-            if (state == "MH") { _send.SendChord(WindowsKeyMap.Shift, WindowsKeyMap.Left); return true; }
-            if (state == "HM") { _send.SendChord(WindowsKeyMap.Control, WindowsKeyMap.Left); return true; }
-            if (state == "MS") { _send.SendChord(WindowsKeyMap.Control, WindowsKeyMap.Shift, WindowsKeyMap.Left); return true; }
-        }
-
-        if (name == "M" && state == "M")
-        {
-            _send.SendKey(WindowsKeyMap.Delete);
+            _interactiveActions?.RunMacro(slot);
             return true;
         }
-
-        if (name == "COMMA")
+        if (state == "MH")
         {
-            if (state == "M") { _send.SendKey(WindowsKeyMap.Space); return true; }
-            if (state == "MH") { _send.SendKey(WindowsKeyMap.Tab); return true; }
-            if (state == "HM") { _send.SendKey(WindowsKeyMap.Enter); return true; }
+            _interactiveActions?.EditMacro(slot);
+            return true;
         }
-
-        if (name == "E")
+        if (state == "HM")
         {
-            if (state == "M") { _desktopActions.MinimizeActive(); return true; }
-            if (state == "MH") { _desktopActions.PlaceActive(DesktopPlacement.TopHalf); return true; }
-            if (state == "HM") { _desktopActions.PlaceActive(DesktopPlacement.BottomHalf); return true; }
+            _interactiveActions?.EditMacroRepeat();
+            return true;
         }
-
-        if (name == "R")
-        {
-            if (state == "M") { _desktopActions.ToggleMaximizeActive(); return true; }
-            if (state == "MH") { _desktopActions.PlaceActive(DesktopPlacement.RightHalf); return true; }
-            if (state == "HM") { _desktopActions.PlaceActive(DesktopPlacement.LeftHalf); return true; }
-            if (state == "MS") { _send.SendChord(WindowsKeyMap.LeftWin, (ushort)'R'); return true; }
-        }
-
-        if (name == "T")
-        {
-            if (state == "M") { _desktopActions.ToggleTopMostActive(); return true; }
-            if (state == "MH") { _desktopActions.AdjustOpacityActive(-30); return true; }
-            if (state == "HM") { _desktopActions.AdjustOpacityActive(30); return true; }
-            if (state == "MS") { _desktopActions.ToggleCaptionActive(); return true; }
-        }
-
-        if (name == "G")
-        {
-            if (state == "MH") { _send.SendChord(WindowsKeyMap.Control, WindowsKeyMap.Tab); return true; }
-            if (state == "HM") { _send.SendChord(WindowsKeyMap.Control, WindowsKeyMap.Shift, WindowsKeyMap.Tab); return true; }
-        }
-
-        if (name == "B")
-        {
-            if (state == "MH") { _send.SendChord(WindowsKeyMap.Alt, WindowsKeyMap.Escape); return true; }
-            if (state == "HM") { _send.SendChord(WindowsKeyMap.Alt, WindowsKeyMap.Shift, WindowsKeyMap.Escape); return true; }
-        }
-
         return false;
+    }
+
+    private bool SendWithFuncKey(string state, string m = "", string mh = "", string hm = "", string ms = "")
+    {
+        string? output = state switch
+        {
+            "M" => m,
+            "MH" => mh,
+            "HM" => hm,
+            "MS" => ms,
+            "KM" => "^" + m,
+            "KMH" => "^" + mh,
+            "KHM" => "^" + hm,
+            "KMS" => "^" + ms,
+            "AM" => "!" + m,
+            "AMH" => "!" + mh,
+            "AHM" => "!" + hm,
+            "AMS" => "!" + ms,
+            _ => null
+        };
+
+        if (output is null)
+            return false;
+        _send.Send(output);
+        return true;
     }
 
     private bool DispatchMouseMedia(KeyId key)
     {
-        var amount = GetMouseMoveAmount();
-        switch (key.Value)
+        var name = key.Value.ToUpperInvariant();
+        switch (name)
         {
             case "D":
             case "E":
             case "C":
                 return true;
             case "J":
-                _desktop.MovePointerBy(-amount, 0);
+                MoveMouse(-1, 0);
                 return true;
             case "K":
-                _desktop.MovePointerBy(0, amount);
+                MoveMouse(0, 1);
                 return true;
             case "L":
-                _desktop.MovePointerBy(amount, 0);
+                MoveMouse(1, 0);
                 return true;
             case "I":
-                _desktop.MovePointerBy(0, -amount);
+                MoveMouse(0, -1);
                 return true;
             case "U":
                 _desktop.Click(DesktopMouseButton.Left);
                 return true;
             case "O":
                 _desktop.Click(DesktopMouseButton.Right);
-                return true;
-            case "COMMA":
-                _desktop.Click(DesktopMouseButton.Middle);
                 return true;
             case "P":
                 _desktop.ScrollVertical(120);
@@ -342,6 +488,18 @@ internal sealed class IKeydRuntimeHandler : IKeyboardEventHandler, IMacroActionD
                 return true;
             case "COLON":
                 _desktop.ScrollVertical(-120, controlModifier: true);
+                return true;
+            case "COMMA":
+                _desktop.Click(DesktopMouseButton.Middle);
+                return true;
+            case "Y":
+                _desktopActions.ToggleMouseButton(DesktopMouseButton.Left);
+                return true;
+            case "H":
+                // Preserve the legacy typo `if s tate = U`: the right button can be released,
+                // but the legacy script never reaches the right-button-down branch.
+                if (_desktop.IsMouseButtonDown(DesktopMouseButton.Right))
+                    _desktop.SetMouseButton(DesktopMouseButton.Right, false);
                 return true;
             case "Q":
                 _desktop.SendMediaCommand(DesktopMediaCommand.VolumeUp);
@@ -361,20 +519,50 @@ internal sealed class IKeydRuntimeHandler : IKeyboardEventHandler, IMacroActionD
             case "V":
                 _desktop.SendMediaCommand(DesktopMediaCommand.PreviousTrack);
                 return true;
+            case "N":
+                MovePointerToLegacyWindowCorner(bottomRight: false);
+                return true;
+            case "M":
+                MovePointerToLegacyWindowCorner(bottomRight: true);
+                return true;
             default:
                 return false;
         }
     }
 
-    private int GetMouseMoveAmount()
+    private void MoveMouse(int xDirection, int yDirection)
     {
         if (_keyboardState.IsVirtualKeyPressed((ushort)'D'))
-            return 30;
+        {
+            _desktop.MovePointerBy(xDirection * 30, yDirection * 30);
+            return;
+        }
         if (_keyboardState.IsVirtualKeyPressed((ushort)'E'))
-            return 10;
+        {
+            _desktop.MovePointerBy(xDirection * 10, yDirection * 10);
+            return;
+        }
         if (_keyboardState.IsVirtualKeyPressed((ushort)'C'))
-            return Math.Max(1, _desktop.GetPrimaryWorkArea().Width / 4);
-        return 100;
+        {
+            var area = _desktop.GetPrimaryWorkArea();
+            _desktop.MovePointerBy(xDirection * Math.Max(1, area.Width / 4), yDirection * Math.Max(1, area.Height / 4));
+            return;
+        }
+        _desktop.MovePointerBy(xDirection * 100, yDirection * 100);
+    }
+
+    private void MovePointerToLegacyWindowCorner(bool bottomRight)
+    {
+        var window = _desktop.GetActiveWindow();
+        if (!_desktop.IsWindow(window))
+            return;
+        var bounds = _desktop.GetWindowBounds(window);
+        if (bounds.X < 0)
+            return;
+        var point = bottomRight
+            ? new DesktopPoint(bounds.Right - 1, bounds.Bottom - 1)
+            : new DesktopPoint(bounds.X + 1, bounds.Y + 1);
+        _desktop.MovePointer(point);
     }
 
     private void SendLayerAction(LayerAction action)
