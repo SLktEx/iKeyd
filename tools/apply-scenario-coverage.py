@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import importlib.util
 import json
+import sys
 from collections import Counter
 from pathlib import Path
 from typing import Any
@@ -19,6 +20,7 @@ ANALYZER_PATH = Path(__file__).with_name("analyze-legacy-compatibility.py")
 _spec = importlib.util.spec_from_file_location("legacy_compatibility_analyzer", ANALYZER_PATH)
 _analyzer = importlib.util.module_from_spec(_spec)
 assert _spec.loader is not None
+sys.modules[_spec.name] = _analyzer
 _spec.loader.exec_module(_analyzer)
 
 
