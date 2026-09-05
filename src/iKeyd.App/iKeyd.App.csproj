@@ -7,16 +7,24 @@
     <Nullable>enable</Nullable>
     <AssemblyName>iKeyd</AssemblyName>
     <RootNamespace>iKeyd.App</RootNamespace>
+    <EmbedDefaultConfig Condition="'$(EmbedDefaultConfig)' == ''">false</EmbedDefaultConfig>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(EmbedDefaultConfig)' == 'true'">
+    <AssemblyName>iKeyd-embedded</AssemblyName>
+    <DefineConstants>$(DefineConstants);IKEYD_EMBEDDED_CONFIG</DefineConstants>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../iKeyd.Core/iKeyd.Core.csproj" />
     <ProjectReference Include="../iKeyd.Profiles.HotkeySkg/iKeyd.Profiles.HotkeySkg.csproj" />
     <ProjectReference Include="../iKeyd.Windows/iKeyd.Windows.csproj" />
   </ItemGroup>
-  <ItemGroup>
+  <ItemGroup Condition="'$(EmbedDefaultConfig)' != 'true'">
     <Content Include="../../config/hotkeySKG.behavior.json" Link="iKeyd.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
     </Content>
+  </ItemGroup>
+  <ItemGroup Condition="'$(EmbedDefaultConfig)' == 'true'">
+    <EmbeddedResource Include="../../config/hotkeySKG.behavior.json" LogicalName="iKeyd.Embedded.json" />
   </ItemGroup>
 </Project>
