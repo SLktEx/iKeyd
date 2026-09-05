@@ -67,38 +67,38 @@ internal static class WindowsKeyMap
 
     public static bool TryResolveNamedKey(string name, out KeyboardKey key)
     {
-        var normalized = name.Trim().ToUpperInvariant();
+        ArgumentNullException.ThrowIfNull(name);
+        return TryResolveNamedKey(name.AsSpan(), out key);
+    }
+
+    public static bool TryResolveNamedKey(ReadOnlySpan<char> name, out KeyboardKey key)
+    {
+        var normalized = name.Trim();
         ushort virtualKey;
 
-        if (normalized.Length > 1 && normalized[0] == 'F' &&
+        if (normalized.Length > 1 && (normalized[0] is 'F' or 'f') &&
             int.TryParse(normalized[1..], out var functionNumber) &&
             functionNumber is >= 1 and <= 12)
         {
             virtualKey = (ushort)(F1 + functionNumber - 1);
         }
-        else
-        {
-            virtualKey = normalized switch
-            {
-                "UP" => Up,
-                "DOWN" => Down,
-                "LEFT" => Left,
-                "RIGHT" => Right,
-                "HOME" => Home,
-                "END" => End,
-                "PGUP" or "PAGEUP" => PageUp,
-                "PGDN" or "PAGEDOWN" => PageDown,
-                "TAB" => Tab,
-                "BS" or "BACKSPACE" => Backspace,
-                "DEL" or "DELETE" => Delete,
-                "ENTER" or "RETURN" => Enter,
-                "INS" or "INSERT" => Insert,
-                "ESC" or "ESCAPE" => Escape,
-                "APPSKEY" or "APPS" => Apps,
-                "SPACE" => Space,
-                _ => 0
-            };
-        }
+        else if (normalized.Equals("UP", StringComparison.OrdinalIgnoreCase)) virtualKey = Up;
+        else if (normalized.Equals("DOWN", StringComparison.OrdinalIgnoreCase)) virtualKey = Down;
+        else if (normalized.Equals("LEFT", StringComparison.OrdinalIgnoreCase)) virtualKey = Left;
+        else if (normalized.Equals("RIGHT", StringComparison.OrdinalIgnoreCase)) virtualKey = Right;
+        else if (normalized.Equals("HOME", StringComparison.OrdinalIgnoreCase)) virtualKey = Home;
+        else if (normalized.Equals("END", StringComparison.OrdinalIgnoreCase)) virtualKey = End;
+        else if (normalized.Equals("PGUP", StringComparison.OrdinalIgnoreCase) || normalized.Equals("PAGEUP", StringComparison.OrdinalIgnoreCase)) virtualKey = PageUp;
+        else if (normalized.Equals("PGDN", StringComparison.OrdinalIgnoreCase) || normalized.Equals("PAGEDOWN", StringComparison.OrdinalIgnoreCase)) virtualKey = PageDown;
+        else if (normalized.Equals("TAB", StringComparison.OrdinalIgnoreCase)) virtualKey = Tab;
+        else if (normalized.Equals("BS", StringComparison.OrdinalIgnoreCase) || normalized.Equals("BACKSPACE", StringComparison.OrdinalIgnoreCase)) virtualKey = Backspace;
+        else if (normalized.Equals("DEL", StringComparison.OrdinalIgnoreCase) || normalized.Equals("DELETE", StringComparison.OrdinalIgnoreCase)) virtualKey = Delete;
+        else if (normalized.Equals("ENTER", StringComparison.OrdinalIgnoreCase) || normalized.Equals("RETURN", StringComparison.OrdinalIgnoreCase)) virtualKey = Enter;
+        else if (normalized.Equals("INS", StringComparison.OrdinalIgnoreCase) || normalized.Equals("INSERT", StringComparison.OrdinalIgnoreCase)) virtualKey = Insert;
+        else if (normalized.Equals("ESC", StringComparison.OrdinalIgnoreCase) || normalized.Equals("ESCAPE", StringComparison.OrdinalIgnoreCase)) virtualKey = Escape;
+        else if (normalized.Equals("APPSKEY", StringComparison.OrdinalIgnoreCase) || normalized.Equals("APPS", StringComparison.OrdinalIgnoreCase)) virtualKey = Apps;
+        else if (normalized.Equals("SPACE", StringComparison.OrdinalIgnoreCase)) virtualKey = Space;
+        else virtualKey = 0;
 
         if (virtualKey == 0)
         {
