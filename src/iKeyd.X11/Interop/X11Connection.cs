@@ -48,9 +48,8 @@ public sealed class X11Connection : IBackendCapabilityProvider, IDisposable
     public nuint[] GetProperty(nuint window, string propertyName, int maxItems = 4096)
     {
         ThrowIfDisposed();
-        var property = Atom(propertyName);
         var status = X11Native.XGetWindowProperty(
-            Display, window, property, 0, maxItems, 0, 0,
+            Display, window, Atom(propertyName), 0, maxItems, 0, 0,
             out _, out var format, out var count, out _, out var data);
         if (status != 0 || data == 0 || count == 0)
         {
@@ -65,7 +64,7 @@ public sealed class X11Connection : IBackendCapabilityProvider, IDisposable
             {
                 8 => 1,
                 16 => 2,
-                32 => IntPtr.Size, // Xlib expands format-32 values to unsigned long.
+                32 => IntPtr.Size,
                 _ => throw new InvalidDataException($"Unsupported X11 property format {format}.")
             };
             for (var index = 0; index < result.Length; index++)
@@ -82,21 +81,14 @@ public sealed class X11Connection : IBackendCapabilityProvider, IDisposable
             }
             return result;
         }
-        finally
-        {
-            X11Native.XFree(data);
-        }
+        finally { X11Native.XFree(data); }
     }
 
     public string? GetWindowClass(nuint window)
     {
         ThrowIfDisposed();
-        if (X11Native.XGetClassHint(Display, window, out var hint) == 0)
-            return null;
-        try
-        {
-            return hint.ResClass != 0 ? Marshal.PtrToStringUTF8(hint.ResClass) : null;
-        }
+        if (X11Native.XGetClassHint(Display, window, out var hint) == 0) return null;
+        try { return hint.ResClass != 0 ? Marshal.PtrToStringUTF8(hint.ResClass) : null; }
         finally
         {
             if (hint.ResName != 0) X11Native.XFree(hint.ResName);
@@ -142,10 +134,11 @@ public sealed class X11Connection : IBackendCapabilityProvider, IDisposable
             Data3 = d3,
             Data4 = d4
         };
-        var memory = Marshal.AllocHGlobal(24 * IntPtr.Size);
+        var size = 24 * IntPtr.Size;
+        var memory = Marshal.AllocHGlobal(size);
         try
         {
-            new Span<byte>((void*)memory, 24 * IntPtr.Size).Clear();
+            Marshal.Copy(new byte[size], 0, memory, size);
             Marshal.StructureToPtr(message, memory, false);
             X11Native.XSendEvent(Display, Root, 0, X11Native.SubstructureRedirectMask | X11Native.SubstructureNotifyMask, memory);
             X11Native.XFlush(Display);
