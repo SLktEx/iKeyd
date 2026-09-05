@@ -7,24 +7,24 @@
     <Nullable>enable</Nullable>
     <AssemblyName>iKeyd</AssemblyName>
     <RootNamespace>iKeyd.App</RootNamespace>
-    <EmbedDefaultConfig Condition="'$(EmbedDefaultConfig)' == ''">false</EmbedDefaultConfig>
-  </PropertyGroup>
-  <PropertyGroup Condition="'$(EmbedDefaultConfig)' == 'true'">
-    <AssemblyName>iKeyd-embedded</AssemblyName>
-    <DefineConstants>$(DefineConstants);IKEYD_EMBEDDED_CONFIG</DefineConstants>
+    <ProfileSource>$(MSBuildProjectDirectory)\..\..\config\hotkeySKG.behavior.json</ProfileSource>
+    <GeneratedProfileSource>$(IntermediateOutputPath)GeneratedProfile.g.cs</GeneratedProfileSource>
+    <ProfileCompilerAssembly>$(MSBuildProjectDirectory)\..\..\tools\iKeyd.ProfileCompiler\bin\$(Configuration)\net8.0\iKeyd.ProfileCompiler.dll</ProfileCompilerAssembly>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../iKeyd.Core/iKeyd.Core.csproj" />
     <ProjectReference Include="../iKeyd.Profiles.HotkeySkg/iKeyd.Profiles.HotkeySkg.csproj" />
     <ProjectReference Include="../iKeyd.Windows/iKeyd.Windows.csproj" />
+    <ProjectReference Include="../../tools/iKeyd.ProfileCompiler/iKeyd.ProfileCompiler.csproj" ReferenceOutputAssembly="false" />
   </ItemGroup>
-  <ItemGroup Condition="'$(EmbedDefaultConfig)' != 'true'">
-    <Content Include="../../config/hotkeySKG.behavior.json" Link="iKeyd.json">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
-    </Content>
+  <ItemGroup>
+    <Compile Include="$(GeneratedProfileSource)" Visible="false" />
   </ItemGroup>
-  <ItemGroup Condition="'$(EmbedDefaultConfig)' == 'true'">
-    <EmbeddedResource Include="../../config/hotkeySKG.behavior.json" LogicalName="iKeyd.Embedded.json" />
-  </ItemGroup>
+  <Target Name="GenerateCompiledProfile"
+          BeforeTargets="CoreCompile"
+          DependsOnTargets="ResolveProjectReferences"
+          Inputs="$(ProfileSource);$(ProfileCompilerAssembly)"
+          Outputs="$(GeneratedProfileSource)">
+    <Exec Command="dotnet &quot;$(ProfileCompilerAssembly)&quot; &quot;$(ProfileSource)&quot; &quot;$(GeneratedProfileSource)&quot;" />
+  </Target>
 </Project>
