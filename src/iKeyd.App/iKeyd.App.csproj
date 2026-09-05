@@ -18,6 +18,7 @@
     <ProjectReference Include="../../tools/iKeyd.ProfileCompiler/iKeyd.ProfileCompiler.csproj" ReferenceOutputAssembly="false" />
   </ItemGroup>
   <ItemGroup>
+    <InternalsVisibleTo Include="iKeyd.Windows.Tests" />
     <Compile Include="$(GeneratedProfileSource)" Visible="false" />
   </ItemGroup>
   <Target Name="GenerateCompiledProfile"

@@ -16,6 +16,7 @@
     </PackageReference>
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="../../src/iKeyd.App/iKeyd.App.csproj" />
     <ProjectReference Include="../../src/iKeyd.Windows/iKeyd.Windows.csproj" />
     <ProjectReference Include="../iKeyd.Compatibility.Tests/iKeyd.Compatibility.Tests.csproj" />
   </ItemGroup>
