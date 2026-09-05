@@ -29,6 +29,8 @@ config/hotkeySKG.behavior.json
 
 The build copies that file beside the executable as `iKeyd.json`.
 
+See [JSON configuration schema](docs/json-configuration.md) for the complete field layout, validation rules, key/chord semantics, and the distinction between runtime configuration and legacy snapshot metadata.
+
 ### Download an Actions artifact
 
 Run **Windows package** from the GitHub Actions tab, or push a `v*` tag. The workflow creates a self-contained `win-x64` package named:
