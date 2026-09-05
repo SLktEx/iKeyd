@@ -1,0 +1,155 @@
+{
+  "ime": {
+    "romaKanaConversionModes": [9, 19, 25, 27, 16],
+    "requiresImeOpen": true,
+    "routingCases": [
+      {"gmode":"S","gimode":"S","imeRomaKana":true,"expected":"ChordEngine:S"},
+      {"gmode":"S","gimode":"S","imeRomaKana":false,"expected":"PassThrough"},
+      {"gmode":"K","gimode":"K","imeRomaKana":true,"expected":"ChordEngine:K"},
+      {"gmode":"K","gimode":"K","imeRomaKana":false,"expected":"PassThrough"},
+      {"gmode":"R","gimode":"","imeRomaKana":true,"expected":"PassThrough"},
+      {"gmode":"T","gimode":"S","imeRomaKana":false,"expected":"ChordEngine:S"},
+      {"gmode":"T","gimode":"K","imeRomaKana":false,"expected":"ChordEngine:K"},
+      {"gmode":"T","gimode":"","imeRomaKana":false,"expected":"ChordEngine:"}
+    ]
+  },
+  "modeCommands": [
+    {"command":"process1","resultGmode":"S","resultGimode":"S"},
+    {"command":"process2","resultGmode":"R","resultGimode":""},
+    {"command":"process3","resultGmode":"T","resultGimode":"unchanged"},
+    {"command":"process4","resultGmode":"K","resultGimode":"K"}
+  ],
+  "layerCases": [
+    {"name":"m-down","initialState":"","initialFlag":1,"event":"MDown","finalState":"M","finalFlag":0,"actions":[]},
+    {"name":"h-down","initialState":"","initialFlag":1,"event":"HDown","finalState":"H","finalFlag":0,"actions":[]},
+    {"name":"space-down","initialState":"","initialFlag":1,"event":"SpaceDown","finalState":"S","finalFlag":0,"actions":[]},
+    {"name":"m-then-h","initialState":"M","initialFlag":0,"event":"HDown","finalState":"MH","finalFlag":0,"actions":[]},
+    {"name":"h-then-m","initialState":"H","initialFlag":0,"event":"MDown","finalState":"HM","finalFlag":0,"actions":[]},
+    {"name":"mh-h-up-tap","initialState":"MH","initialFlag":0,"event":"HUp","finalState":"M","finalFlag":1,"actions":["Tab"]},
+    {"name":"hm-m-up-tap","initialState":"HM","initialFlag":0,"event":"MUp","finalState":"H","finalFlag":1,"actions":["Shift+Tab"]},
+    {"name":"h-up-tap","initialState":"H","initialFlag":0,"event":"HUp","finalState":"","finalFlag":0,"actions":["Ctrl"]},
+    {"name":"s-up-tap","initialState":"S","initialFlag":0,"event":"SpaceUp","finalState":"","finalFlag":0,"actions":["Space"]},
+    {"name":"ms-space-up","initialState":"MS","initialFlag":0,"event":"SpaceUp","finalState":"M","finalFlag":1,"actions":["Enter"]},
+    {"name":"hs-space-up","initialState":"HS","initialFlag":0,"event":"SpaceUp","finalState":"H","finalFlag":1,"actions":["Ctrl+Space"]},
+    {"name":"ks-space-up","initialState":"KS","initialFlag":0,"event":"SpaceUp","finalState":"","finalFlag":1,"actions":["Shift+Space"]},
+    {"name":"kms-space-up","initialState":"KMS","initialFlag":0,"event":"SpaceUp","finalState":"M","finalFlag":1,"actions":["Ctrl+Enter"]},
+    {"name":"ams-space-up","initialState":"AMS","initialFlag":0,"event":"SpaceUp","finalState":"M","finalFlag":1,"actions":["Alt+Enter"]},
+    {"name":"alt-h-down","initialState":"","initialFlag":0,"event":"AltHDown","finalState":"AH","finalFlag":0,"actions":[]},
+    {"name":"alt-h-up","initialState":"AH","initialFlag":0,"event":"AltHUp","finalState":"","finalFlag":0,"actions":[]},
+    {"name":"alt-space-down","initialState":"M","initialFlag":0,"event":"AltSpaceDown","finalState":"MAS","finalFlag":0,"actions":[]},
+    {"name":"alt-space-up-ams","initialState":"AMS","initialFlag":0,"event":"AltSpaceUp","finalState":"AM","finalFlag":1,"actions":["Alt+Space"]},
+    {"name":"kana-empty","initialState":"","initialFlag":0,"event":"KanaDown","finalState":"K","finalFlag":0,"actions":[]},
+    {"name":"kana-k-toggle-off","initialState":"K","initialFlag":0,"event":"KanaDown","finalState":"","finalFlag":0,"actions":[]},
+    {"name":"kana-m","initialState":"M","initialFlag":0,"event":"KanaDown","finalState":"M","finalFlag":1,"actions":["Muhenkan"]},
+    {"name":"kana-h","initialState":"H","initialFlag":0,"event":"KanaDown","finalState":"H","finalFlag":1,"actions":["Henkan"]},
+    {"name":"kana-s","initialState":"S","initialFlag":0,"event":"KanaDown","finalState":"S","finalFlag":1,"actions":["Ctrl+Esc"]},
+    {"name":"alt-kana","initialState":"","initialFlag":0,"event":"AltKanaDown","finalState":"A","finalFlag":0,"actions":[]}
+  ],
+  "modifiedKeyDispatch": [
+    {"state":"H","action":"Ctrl+key","clearsState":false},
+    {"state":"S","action":"Shift+key","clearsState":false},
+    {"state":"HS","action":"Ctrl+Shift+key","clearsState":false},
+    {"state":"K","action":"Win+key","clearsState":true},
+    {"state":"A","action":"Alt+key","clearsState":true},
+    {"state":"KH","action":"Win+Ctrl+key","clearsState":false},
+    {"state":"KS","action":"Win+Shift+key","clearsState":false},
+    {"state":"AH","action":"Alt+Ctrl+key","clearsState":false},
+    {"state":"AS","action":"Alt+Shift+key","clearsState":false},
+    {"state":"SH","action":"SHKey","clearsState":false},
+    {"state":"KSH","action":"Ctrl+SHKey","clearsState":false},
+    {"state":"ASH","action":"Alt+SHKey","clearsState":false},
+    {"state":"SM","action":"MouseMediaMode","clearsState":false},
+    {"state":"other","action":"FunctionDispatch","clearsState":false}
+  ],
+  "functionKeyCases": [
+    {"key":"Q","state":"M","action":"("},
+    {"key":"Q","state":"MH","action":"\""},
+    {"key":"Q","state":"HM","action":"'"},
+    {"key":"W","state":"M","action":"Alt+F4"},
+    {"key":"W","state":"MH","action":"Ctrl+F4"},
+    {"key":"J","state":"M","action":"Left"},
+    {"key":"J","state":"MH","action":"Shift+Left"},
+    {"key":"J","state":"HM","action":"Ctrl+Left"},
+    {"key":"J","state":"MS","action":"Ctrl+Shift+Left"},
+    {"key":"M","state":"M","action":"Delete"},
+    {"key":"Comma","state":"M","action":"Space"},
+    {"key":"Comma","state":"MH","action":"Tab"},
+    {"key":"Comma","state":"HM","action":"Enter"}
+  ],
+  "desktopCases": [
+    {"function":"E","state":"M","modernAction":"Minimize"},
+    {"function":"E","state":"MH","modernAction":"Win+Up","legacyAction":"MoveTopHalf"},
+    {"function":"E","state":"HM","modernAction":"Win+Down","legacyAction":"MoveBottomHalf"},
+    {"function":"R","state":"M","modernAction":"ToggleMaximizeRestore"},
+    {"function":"R","state":"MH","modernAction":"Win+Right","legacyAction":"MoveRightHalf"},
+    {"function":"R","state":"HM","modernAction":"Win+Left","legacyAction":"MoveLeftHalf"},
+    {"function":"R","state":"MS","modernAction":"Win+R"},
+    {"function":"T","state":"M","modernAction":"ToggleTopmost"},
+    {"function":"T","state":"MH","modernAction":"Transparency-30"},
+    {"function":"T","state":"HM","modernAction":"Transparency+30"},
+    {"function":"T","state":"MS","modernAction":"ToggleTitleBar"},
+    {"function":"G","state":"MH","modernAction":"Ctrl+Tab"},
+    {"function":"G","state":"HM","modernAction":"Ctrl+Shift+Tab"},
+    {"function":"B","state":"MH","modernAction":"Alt+Esc"},
+    {"function":"B","state":"HM","modernAction":"Alt+Shift+Esc"}
+  ],
+  "mouseMediaCases": [
+    {"key":"j","action":"MouseLeft","defaultAmount":100},
+    {"key":"k","action":"MouseDown","defaultAmount":100},
+    {"key":"l","action":"MouseRight","defaultAmount":100},
+    {"key":"i","action":"MouseUp","defaultAmount":100},
+    {"key":"u","action":"LeftClick"},
+    {"key":"o","action":"RightClick"},
+    {"key":"p","action":"WheelUp"},
+    {"key":";","action":"WheelDown"},
+    {"key":"@","action":"Ctrl+WheelUp"},
+    {"key":":","action":"Ctrl+WheelDown"},
+    {"key":",","action":"MiddleClick"},
+    {"key":"q","action":"VolumeUp"},
+    {"key":"a","action":"VolumeMute"},
+    {"key":"z","action":"VolumeDown"},
+    {"key":"r","action":"MediaNext"},
+    {"key":"f","action":"MediaPlayPause"},
+    {"key":"v","action":"MediaPrevious"}
+  ],
+  "mouseMoveAmounts": [
+    {"heldKey":"D","amount":30},
+    {"heldKey":"E","amount":10},
+    {"heldKey":"C","amount":"ScreenQuarter"},
+    {"heldKey":"none","amount":100}
+  ],
+  "clipboard": {
+    "capacity": 20,
+    "emptyClipboardIgnored": true,
+    "newItemAtIndex": 0,
+    "pasteAction":"Shift+Insert",
+    "cases": [
+      {"name":"first","initial":[],"selectedIndex":0,"incoming":"A","expected":["A"]},
+      {"name":"prepend","initial":["A"],"selectedIndex":1,"incoming":"B","expected":["B","A"]},
+      {"name":"after-selecting-second","initial":["B","A"],"selectedIndex":1,"incoming":"C","expected":["C","B"]}
+    ]
+  },
+  "macro": {
+    "features":["text","wait","calc","hk","loop","increment","escape-cancel"],
+    "waitPattern":"{wait <milliseconds>}",
+    "hkStatePattern":"[MSH]+",
+    "hkKeyPattern":"[a-z@;:,.\\/]",
+    "calculatorCases":[
+      {"expression":"(1+2)*3","expected":"9"},
+      {"expression":"2^3*4","expected":"32"},
+      {"expression":"5/2","expected":"2"},
+      {"expression":"7%4","expected":"3"},
+      {"expression":"10-3+2","expected":"9"}
+    ],
+    "incrementBehavior":"Every even backtick-separated segment is incremented after each loop iteration"
+  },
+  "knownQuirks": [
+    "process3 enters TMODE without changing gimode, so T mode inherits the previous S/K/R map",
+    "onKeyDown contains an unreachable fstate == empty branch inside fstate != empty",
+    "KSH dispatches Ctrl+SHKey rather than Win+SHKey",
+    "ASH dispatches Alt+SHKey",
+    "whenSM right-button toggle source contains 'if s tate = U' typo",
+    "macro hk token accepts only M/S/H state letters, not K/A",
+    "clipboard history is selection-sensitive because clipNTmp affects the next insertion"
+  ]
+}
