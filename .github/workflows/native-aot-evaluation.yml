@@ -5,6 +5,7 @@ on:
   pull_request:
     paths:
       - '.github/workflows/native-aot-evaluation.yml'
+      - 'global.json'
       - 'tools/evaluate-native-aot.ps1'
       - 'src/iKeyd.App/**'
       - 'src/iKeyd.Core/**'
