@@ -244,7 +244,14 @@ public static class LayerStateMachine
     }
 
     private static LayerTransition PressAltKana(LayerRuntimeState state)
-        => Result(state with { Layers = state.Layers.Press(LayerKey.A) });
+    {
+        // AutoHotkey v1 emits its default Ctrl menu-mask tap for an Alt hotkey
+        // before entering the !sc070 handler. Preserve that externally visible
+        // behavior so releasing physical Alt cannot spuriously activate menus.
+        return Result(
+            state with { Layers = state.Layers.Press(LayerKey.A) },
+            [LayerAction.Ctrl]);
+    }
 
     private static LayerTransition Result(LayerRuntimeState state, IReadOnlyList<LayerAction>? actions = null)
         => new(state, actions ?? []);
