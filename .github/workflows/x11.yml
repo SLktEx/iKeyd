@@ -1,0 +1,59 @@
+name: X11
+
+on:
+  pull_request:
+    paths:
+      - 'src/iKeyd.Core/**'
+      - 'src/iKeyd.Linux/**'
+      - 'src/iKeyd.X11/**'
+      - 'tests/iKeyd.X11.Tests/**'
+      - '.github/workflows/x11.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'src/iKeyd.Core/**'
+      - 'src/iKeyd.Linux/**'
+      - 'src/iKeyd.X11/**'
+      - 'tests/iKeyd.X11.Tests/**'
+      - '.github/workflows/x11.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - name: Install X11 integration dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb openbox xclip xterm libxtst6
+      - name: Start X11 server and EWMH window manager
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "DISPLAY=:98" >> "$GITHUB_ENV"
+          echo "IKEYD_X11_INTEGRATION=1" >> "$GITHUB_ENV"
+
+          Xvfb :98 -screen 0 1280x800x24 >"$RUNNER_TEMP/xvfb-x11.log" 2>&1 &
+          echo $! > "$RUNNER_TEMP/xvfb-x11.pid"
+          for attempt in $(seq 1 50); do
+            if [ -S /tmp/.X11-unix/X98 ]; then break; fi
+            sleep 0.1
+          done
+          test -S /tmp/.X11-unix/X98
+
+          DISPLAY=:98 openbox --sm-disable >"$RUNNER_TEMP/openbox.log" 2>&1 &
+          echo $! > "$RUNNER_TEMP/openbox.pid"
+          sleep 1
+      - run: dotnet restore tests/iKeyd.X11.Tests/iKeyd.X11.Tests.csproj
+      - run: dotnet test tests/iKeyd.X11.Tests/iKeyd.X11.Tests.csproj --no-restore --configuration Release
+      - name: Show X11 logs on failure
+        if: failure()
+        run: |
+          cat "$RUNNER_TEMP/openbox.log" || true
+          cat "$RUNNER_TEMP/xvfb-x11.log" || true
