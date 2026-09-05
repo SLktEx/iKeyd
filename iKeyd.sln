@@ -6,6 +6,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "iKeyd.Core", "src\\iKeyd.Co
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "iKeyd.Windows", "src\\iKeyd.Windows\\iKeyd.Windows.csproj", "{B8A0F2E0-6CDB-4494-984A-3190B34D6159}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "iKeyd.Wayland", "src\\iKeyd.Wayland\\iKeyd.Wayland.csproj", "{E7E2E3BF-BB8A-4A57-B5AF-07ACD227A433}"
+EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "iKeyd.Profiles.HotkeySkg", "src\\iKeyd.Profiles.HotkeySkg\\iKeyd.Profiles.HotkeySkg.csproj", "{7E219181-03DB-4B82-87B0-5F56BA66C845}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "iKeyd.App", "src\\iKeyd.App\\iKeyd.App.csproj", "{8C3E132F-9B67-4D0B-A746-2C02F47D4265}"
@@ -15,6 +17,8 @@ EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "iKeyd.Core.Tests", "tests\\iKeyd.Core.Tests\\iKeyd.Core.Tests.csproj", "{6F6C2E8D-1D4D-46EF-86C5-4D12B4540C3A}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "iKeyd.Windows.Tests", "tests\\iKeyd.Windows.Tests\\iKeyd.Windows.Tests.csproj", "{D1E8A7A7-B5E8-4E5C-A873-75D78A5F3484}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "iKeyd.Wayland.Tests", "tests\\iKeyd.Wayland.Tests\\iKeyd.Wayland.Tests.csproj", "{9848199D-F189-4721-A8E3-D73F311D28B5}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "iKeyd.LegacySpec.Tests", "tests\\iKeyd.LegacySpec.Tests\\iKeyd.LegacySpec.Tests.csproj", "{16CF9706-436B-42FB-94C8-99E50457A819}"
 EndProject
@@ -34,6 +38,10 @@ Global
 		{B8A0F2E0-6CDB-4494-984A-3190B34D6159}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{B8A0F2E0-6CDB-4494-984A-3190B34D6159}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{B8A0F2E0-6CDB-4494-984A-3190B34D6159}.Release|Any CPU.Build.0 = Release|Any CPU
+		{E7E2E3BF-BB8A-4A57-B5AF-07ACD227A433}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{E7E2E3BF-BB8A-4A57-B5AF-07ACD227A433}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{E7E2E3BF-BB8A-4A57-B5AF-07ACD227A433}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{E7E2E3BF-BB8A-4A57-B5AF-07ACD227A433}.Release|Any CPU.Build.0 = Release|Any CPU
 		{7E219181-03DB-4B82-87B0-5F56BA66C845}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{7E219181-03DB-4B82-87B0-5F56BA66C845}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{7E219181-03DB-4B82-87B0-5F56BA66C845}.Release|Any CPU.ActiveCfg = Release|Any CPU
@@ -54,6 +62,10 @@ Global
 		{D1E8A7A7-B5E8-4E5C-A873-75D78A5F3484}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{D1E8A7A7-B5E8-4E5C-A873-75D78A5F3484}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{D1E8A7A7-B5E8-4E5C-A873-75D78A5F3484}.Release|Any CPU.Build.0 = Release|Any CPU
+		{9848199D-F189-4721-A8E3-D73F311D28B5}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{9848199D-F189-4721-A8E3-D73F311D28B5}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{9848199D-F189-4721-A8E3-D73F311D28B5}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{9848199D-F189-4721-A8E3-D73F311D28B5}.Release|Any CPU.Build.0 = Release|Any CPU
 		{16CF9706-436B-42FB-94C8-99E50457A819}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{16CF9706-436B-42FB-94C8-99E50457A819}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{16CF9706-436B-42FB-94C8-99E50457A819}.Release|Any CPU.ActiveCfg = Release|Any CPU
