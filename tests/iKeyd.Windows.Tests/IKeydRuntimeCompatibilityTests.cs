@@ -83,9 +83,10 @@ public sealed class IKeydRuntimeCompatibilityTests
         Assert.Equal(KeyboardDisposition.Suppress, fixture.Down((ushort)'A'));
 
         Assert.Empty(fixture.Keyboard.Text);
-        Assert.StartsWith(Down(WindowsKeyMap.Control), fixture.Keyboard.Events);
+        Assert.NotEmpty(fixture.Keyboard.Events);
+        Assert.Equal(Down(WindowsKeyMap.Control), fixture.Keyboard.Events[0]);
         Assert.Contains(Press(WindowsKeyMap.Left), fixture.Keyboard.Events);
-        Assert.EndsWith(Up(WindowsKeyMap.Control), fixture.Keyboard.Events);
+        Assert.Equal(Up(WindowsKeyMap.Control), fixture.Keyboard.Events[^1]);
     }
 
     [Fact]
@@ -113,12 +114,12 @@ public sealed class IKeydRuntimeCompatibilityTests
 
         fixture.Down(WindowsKeyMap.NonConvert); // M
         Assert.Equal(KeyboardDisposition.Suppress, fixture.Down((ushort)'Y'));
-        Assert.Equal('Y', fixture.Interactive.LastRunMacro);
+        Assert.Equal('Y', fixture.Interactive.LastRunMacro.GetValueOrDefault());
 
         fixture.Up((ushort)'Y');
         fixture.Down(WindowsKeyMap.Convert); // MH
         Assert.Equal(KeyboardDisposition.Suppress, fixture.Down((ushort)'H'));
-        Assert.Equal('H', fixture.Interactive.LastEditedMacro);
+        Assert.Equal('H', fixture.Interactive.LastEditedMacro.GetValueOrDefault());
     }
 
     private static string Press(ushort key) => $"press:{key:X2}";
