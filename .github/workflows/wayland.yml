@@ -1,0 +1,68 @@
+name: Wayland
+
+on:
+  pull_request:
+    paths:
+      - 'src/iKeyd.Core/**'
+      - 'src/iKeyd.Wayland/**'
+      - 'tests/iKeyd.Wayland.Tests/**'
+      - '.github/workflows/wayland.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'src/iKeyd.Core/**'
+      - 'src/iKeyd.Wayland/**'
+      - 'tests/iKeyd.Wayland.Tests/**'
+      - '.github/workflows/wayland.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - name: Install headless Wayland dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y weston wl-clipboard
+      - name: Configure headless Weston
+        shell: bash
+        run: |
+          set -euo pipefail
+          runtime="$RUNNER_TEMP/xdg-runtime"
+          mkdir -p "$runtime"
+          chmod 700 "$runtime"
+          echo "XDG_RUNTIME_DIR=$runtime" >> "$GITHUB_ENV"
+          echo "WAYLAND_DISPLAY=wayland-9" >> "$GITHUB_ENV"
+          echo "XDG_SESSION_TYPE=wayland" >> "$GITHUB_ENV"
+          echo "IKEYD_WAYLAND_INTEGRATION=1" >> "$GITHUB_ENV"
+          XDG_RUNTIME_DIR="$runtime" weston --backend=headless-backend.so --socket=wayland-9 --idle-time=0 --log="$RUNNER_TEMP/weston.log" &
+          echo $! > "$RUNNER_TEMP/weston.pid"
+          for attempt in $(seq 1 50); do
+            if [ -S "$runtime/wayland-9" ]; then
+              exit 0
+            fi
+            sleep 0.1
+          done
+          cat "$RUNNER_TEMP/weston.log"
+          exit 1
+      - name: Enable uinput integration when runner supports it
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo modprobe uinput || true
+          if [ -e /dev/uinput ]; then
+            sudo chmod a+rw /dev/uinput
+            echo "IKEYD_UINPUT=/dev/uinput" >> "$GITHUB_ENV"
+            echo "IKEYD_UINPUT_INTEGRATION=1" >> "$GITHUB_ENV"
+          fi
+      - run: dotnet restore tests/iKeyd.Wayland.Tests/iKeyd.Wayland.Tests.csproj
+      - run: dotnet test tests/iKeyd.Wayland.Tests/iKeyd.Wayland.Tests.csproj --no-restore --configuration Release
+      - name: Show Weston log on failure
+        if: failure()
+        run: cat "$RUNNER_TEMP/weston.log" || true
