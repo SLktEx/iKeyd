@@ -24,6 +24,28 @@ internal sealed class LegacySendOutput : IMacroOutput
         if (legacySendText.Length == 0)
             return;
 
+        // The compiled keymaps overwhelmingly emit literal text. Avoid constructing
+        // parser state for that normal path and forward the existing string directly.
+        if (!ContainsLegacySyntax(legacySendText))
+        {
+            _keyboard.SendText(legacySendText);
+            return;
+        }
+
+        // Function/named-key mappings such as {F1} are also common enough to keep
+        // allocation-free. Resolve the token directly from a span.
+        if (legacySendText.Length >= 3 &&
+            legacySendText[0] == '{' &&
+            legacySendText[^1] == '}' &&
+            legacySendText.AsSpan(1, legacySendText.Length - 2).IndexOf('{') < 0 &&
+            WindowsKeyMap.TryResolveNamedKey(legacySendText.AsSpan(1, legacySendText.Length - 2), out var directNamedKey))
+        {
+            _keyboard.SendKeyPress(directNamedKey);
+            return;
+        }
+
+        // General legacy macro syntax remains supported. This path is not used by
+        // ordinary compiled literal mappings and can favor compatibility/readability.
         var plain = new StringBuilder();
 
         void FlushPlain()
@@ -69,7 +91,7 @@ internal sealed class LegacySendOutput : IMacroOutput
                     break;
                 }
 
-                var token = legacySendText[(index + 1)..close];
+                var token = legacySendText.AsSpan(index + 1, close - index - 1);
                 if (WindowsKeyMap.TryResolveNamedKey(token, out var namedKey))
                     SendKeyWithModifiers(namedKey, modifiers);
                 else
@@ -97,10 +119,34 @@ internal sealed class LegacySendOutput : IMacroOutput
         => SendKeyWithModifiers(WindowsKeyMap.Keyboard(virtualKey), modifiers);
 
     public void SendChord(ushort modifier, ushort virtualKey)
-        => SendChord([modifier], virtualKey);
+    {
+        var key = WindowsKeyMap.Keyboard(virtualKey);
+        _keyboard.SendKey(WindowsKeyMap.Keyboard(modifier), KeyEventKind.Down);
+        try
+        {
+            _keyboard.SendKeyPress(key);
+        }
+        finally
+        {
+            _keyboard.SendKey(WindowsKeyMap.Keyboard(modifier), KeyEventKind.Up);
+        }
+    }
 
     public void SendChord(ushort modifier1, ushort modifier2, ushort virtualKey)
-        => SendChord([modifier1, modifier2], virtualKey);
+    {
+        var key = WindowsKeyMap.Keyboard(virtualKey);
+        _keyboard.SendKey(WindowsKeyMap.Keyboard(modifier1), KeyEventKind.Down);
+        _keyboard.SendKey(WindowsKeyMap.Keyboard(modifier2), KeyEventKind.Down);
+        try
+        {
+            _keyboard.SendKeyPress(key);
+        }
+        finally
+        {
+            _keyboard.SendKey(WindowsKeyMap.Keyboard(modifier2), KeyEventKind.Up);
+            _keyboard.SendKey(WindowsKeyMap.Keyboard(modifier1), KeyEventKind.Up);
+        }
+    }
 
     private void SendKeyWithModifiers(KeyboardKey key, IReadOnlyList<ushort> modifiers)
     {
@@ -116,6 +162,16 @@ internal sealed class LegacySendOutput : IMacroOutput
             for (var index = modifiers.Count - 1; index >= 0; index--)
                 _keyboard.SendKey(WindowsKeyMap.Keyboard(modifiers[index]), KeyEventKind.Up);
         }
+    }
+
+    private static bool ContainsLegacySyntax(string value)
+    {
+        foreach (var character in value)
+        {
+            if (character is '^' or '!' or '+' or '#' or '{')
+                return true;
+        }
+        return false;
     }
 
     private static bool TryModifier(char character, out ushort virtualKey)
