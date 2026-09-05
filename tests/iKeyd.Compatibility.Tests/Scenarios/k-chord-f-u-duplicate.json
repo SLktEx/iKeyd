@@ -1,0 +1,13 @@
+{
+  "id": "k-chord-f-u-duplicate",
+  "description": "K mode F+U preserves the legacy first-match duplicate chord result she (before later je).",
+  "initialState": { "mode": "K", "ime": "on", "modifiers": [] },
+  "input": [
+    { "atMs": 0, "kind": "keyDown", "key": "F" },
+    { "atMs": 0, "kind": "keyDown", "key": "U" },
+    { "atMs": 1, "kind": "keyUp", "key": "F" },
+    { "atMs": 1, "kind": "keyUp", "key": "U" }
+  ],
+  "expected": { "text": "she", "events": [] },
+  "tags": ["legacy", "chord", "k-mode", "quirk", "duplicate", "realtime-safe", "windows", "hosted-legacy"]
+}
