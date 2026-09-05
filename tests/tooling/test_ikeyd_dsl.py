@@ -55,7 +55,7 @@ keymap S {
 }
 '''.strip()
 
-        with self.assertRaisesRegex(module.DslError, r"profile\.ikeyd:6: unknown keymap statement"):
+        with self.assertRaisesRegex(module.DslError, r"profile\.ikeyd:5: unknown keymap statement"):
             module.compile_dsl(text, Path("profile.ikeyd"))
 
 
