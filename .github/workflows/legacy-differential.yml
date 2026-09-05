@@ -8,6 +8,24 @@ on:
       - tests/legacy-binary/hotkeySKG.exe.gpg
       - tests/legacy-binary/hotkeySKG.ahk.gpg.asc
       - .github/workflows/legacy-differential.yml
+      - src/iKeyd.App/IKeydRuntimeHandler.cs
+      - src/iKeyd.App/LegacySendOutput.cs
+      - src/iKeyd.App/WindowsKeyMap.cs
+      - src/iKeyd.Profiles.HotkeySkg/**
+      - tests/iKeyd.Compatibility.Tests/Scenarios/**
+      - tests/iKeyd.Windows.Tests/HostedTModeLegacyRunner.cs
+      - tests/iKeyd.Windows.Tests/HostedLegacyDifferentialTests.cs
+      - tests/iKeyd.Windows.Tests/HostedAutoHotkeySourceRunner.cs
+      - tests/iKeyd.Windows.Tests/HostedAutoHotkeySourceDifferentialTests.cs
+  pull_request:
+    paths:
+      - tests/legacy-binary/hotkeySKG.exe.gpg
+      - tests/legacy-binary/hotkeySKG.ahk.gpg.asc
+      - .github/workflows/legacy-differential.yml
+      - src/iKeyd.App/IKeydRuntimeHandler.cs
+      - src/iKeyd.App/LegacySendOutput.cs
+      - src/iKeyd.App/WindowsKeyMap.cs
+      - src/iKeyd.Profiles.HotkeySkg/**
       - tests/iKeyd.Compatibility.Tests/Scenarios/**
       - tests/iKeyd.Windows.Tests/HostedTModeLegacyRunner.cs
       - tests/iKeyd.Windows.Tests/HostedLegacyDifferentialTests.cs
@@ -18,11 +36,12 @@ permissions:
   contents: read
 
 concurrency:
-  group: legacy-oracles-v1
+  group: legacy-oracles-v1-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
   compare:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: windows-latest
     timeout-minutes: 20
 
