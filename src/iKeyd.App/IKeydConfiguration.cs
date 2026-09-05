@@ -18,8 +18,13 @@ public sealed record IKeydConfiguration(
     public Keymap<string> KKeymap => Profile.GetKeymap("K").BuildKeymap();
 
     public static IKeydConfiguration Load(string path)
+        => FromProfile(AutomationProfileJson.Load(path));
+
+    public static IKeydConfiguration Parse(string json)
+        => FromProfile(AutomationProfileJson.Parse(json));
+
+    private static IKeydConfiguration FromProfile(AutomationProfile profile)
     {
-        var profile = AutomationProfileJson.Load(path);
         if (!Enum.TryParse<InputMode>(profile.StartupMode, ignoreCase: true, out var startupMode))
             throw new InvalidDataException($"Unsupported startupMode '{profile.StartupMode}' for the Windows app.");
 
