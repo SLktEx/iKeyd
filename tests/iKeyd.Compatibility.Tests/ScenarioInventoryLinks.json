@@ -30,6 +30,47 @@
     "requiredEnvironment": ["hosted-windows"],
     "oracleTargets": ["compiled-exe", "ahk-source", "ikeyd"]
   },
+  "runtime-media-volume-up-ms-q": {
+    "inventoryIds": ["legacy-send-ee1a14ac1f"],
+    "requiredEnvironment": ["deterministic-windows-runtime"],
+    "oracleTargets": ["ikeyd-runtime"]
+  },
+  "runtime-mouse-left-click-ms-u": {
+    "inventoryIds": ["legacy-mouse-operation-577e9f6675"],
+    "requiredEnvironment": ["deterministic-windows-runtime"],
+    "oracleTargets": ["ikeyd-runtime"]
+  },
+  "runtime-mouse-move-left-30-ms-d-j": {
+    "inventoryIds": [
+      "legacy-input-state-operation-fbe6596626",
+      "legacy-mouse-operation-1d121fa683"
+    ],
+    "requiredEnvironment": ["deterministic-windows-runtime"],
+    "oracleTargets": ["ikeyd-runtime"]
+  },
+  "runtime-window-caption-ms-t": {
+    "inventoryIds": ["legacy-window-operation-45574cea8e"],
+    "requiredEnvironment": ["deterministic-windows-runtime"],
+    "oracleTargets": ["ikeyd-runtime"]
+  },
+  "runtime-window-maximize-m-r": {
+    "inventoryIds": [
+      "legacy-window-operation-d83958e830",
+      "legacy-window-operation-d0984d9943"
+    ],
+    "requiredEnvironment": ["deterministic-windows-runtime"],
+    "oracleTargets": ["ikeyd-runtime"]
+  },
+  "runtime-window-minimize-m-e": {
+    "inventoryIds": ["legacy-window-operation-bea22b324d"],
+    "requiredEnvironment": ["deterministic-windows-runtime"],
+    "oracleTargets": ["ikeyd-runtime"]
+  },
+  "runtime-window-topmost-m-t": {
+    "inventoryIds": ["legacy-window-operation-688970d281"],
+    "requiredEnvironment": ["deterministic-windows-runtime"],
+    "oracleTargets": ["ikeyd-runtime"]
+  },
   "s-chord-i-v": {
     "inventoryIds": ["legacy-chord-6f6dff24ea"],
     "requiredEnvironment": ["hosted-windows"],

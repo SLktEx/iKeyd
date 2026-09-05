@@ -1,0 +1,15 @@
+{
+  "id": "runtime-mouse-move-left-30-ms-d-j",
+  "description": "Holding D in Space-then-M mouse mode changes J movement to 30 pixels left.",
+  "initialState": { "mode": "S", "ime": "off", "layers": ["S", "M"] },
+  "input": [
+    { "atMs": 10, "kind": "keyDown", "key": "D" },
+    { "atMs": 20, "kind": "keyDown", "key": "J" },
+    { "atMs": 21, "kind": "keyUp", "key": "J" },
+    { "atMs": 30, "kind": "keyUp", "key": "D" }
+  ],
+  "expected": {
+    "actions": [ { "kind": "mouse", "value": "move-by:-30,0" } ]
+  },
+  "tags": ["legacy", "runtime-long-tail", "mouse", "input-state", "deterministic"]
+}

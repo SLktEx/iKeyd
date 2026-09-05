@@ -1,0 +1,13 @@
+{
+  "id": "runtime-media-volume-up-ms-q",
+  "description": "Space then M plus Q emits the legacy volume-up action.",
+  "initialState": { "mode": "S", "ime": "off", "layers": ["S", "M"] },
+  "input": [
+    { "atMs": 10, "kind": "keyDown", "key": "Q" },
+    { "atMs": 11, "kind": "keyUp", "key": "Q" }
+  ],
+  "expected": {
+    "actions": [ { "kind": "media", "value": "VolumeUp" } ]
+  },
+  "tags": ["legacy", "runtime-long-tail", "media", "deterministic"]
+}

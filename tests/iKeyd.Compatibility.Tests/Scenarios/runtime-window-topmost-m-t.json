@@ -1,0 +1,13 @@
+{
+  "id": "runtime-window-topmost-m-t",
+  "description": "M+T enables topmost when the active window starts non-topmost.",
+  "initialState": { "mode": "S", "ime": "off", "layers": ["M"] },
+  "input": [
+    { "atMs": 10, "kind": "keyDown", "key": "T" },
+    { "atMs": 11, "kind": "keyUp", "key": "T" }
+  ],
+  "expected": {
+    "actions": [ { "kind": "window", "value": "topmost:true" } ]
+  },
+  "tags": ["legacy", "runtime-long-tail", "window", "deterministic"]
+}

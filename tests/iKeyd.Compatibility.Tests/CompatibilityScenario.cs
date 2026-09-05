@@ -34,6 +34,7 @@ public sealed record ScenarioExpected
 {
     public string? Text { get; init; }
     public List<ObservedKeyEvent> Events { get; init; } = [];
+    public List<ObservedAction> Actions { get; init; } = [];
 }
 
 public sealed record ObservedKeyEvent
@@ -42,12 +43,19 @@ public sealed record ObservedKeyEvent
     public required string Key { get; init; }
 }
 
+public sealed record ObservedAction
+{
+    public required string Kind { get; init; }
+    public required string Value { get; init; }
+}
+
 public sealed record ScenarioRunResult
 {
     public required string Runner { get; init; }
     public required string ScenarioId { get; init; }
     public string? Text { get; init; }
     public List<ObservedKeyEvent> Events { get; init; } = [];
+    public List<ObservedAction> Actions { get; init; } = [];
     public Dictionary<string, string> Metadata { get; init; } = [];
 }
 
@@ -213,12 +221,10 @@ public static class CompatibilityScenarioDiff
             differences.Add($"text: expected '{scenario.Expected.Text ?? "<null>"}', actual '{actual.Text ?? "<null>"}'");
 
         if (scenario.Expected.Events.Count != actual.Events.Count)
-        {
             differences.Add($"event count: expected {scenario.Expected.Events.Count}, actual {actual.Events.Count}");
-            return differences;
-        }
 
-        for (var i = 0; i < scenario.Expected.Events.Count; i++)
+        var eventCount = Math.Min(scenario.Expected.Events.Count, actual.Events.Count);
+        for (var i = 0; i < eventCount; i++)
         {
             var expected = scenario.Expected.Events[i];
             var observed = actual.Events[i];
@@ -227,6 +233,22 @@ public static class CompatibilityScenarioDiff
             {
                 differences.Add(
                     $"event[{i}]: expected {expected.Kind}:{expected.Key}, actual {observed.Kind}:{observed.Key}");
+            }
+        }
+
+        if (scenario.Expected.Actions.Count != actual.Actions.Count)
+            differences.Add($"action count: expected {scenario.Expected.Actions.Count}, actual {actual.Actions.Count}");
+
+        var actionCount = Math.Min(scenario.Expected.Actions.Count, actual.Actions.Count);
+        for (var i = 0; i < actionCount; i++)
+        {
+            var expected = scenario.Expected.Actions[i];
+            var observed = actual.Actions[i];
+            if (!string.Equals(expected.Kind, observed.Kind, StringComparison.OrdinalIgnoreCase) ||
+                !string.Equals(expected.Value, observed.Value, StringComparison.OrdinalIgnoreCase))
+            {
+                differences.Add(
+                    $"action[{i}]: expected {expected.Kind}:{expected.Value}, actual {observed.Kind}:{observed.Value}");
             }
         }
 

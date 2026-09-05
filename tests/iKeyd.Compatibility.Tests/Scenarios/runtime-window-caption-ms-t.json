@@ -1,0 +1,13 @@
+{
+  "id": "runtime-window-caption-ms-t",
+  "description": "M then Space plus T toggles the active window caption off.",
+  "initialState": { "mode": "S", "ime": "off", "layers": ["M", "S"] },
+  "input": [
+    { "atMs": 10, "kind": "keyDown", "key": "T" },
+    { "atMs": 11, "kind": "keyUp", "key": "T" }
+  ],
+  "expected": {
+    "actions": [ { "kind": "window", "value": "caption:false" } ]
+  },
+  "tags": ["legacy", "runtime-long-tail", "window", "deterministic"]
+}
