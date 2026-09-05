@@ -6,5 +6,6 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../iKeyd.Core/iKeyd.Core.csproj" />
+    <ProjectReference Include="../iKeyd.Linux/iKeyd.Linux.csproj" />
   </ItemGroup>
 </Project>
