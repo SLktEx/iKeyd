@@ -1,4 +1,5 @@
 using iKeyd.Core.Platform;
+using iKeyd.Linux.Input;
 
 namespace iKeyd.Wayland;
 
@@ -14,7 +15,7 @@ public sealed record WaylandBackendOptions(
         var configured = Environment.GetEnvironmentVariable("IKEYD_INPUT_DEVICES");
         var devices = !string.IsNullOrWhiteSpace(configured)
             ? configured.Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            : WaylandInputDeviceDiscovery.DiscoverKeyboardDevices().ToArray();
+            : LinuxInputDeviceDiscovery.DiscoverKeyboardDevices().ToArray();
 
         var uinput = Environment.GetEnvironmentVariable("IKEYD_UINPUT") ?? DetectUInputPath();
         return new WaylandBackendOptions(devices, uinput);
@@ -22,38 +23,6 @@ public sealed record WaylandBackendOptions(
 
     private static string DetectUInputPath()
         => File.Exists("/dev/uinput") ? "/dev/uinput" : "/dev/input/uinput";
-}
-
-public static class WaylandInputDeviceDiscovery
-{
-    public static IEnumerable<string> DiscoverKeyboardDevices()
-    {
-        var seenTargets = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var directory in new[] { "/dev/input/by-id", "/dev/input/by-path" })
-        {
-            if (!Directory.Exists(directory))
-                continue;
-
-            foreach (var path in Directory.EnumerateFiles(directory, "*-event-kbd").OrderBy(path => path, StringComparer.Ordinal))
-            {
-                var target = ResolveDeviceTarget(path);
-                if (seenTargets.Add(target))
-                    yield return path;
-            }
-        }
-    }
-
-    private static string ResolveDeviceTarget(string path)
-    {
-        try
-        {
-            return File.ResolveLinkTarget(path, returnFinalTarget: true)?.FullName ?? Path.GetFullPath(path);
-        }
-        catch
-        {
-            return Path.GetFullPath(path);
-        }
-    }
 }
 
 public sealed record WaylandBackendProbeResult(
@@ -91,10 +60,8 @@ public static class WaylandBackendProbe
             notes.Add("Install wl-clipboard (wl-copy/wl-paste) for the portable command-based clipboard integration.");
 
         var capabilities = new List<BackendCapability>();
-        if (readable)
-            capabilities.Add(BackendCapability.KeyboardInput);
-        if (readable && uinput && options.GrabPhysicalKeyboards)
-            capabilities.Add(BackendCapability.KeyboardSuppression);
+        if (readable) capabilities.Add(BackendCapability.KeyboardInput);
+        if (readable && uinput && options.GrabPhysicalKeyboards) capabilities.Add(BackendCapability.KeyboardSuppression);
         if (uinput)
         {
             capabilities.AddRange([
@@ -111,17 +78,11 @@ public static class WaylandBackendProbe
             capabilities.Add(BackendCapability.ClipboardRead);
             capabilities.Add(BackendCapability.ClipboardWatch);
         }
-        if (isWayland && wlCopy)
-            capabilities.Add(BackendCapability.ClipboardWrite);
+        if (isWayland && wlCopy) capabilities.Add(BackendCapability.ClipboardWrite);
 
         return new WaylandBackendProbeResult(
-            isWayland,
-            readable,
-            uinput,
-            wlCopy,
-            wlPaste,
-            new BackendCapabilities(capabilities),
-            notes);
+            isWayland, readable, uinput, wlCopy, wlPaste,
+            new BackendCapabilities(capabilities), notes);
     }
 
     private static bool CanReadFile(string path) => CanOpen(path, FileAccess.Read);
@@ -129,15 +90,8 @@ public static class WaylandBackendProbe
 
     private static bool CanOpen(string path, FileAccess access)
     {
-        try
-        {
-            using var stream = new FileStream(path, FileMode.Open, access, FileShare.ReadWrite);
-            return true;
-        }
-        catch
-        {
-            return false;
-        }
+        try { using var stream = new FileStream(path, FileMode.Open, access, FileShare.ReadWrite); return true; }
+        catch { return false; }
     }
 }
 
@@ -145,11 +99,8 @@ internal static class CommandSearch
 {
     public static bool Exists(string command)
     {
-        if (string.IsNullOrWhiteSpace(command))
-            return false;
-        if (Path.IsPathRooted(command))
-            return File.Exists(command);
-
+        if (string.IsNullOrWhiteSpace(command)) return false;
+        if (Path.IsPathRooted(command)) return File.Exists(command);
         var path = Environment.GetEnvironmentVariable("PATH") ?? string.Empty;
         return path.Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries)
             .Select(directory => Path.Combine(directory, command))
