@@ -1,16 +1,16 @@
 using iKeyd.Core.Desktop;
 using iKeyd.Core.Input;
 using iKeyd.Core.Platform;
-using iKeyd.Wayland.Input;
+using iKeyd.Linux.Input;
 
 namespace iKeyd.Wayland.Desktop;
 
 public sealed class WaylandDesktopBackend : IDesktopBackend, IBackendCapabilityProvider
 {
-    private readonly IWaylandVirtualInput _uinput;
+    private readonly ILinuxVirtualInput _uinput;
     private readonly HashSet<DesktopMouseButton> _buttonsDown = [];
 
-    public WaylandDesktopBackend(IWaylandVirtualInput uinput)
+    public WaylandDesktopBackend(ILinuxVirtualInput uinput)
     {
         _uinput = uinput ?? throw new ArgumentNullException(nameof(uinput));
         Capabilities = new BackendCapabilities([
@@ -22,7 +22,6 @@ public sealed class WaylandDesktopBackend : IDesktopBackend, IBackendCapabilityP
     }
 
     public BackendCapabilities Capabilities { get; }
-
     public WindowHandle GetActiveWindow() => Unsupported<WindowHandle>(BackendCapability.WindowQuery);
     public DesktopWindowState GetWindowState(WindowHandle window) => Unsupported<DesktopWindowState>(BackendCapability.WindowState);
     public DesktopRect GetWindowBounds(WindowHandle window) => Unsupported<DesktopRect>(BackendCapability.WindowQuery);
@@ -41,61 +40,34 @@ public sealed class WaylandDesktopBackend : IDesktopBackend, IBackendCapabilityP
     public void SetOpacity(WindowHandle window, byte? opacity) => Unsupported(BackendCapability.WindowOpacity);
     public bool HasCaption(WindowHandle window) => Unsupported<bool>(BackendCapability.WindowCaption);
     public void SetCaption(WindowHandle window, bool enabled) => Unsupported(BackendCapability.WindowCaption);
-
     public DesktopPoint GetPointerPosition() => Unsupported<DesktopPoint>(BackendCapability.PointerAbsolute);
     public void MovePointer(DesktopPoint position) => Unsupported(BackendCapability.PointerAbsolute);
 
-    public void MovePointerBy(int deltaX, int deltaY)
-    {
-        Capabilities.Require(BackendCapability.PointerRelative);
-        _uinput.MovePointerBy(deltaX, deltaY);
-    }
+    public void MovePointerBy(int deltaX, int deltaY) { Capabilities.Require(BackendCapability.PointerRelative); _uinput.MovePointerBy(deltaX, deltaY); }
 
     public bool IsMouseButtonDown(DesktopMouseButton button)
     {
         Capabilities.Require(BackendCapability.PointerButtons);
-        lock (_buttonsDown)
-            return _buttonsDown.Contains(button);
+        lock (_buttonsDown) return _buttonsDown.Contains(button);
     }
 
     public void SetMouseButton(DesktopMouseButton button, bool down)
     {
         Capabilities.Require(BackendCapability.PointerButtons);
         _uinput.SetMouseButton(ToLinuxButton(button), down);
-        lock (_buttonsDown)
-        {
-            if (down)
-                _buttonsDown.Add(button);
-            else
-                _buttonsDown.Remove(button);
-        }
+        lock (_buttonsDown) { if (down) _buttonsDown.Add(button); else _buttonsDown.Remove(button); }
     }
 
-    public void Click(DesktopMouseButton button)
-    {
-        Capabilities.Require(BackendCapability.PointerButtons);
-        _uinput.ClickMouseButton(ToLinuxButton(button));
-    }
+    public void Click(DesktopMouseButton button) { Capabilities.Require(BackendCapability.PointerButtons); _uinput.ClickMouseButton(ToLinuxButton(button)); }
 
     public void ScrollVertical(int wheelDelta, bool controlModifier = false)
     {
         Capabilities.Require(BackendCapability.PointerScroll);
         var clicks = wheelDelta / 120;
-        if (clicks == 0 && wheelDelta != 0)
-            clicks = Math.Sign(wheelDelta);
-
-        if (controlModifier)
-            _uinput.SendKey(new KeyboardKey(0x11, 0), KeyEventKind.Down);
-        try
-        {
-            if (clicks != 0)
-                _uinput.ScrollVertical(clicks);
-        }
-        finally
-        {
-            if (controlModifier)
-                _uinput.SendKey(new KeyboardKey(0x11, 0), KeyEventKind.Up);
-        }
+        if (clicks == 0 && wheelDelta != 0) clicks = Math.Sign(wheelDelta);
+        if (controlModifier) _uinput.SendKey(new KeyboardKey(0x11, 0), KeyEventKind.Down);
+        try { if (clicks != 0) _uinput.ScrollVertical(clicks); }
+        finally { if (controlModifier) _uinput.SendKey(new KeyboardKey(0x11, 0), KeyEventKind.Up); }
     }
 
     public void SendMediaCommand(DesktopMediaCommand command)
@@ -123,7 +95,6 @@ public sealed class WaylandDesktopBackend : IDesktopBackend, IBackendCapabilityP
 
     private static T Unsupported<T>(BackendCapability capability)
         => throw new BackendCapabilityException(capability, "Wayland has no compositor-independent protocol for this desktop/window operation.");
-
     private static void Unsupported(BackendCapability capability)
         => throw new BackendCapabilityException(capability, "Wayland has no compositor-independent protocol for this desktop/window operation.");
 }
