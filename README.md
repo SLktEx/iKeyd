@@ -57,22 +57,31 @@ The current reference `hotkeySKG.exe` is pinned by SHA-256:
 5492198ce403d796c8588b17419bce82a0e6de3961bb40896a875ee5dee359ea
 ```
 
-On Windows, close any already-running copy of `hotkeySKG.exe`, make sure a Japanese IME is installed, then run:
+On an interactive Windows session with a Japanese IME installed, the preferred command is:
+
+```powershell
+.\tools\run-legacy-differential.ps1 -LegacyExe 'C:\path\to\hotkeySKG.exe'
+```
+
+This command verifies the executable hash, runs each realtime-safe scenario through both the real iKeyd Windows path and the real legacy process, compares the two observations directly, and writes one JSON report per scenario to `TestResults\legacy-differential`.
+
+A report separately records:
+
+- iKeyd vs the shared expected result
+- `hotkeySKG.exe` vs the shared expected result
+- iKeyd vs `hotkeySKG.exe` directly
+- runner metadata including the legacy executable SHA-256
+
+To invoke only the legacy executable runner without the direct iKeyd-vs-EXE comparison:
 
 ```powershell
 $env:IKEYD_LEGACY_EXE = 'C:\path\to\hotkeySKG.exe'
 dotnet test tests/iKeyd.Windows.Tests/iKeyd.Windows.Tests.csproj --filter 'Category=LegacyExeE2E'
 ```
 
-The runner creates a focused IME-capable test window, launches the real legacy process, feeds it the same realtime-safe compatibility scenarios, captures keyboard output emitted by the executable, and compares that output with the shared scenario expectation.
+When intentionally testing a different legacy binary, pass its expected hash to the script or set `IKEYD_LEGACY_EXE_SHA256` explicitly.
 
-When intentionally testing a different legacy binary, pin its expected hash explicitly:
-
-```powershell
-$env:IKEYD_LEGACY_EXE_SHA256 = '<sha256>'
-```
-
-Normal CI does not require or download the legacy binary; `LegacyExeE2E` tests are opt-in when `IKEYD_LEGACY_EXE` is available.
+Normal CI does not require or download the legacy binary. The executable and direct differential tests are opt-in when the reference binary is available on an interactive Windows machine.
 
 Run all normal tests with:
 
