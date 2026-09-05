@@ -85,12 +85,10 @@ public static class LegacyDifferentialComparison
             differences.Add($"text: {left.Runner}='{left.Text ?? "<null>"}', {right.Runner}='{right.Text ?? "<null>"}'");
 
         if (left.Events.Count != right.Events.Count)
-        {
             differences.Add($"event count: {left.Runner}={left.Events.Count}, {right.Runner}={right.Events.Count}");
-            return differences;
-        }
 
-        for (var i = 0; i < left.Events.Count; i++)
+        var eventCount = Math.Min(left.Events.Count, right.Events.Count);
+        for (var i = 0; i < eventCount; i++)
         {
             var a = left.Events[i];
             var b = right.Events[i];
@@ -99,6 +97,22 @@ public static class LegacyDifferentialComparison
             {
                 differences.Add(
                     $"event[{i}]: {left.Runner}={a.Kind}:{a.Key}, {right.Runner}={b.Kind}:{b.Key}");
+            }
+        }
+
+        if (left.Actions.Count != right.Actions.Count)
+            differences.Add($"action count: {left.Runner}={left.Actions.Count}, {right.Runner}={right.Actions.Count}");
+
+        var actionCount = Math.Min(left.Actions.Count, right.Actions.Count);
+        for (var i = 0; i < actionCount; i++)
+        {
+            var a = left.Actions[i];
+            var b = right.Actions[i];
+            if (!string.Equals(a.Kind, b.Kind, StringComparison.OrdinalIgnoreCase) ||
+                !string.Equals(a.Value, b.Value, StringComparison.OrdinalIgnoreCase))
+            {
+                differences.Add(
+                    $"action[{i}]: {left.Runner}={a.Kind}:{a.Value}, {right.Runner}={b.Kind}:{b.Value}");
             }
         }
 
