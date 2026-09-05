@@ -55,6 +55,15 @@ jobs:
       - name: Create release archive
         shell: pwsh
         run: Compress-Archive -Path artifacts/iKeyd-win-x64/* -DestinationPath artifacts/iKeyd-win-x64.zip -Force
+      - uses: actions/upload-artifact@v4
+        with:
+          name: iKeyd-v0.1.1
+          path: |
+            artifacts/iKeyd-win-x64.zip
+            artifacts/iKeyd-win-x64/iKeyd.exe
+            artifacts/iKeyd-win-x64/iKeyd.json
+            artifacts/iKeyd-win-x64-embedded/iKeyd-embedded.exe
+          if-no-files-found: error
       - name: Create GitHub Release
         shell: pwsh
         env:
@@ -66,5 +75,5 @@ jobs:
           artifacts/iKeyd-win-x64/iKeyd.json
           artifacts/iKeyd-win-x64-embedded/iKeyd-embedded.exe
           --target $env:TARGET_SHA
-          --generate-notes
+          --notes "Adds iKeyd-embedded.exe, a self-contained Windows x64 build with the default iKeyd configuration embedded in the executable."
           --title "iKeyd $env:RELEASE_TAG"
