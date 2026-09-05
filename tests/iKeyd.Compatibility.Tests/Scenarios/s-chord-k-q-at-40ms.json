@@ -1,0 +1,20 @@
+{
+  "id": "s-chord-k-q-at-40ms",
+  "description": "S mode K+Q still resolves as fa exactly at the inclusive 40ms boundary.",
+  "initialState": {
+    "mode": "S",
+    "ime": "on",
+    "modifiers": []
+  },
+  "input": [
+    { "atMs": 0, "kind": "keyDown", "key": "K" },
+    { "atMs": 5, "kind": "keyUp", "key": "K" },
+    { "atMs": 40, "kind": "keyDown", "key": "Q" },
+    { "atMs": 45, "kind": "keyUp", "key": "Q" }
+  ],
+  "expected": {
+    "text": "fa",
+    "events": []
+  },
+  "tags": ["legacy", "chord", "boundary"]
+}
