@@ -6,22 +6,25 @@ on:
     branches: [main]
     paths:
       - tests/legacy-binary/hotkeySKG.exe.gpg
+      - tests/legacy-binary/hotkeySKG.ahk.gpg.asc
       - .github/workflows/legacy-differential.yml
       - tests/iKeyd.Compatibility.Tests/Scenarios/**
       - tests/iKeyd.Windows.Tests/HostedTModeLegacyRunner.cs
       - tests/iKeyd.Windows.Tests/HostedLegacyDifferentialTests.cs
+      - tests/iKeyd.Windows.Tests/HostedAutoHotkeySourceRunner.cs
+      - tests/iKeyd.Windows.Tests/HostedAutoHotkeySourceDifferentialTests.cs
 
 permissions:
   contents: read
 
 concurrency:
-  group: legacy-differential-fast-v2
+  group: legacy-oracles-v1
   cancel-in-progress: true
 
 jobs:
   compare:
     runs-on: windows-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
 
     steps:
       - uses: actions/checkout@v4
@@ -30,23 +33,11 @@ jobs:
         with:
           dotnet-version: 8.0.x
 
-      - name: Decrypt pinned legacy executable
-        id: legacy
+      - name: Resolve bundled GnuPG
+        id: gpg
         shell: powershell
-        env:
-          LEGACY_EXE_GPG_PASSPHRASE: ${{ secrets.LEGACY_EXE_GPG_PASSPHRASE }}
         run: |
           $ErrorActionPreference = 'Stop'
-
-          if ([string]::IsNullOrWhiteSpace($env:LEGACY_EXE_GPG_PASSPHRASE)) {
-            throw 'Repository secret LEGACY_EXE_GPG_PASSPHRASE is not configured.'
-          }
-
-          $encrypted = Join-Path $PWD 'tests\legacy-binary\hotkeySKG.exe.gpg'
-          if (-not (Test-Path -LiteralPath $encrypted -PathType Leaf)) {
-            throw "Encrypted legacy executable was not found: $encrypted"
-          }
-
           $gpg = Join-Path $env:ProgramFiles 'Git\usr\bin\gpg.exe'
           if (-not (Test-Path -LiteralPath $gpg -PathType Leaf)) {
             $command = Get-Command gpg.exe -ErrorAction SilentlyContinue
@@ -55,45 +46,130 @@ jobs:
             }
             $gpg = $command.Source
           }
+          "path=$gpg" >> $env:GITHUB_OUTPUT
           Write-Host "Using GnuPG: $gpg"
 
-          $path = Join-Path $env:RUNNER_TEMP 'hotkeySKG.exe'
-          & $gpg `
-            --batch `
-            --yes `
-            --pinentry-mode loopback `
-            --passphrase $env:LEGACY_EXE_GPG_PASSPHRASE `
-            --output $path `
-            --decrypt $encrypted
+      - name: Decrypt pinned compiled legacy executable
+        id: legacy
+        shell: powershell
+        env:
+          LEGACY_EXE_GPG_PASSPHRASE: ${{ secrets.LEGACY_EXE_GPG_PASSPHRASE }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ([string]::IsNullOrWhiteSpace($env:LEGACY_EXE_GPG_PASSPHRASE)) {
+            throw 'Repository secret LEGACY_EXE_GPG_PASSPHRASE is not configured.'
+          }
 
+          $encrypted = Join-Path $PWD 'tests\legacy-binary\hotkeySKG.exe.gpg'
+          $path = Join-Path $env:RUNNER_TEMP 'compiled-hotkeySKG.exe'
+          & '${{ steps.gpg.outputs.path }}' `
+            --batch --yes --pinentry-mode loopback `
+            --passphrase $env:LEGACY_EXE_GPG_PASSPHRASE `
+            --output $path --decrypt $encrypted
           if ($LASTEXITCODE -ne 0) {
-            throw "GnuPG failed to decrypt the legacy executable (exit code $LASTEXITCODE)."
+            throw "GnuPG failed to decrypt the compiled legacy executable (exit code $LASTEXITCODE)."
           }
 
           $actual = (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant()
           $expected = '5492198ce403d796c8588b17419bce82a0e6de3961bb40896a875ee5dee359ea'
           if ($actual -ne $expected) {
-            Remove-Item -LiteralPath $path -Force -ErrorAction SilentlyContinue
-            throw "Legacy executable SHA-256 mismatch. Expected $expected, actual $actual."
+            throw "Compiled legacy executable SHA-256 mismatch. Expected $expected, actual $actual."
+          }
+          "path=$path" >> $env:GITHUB_OUTPUT
+          Write-Host "Verified compiled hotkeySKG.exe SHA-256: $actual"
+
+      - name: Decrypt pinned legacy AHK source
+        id: source
+        shell: powershell
+        env:
+          LEGACY_EXE_GPG_PASSPHRASE: ${{ secrets.LEGACY_EXE_GPG_PASSPHRASE }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $encrypted = Join-Path $PWD 'tests\legacy-binary\hotkeySKG.ahk.gpg.asc'
+          $path = Join-Path $env:RUNNER_TEMP 'hotkeySKG.ahk'
+          & '${{ steps.gpg.outputs.path }}' `
+            --batch --yes --pinentry-mode loopback `
+            --passphrase $env:LEGACY_EXE_GPG_PASSPHRASE `
+            --output $path --decrypt $encrypted
+          if ($LASTEXITCODE -ne 0) {
+            throw "GnuPG failed to decrypt the legacy AHK source (exit code $LASTEXITCODE)."
           }
 
+          $actual = (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant()
+          $expected = 'fde46d179a2cfb8123a314d4ea6b8de714a65302867d4b3a654af07f9472bab7'
+          if ($actual -ne $expected) {
+            throw "Legacy AHK source SHA-256 mismatch. Expected $expected, actual $actual."
+          }
           "path=$path" >> $env:GITHUB_OUTPUT
-          Write-Host "Verified hotkeySKG.exe SHA-256: $actual"
+          Write-Host "Verified hotkeySKG.ahk SHA-256: $actual"
+
+      - name: Download pinned AutoHotkey v1.1.16.05 interpreter
+        id: ahk
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $url = 'https://raw.githubusercontent.com/2wayne/AutoHotkey_LPortable/2fca5b7f6b84e8c9574b78b01c101831068016e5/App/AutoHotkey/AutoHotkey.exe'
+          $path = Join-Path $env:RUNNER_TEMP 'AutoHotkey-v1.1.16.05.exe'
+          Invoke-WebRequest -Uri $url -OutFile $path -MaximumRedirection 10
+
+          $length = (Get-Item -LiteralPath $path).Length
+          if ($length -ne 910848) {
+            throw "Unexpected AutoHotkey v1.1.16.05 interpreter size: $length."
+          }
+          $gitBlob = (& git hash-object $path).Trim().ToLowerInvariant()
+          $expectedGitBlob = 'a776454e1eccfdcb92b7ab5214bca2832d52a1e8'
+          if ($gitBlob -ne $expectedGitBlob) {
+            throw "AutoHotkey interpreter Git blob mismatch. Expected $expectedGitBlob, actual $gitBlob."
+          }
+
+          $versionFile = Join-Path $env:RUNNER_TEMP 'ahk-version.txt'
+          $probeFile = Join-Path $env:RUNNER_TEMP 'ahk-version-probe.ahk'
+          @(
+            "FileAppend, %A_AhkVersion%, $versionFile",
+            'ExitApp'
+          ) | Set-Content -LiteralPath $probeFile -Encoding ASCII
+          $probe = Start-Process -FilePath $path -ArgumentList $probeFile -Wait -PassThru
+          if ($probe.ExitCode -ne 0 -or -not (Test-Path -LiteralPath $versionFile)) {
+            throw "AutoHotkey version probe failed with exit code $($probe.ExitCode)."
+          }
+          $runtimeVersion = (Get-Content -LiteralPath $versionFile -Raw).Trim()
+          if ($runtimeVersion -ne '1.1.16.05') {
+            throw "Unexpected AutoHotkey runtime version: $runtimeVersion."
+          }
+
+          $sha256 = (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant()
+          "path=$path" >> $env:GITHUB_OUTPUT
+          "sha256=$sha256" >> $env:GITHUB_OUTPUT
+          Write-Host "Verified AutoHotkey interpreter Git blob: $gitBlob"
+          Write-Host "Verified AutoHotkey runtime version: $runtimeVersion"
+          Write-Host "AutoHotkey interpreter SHA-256: $sha256"
 
       - name: Restore
         run: dotnet restore iKeyd.sln
 
-      - name: Run hosted direct legacy differential
+      - name: Run compiled EXE differential
         shell: powershell
         env:
           IKEYD_LEGACY_EXE: ${{ steps.legacy.outputs.path }}
           IKEYD_LEGACY_EXE_SHA256: 5492198ce403d796c8588b17419bce82a0e6de3961bb40896a875ee5dee359ea
-          IKEYD_DIFFERENTIAL_REPORT_DIR: ${{ github.workspace }}\TestResults\legacy-differential
+          IKEYD_DIFFERENTIAL_REPORT_DIR: ${{ github.workspace }}\TestResults\legacy-differential\compiled-exe
         run: |
           dotnet test tests/iKeyd.Windows.Tests/iKeyd.Windows.Tests.csproj `
             --no-restore `
             --configuration Release `
             --filter 'Category=HostedLegacyDifferentialE2E'
+
+      - name: Run AHK v1 source differential
+        shell: powershell
+        env:
+          IKEYD_AHK_V1_EXE: ${{ steps.ahk.outputs.path }}
+          IKEYD_LEGACY_AHK: ${{ steps.source.outputs.path }}
+          IKEYD_DIFFERENTIAL_REPORT_DIR: ${{ github.workspace }}\TestResults\legacy-differential\ahk-source
+        run: |
+          dotnet test tests/iKeyd.Windows.Tests/iKeyd.Windows.Tests.csproj `
+            --no-restore `
+            --configuration Release `
+            --filter 'Category=HostedAhkSourceDifferentialE2E'
 
       - name: Upload differential reports
         if: always()
