@@ -6,6 +6,7 @@ namespace iKeyd.Windows.Tests;
 public sealed class HostedLegacyDifferentialTests
 {
     private const string HostedLegacyTag = "hosted-legacy";
+    private const string RuntimeTag = "hosted-legacy-runtime";
     private static string ScenarioDirectory => Path.Combine(AppContext.BaseDirectory, "Scenarios");
 
     [Fact]
@@ -15,13 +16,12 @@ public sealed class HostedLegacyDifferentialTests
         if (!OperatingSystem.IsWindows())
             return;
 
-        var legacyRunner = new HostedTModeLegacyRunner();
-        if (!legacyRunner.IsAvailable)
+        var baseLegacyRunner = new HostedTModeLegacyRunner();
+        if (!baseLegacyRunner.IsAvailable)
             return;
 
         var scenarios = CompatibilityScenarioCatalog.LoadDirectory(ScenarioDirectory)
-            .Where(item => item.Tags.Any(tag =>
-                string.Equals(tag, HostedLegacyTag, StringComparison.OrdinalIgnoreCase)))
+            .Where(item => HasTag(item, HostedLegacyTag))
             .OrderBy(item => item.Id, StringComparer.OrdinalIgnoreCase)
             .ToArray();
 
@@ -32,9 +32,18 @@ public sealed class HostedLegacyDifferentialTests
         {
             try
             {
+                var runtimeScenario = HasTag(scenario, RuntimeTag);
+                ICompatibilityScenarioRunner iKeydRunner = runtimeScenario
+                    ? new HotkeySkgRuntimeScenarioRunner()
+                    : new WindowsScenarioRunner();
+                ICompatibilityScenarioRunner legacyRunner = runtimeScenario
+                    ? new RuntimeEventCaptureRunner(
+                        new RuntimeInputInjectionRunner(new HostedTModeLegacyRunner()))
+                    : new HostedTModeLegacyRunner();
+
                 var report = await LegacyDifferentialComparison.RunAsync(
                     scenario,
-                    new WindowsScenarioRunner(),
+                    iKeydRunner,
                     legacyRunner);
                 var reportPath = LegacyDifferentialComparison.WriteReport(report);
 
@@ -101,6 +110,9 @@ public sealed class HostedLegacyDifferentialTests
     {
         Assert.Equal(expected, HostedTModeLegacyRunner.ResolveLegacyProcessName(executablePath));
     }
+
+    private static bool HasTag(CompatibilityScenario scenario, string tag)
+        => scenario.Tags.Any(item => string.Equals(item, tag, StringComparison.OrdinalIgnoreCase));
 
     private static string BuildFailureMessage(LegacyDifferentialReport report, string reportPath)
     {
