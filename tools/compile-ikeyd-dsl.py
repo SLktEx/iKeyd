@@ -11,6 +11,7 @@ from collections import OrderedDict
 from pathlib import Path
 
 IDENT = r"[A-Za-z0-9_]+"
+KEY_REF = rf"{IDENT}(?:\[\s*\d+\s*,\s*\d+\s*\])?"
 
 
 class DslError(ValueError):
@@ -62,6 +63,65 @@ def parse_string_list(path: Path, lineno: int, value: str) -> list[str]:
     return parsed
 
 
+def parse_layout_row(path: Path, lineno: int, value: str) -> list[str]:
+    value = value.strip().rstrip(";").strip()
+    keys = [item for item in re.split(r"[\s,]+", value) if item]
+    if not keys or not all(re.fullmatch(IDENT, key) for key in keys):
+        raise DslError(path, lineno, "expected one or more key identifiers after 'row'")
+    return keys
+
+
+def resolve_key_ref(
+    path: Path,
+    lineno: int,
+    value: str,
+    layouts: dict[str, list[list[str]]],
+) -> str:
+    value = value.strip()
+    direct = re.fullmatch(IDENT, value)
+    if direct:
+        return direct.group(0)
+
+    coordinate = re.fullmatch(
+        rf"({IDENT})\[\s*(\d+)\s*,\s*(\d+)\s*\]",
+        value,
+    )
+    if not coordinate:
+        raise DslError(path, lineno, f"invalid key reference '{value}'")
+
+    layout_name = coordinate.group(1)
+    row = int(coordinate.group(2))
+    column = int(coordinate.group(3))
+    if row < 1 or column < 1:
+        raise DslError(path, lineno, f"key positions are 1-based: '{value}'")
+
+    # POS is the canonical physical-position spelling. BASE is the default
+    # authoring layout, so POS[r,c] aliases BASE[r,c] unless POS is declared
+    # explicitly.
+    resolved_layout_name = layout_name
+    if layout_name == "POS" and "POS" not in layouts and "BASE" in layouts:
+        resolved_layout_name = "BASE"
+
+    layout = layouts.get(resolved_layout_name)
+    if layout is None:
+        raise DslError(path, lineno, f"unknown layout '{layout_name}' in key reference '{value}'")
+    if row > len(layout):
+        raise DslError(
+            path,
+            lineno,
+            f"row {row} is out of range for layout '{layout_name}'",
+        )
+
+    layout_row = layout[row - 1]
+    if column > len(layout_row):
+        raise DslError(
+            path,
+            lineno,
+            f"column {column} is out of range for layout '{layout_name}' row {row}",
+        )
+    return layout_row[column - 1]
+
+
 def canonical_pair(first: str, second: str) -> tuple[str, str]:
     return tuple(sorted((first.casefold(), second.casefold())))
 
@@ -87,6 +147,7 @@ def duplicate_chord_metadata(chords: dict[str, list[list[str]]]) -> dict[str, li
 
 def compile_dsl(text: str, path: Path) -> dict[str, object]:
     source: OrderedDict[str, object] = OrderedDict()
+    layouts: OrderedDict[str, list[list[str]]] = OrderedDict()
     single: OrderedDict[str, OrderedDict[str, str]] = OrderedDict()
     chords: OrderedDict[str, list[list[str]]] = OrderedDict()
     duplicate_flags: list[dict[str, object]] = []
@@ -112,6 +173,15 @@ def compile_dsl(text: str, path: Path) -> dict[str, object]:
                     raise DslError(path, lineno, "only one profile block is allowed")
                 saw_profile = True
                 block = ("profile", profile.group(1))
+                continue
+
+            layout = re.fullmatch(rf"layout\s+({IDENT})\s*\{{", line)
+            if layout:
+                layout_name = layout.group(1)
+                if layout_name in layouts:
+                    raise DslError(path, lineno, f"duplicate layout '{layout_name}'")
+                layouts[layout_name] = []
+                block = ("layout", layout_name)
                 continue
 
             keymap = re.fullmatch(rf"keymap\s+({IDENT})\s*\{{", line)
@@ -146,20 +216,49 @@ def compile_dsl(text: str, path: Path) -> dict[str, object]:
                 continue
             raise DslError(path, lineno, f"unknown profile setting: {line}")
 
+        if kind == "layout":
+            assert name is not None
+            match = re.fullmatch(r"row\s+(.+)", line)
+            if match:
+                row = parse_layout_row(path, lineno, match.group(1))
+                existing_keys = {key.casefold() for existing in layouts[name] for key in existing}
+                duplicate = next((key for key in row if key.casefold() in existing_keys), None)
+                if duplicate is not None:
+                    raise DslError(path, lineno, f"duplicate key '{duplicate}' in layout '{name}'")
+                row_seen: set[str] = set()
+                duplicate_in_row = None
+                for key in row:
+                    folded = key.casefold()
+                    if folded in row_seen:
+                        duplicate_in_row = key
+                        break
+                    row_seen.add(folded)
+                if duplicate_in_row is not None:
+                    raise DslError(
+                        path,
+                        lineno,
+                        f"duplicate key '{duplicate_in_row}' in layout '{name}'",
+                    )
+                layouts[name].append(row)
+                continue
+            raise DslError(path, lineno, f"unknown layout statement: {line}")
+
         if kind == "keymap":
             assert name is not None
-            match = re.fullmatch(rf"combo\s+({IDENT})\s*\+\s*({IDENT})\s*=\s*(.+)", line)
+            match = re.fullmatch(rf"combo\s+({KEY_REF})\s*\+\s*({KEY_REF})\s*=\s*(.+)", line)
             if match:
+                first = resolve_key_ref(path, lineno, match.group(1), layouts)
+                second = resolve_key_ref(path, lineno, match.group(2), layouts)
                 chords[name].append([
-                    match.group(1),
-                    match.group(2),
+                    first,
+                    second,
                     parse_json_string(path, lineno, match.group(3)),
                 ])
                 continue
 
-            match = re.fullmatch(rf"({IDENT})\s*=\s*(.+)", line)
+            match = re.fullmatch(rf"({KEY_REF})\s*=\s*(.+)", line)
             if match:
-                key = match.group(1)
+                key = resolve_key_ref(path, lineno, match.group(1), layouts)
                 if key in single[name]:
                     raise DslError(path, lineno, f"duplicate single-stroke mapping '{name}.{key}'")
                 single[name][key] = parse_json_string(path, lineno, match.group(2))
