@@ -1,0 +1,187 @@
+{
+  "schemaVersion": 1,
+  "defaults": {
+    "implementation": "unknown",
+    "unit": "unknown",
+    "scenario": "unknown",
+    "exeDiff": "unknown",
+    "ahkDiff": "unknown",
+    "realWindows": "unknown",
+    "intentionalDifference": "unknown"
+  },
+  "rules": [
+    {
+      "name": "captured S/K keymap declarations",
+      "match": {"kind": ["single-stroke", "chord"]},
+      "set": {
+        "implementation": "implemented",
+        "unit": "covered",
+        "scenario": "partial",
+        "exeDiff": "partial",
+        "ahkDiff": "partial",
+        "realWindows": "unverified",
+        "intentionalDifference": "no"
+      },
+      "evidence": [
+        "config/hotkeySKG.behavior.json",
+        "tests/iKeyd.LegacySpec.Tests/LegacyBehaviorSpecTests.cs",
+        "tests/iKeyd.Compatibility.Tests/Scenarios"
+      ]
+    },
+    {
+      "name": "core keyboard dispatch",
+      "match": {"ownerRegex": "(?:function|hotkey):(onKeyDown|onKeyUp|outputChar)"},
+      "set": {
+        "implementation": "implemented",
+        "unit": "covered",
+        "scenario": "partial",
+        "exeDiff": "partial",
+        "ahkDiff": "partial",
+        "realWindows": "unverified",
+        "intentionalDifference": "no"
+      },
+      "evidence": [
+        "tests/iKeyd.Core.Tests",
+        "tests/iKeyd.Compatibility.Tests",
+        "tests/iKeyd.Windows.Tests"
+      ]
+    },
+    {
+      "name": "mode and layer behavior has regression coverage but long-tail remains",
+      "match": {"tag": ["mode", "layer"]},
+      "set": {
+        "implementation": "partial",
+        "unit": "covered",
+        "scenario": "partial",
+        "exeDiff": "partial",
+        "ahkDiff": "partial",
+        "realWindows": "unverified",
+        "intentionalDifference": "no"
+      },
+      "evidence": [
+        "tests/iKeyd.LegacySpec.Tests/LegacyRuntimeSpecTests.cs",
+        "tests/COMPATIBILITY.md"
+      ]
+    },
+    {
+      "name": "legacy Send interpreter",
+      "match": {"tag": "send"},
+      "set": {
+        "implementation": "partial",
+        "unit": "partial",
+        "scenario": "partial",
+        "exeDiff": "partial",
+        "ahkDiff": "partial",
+        "realWindows": "unverified",
+        "intentionalDifference": "no"
+      },
+      "evidence": [
+        "src/iKeyd.Windows",
+        "tests/iKeyd.Windows.Tests",
+        "README.md"
+      ]
+    },
+    {
+      "name": "desktop window operations",
+      "match": {"tag": "window"},
+      "set": {
+        "implementation": "partial",
+        "unit": "partial",
+        "scenario": "missing",
+        "exeDiff": "missing",
+        "ahkDiff": "missing",
+        "realWindows": "required",
+        "intentionalDifference": "no"
+      },
+      "evidence": [
+        "tests/iKeyd.Windows.Tests",
+        "tests/COMPATIBILITY.md"
+      ]
+    },
+    {
+      "name": "mouse and media operations",
+      "match": {"tag": ["mouse", "media"]},
+      "set": {
+        "implementation": "partial",
+        "unit": "partial",
+        "scenario": "missing",
+        "exeDiff": "missing",
+        "ahkDiff": "missing",
+        "realWindows": "required",
+        "intentionalDifference": "no"
+      },
+      "evidence": [
+        "tests/iKeyd.Windows.Tests",
+        "tests/COMPATIBILITY.md"
+      ]
+    },
+    {
+      "name": "clipboard history and picker",
+      "match": {"tag": "clipboard"},
+      "set": {
+        "implementation": "partial",
+        "unit": "covered",
+        "scenario": "missing",
+        "exeDiff": "missing",
+        "ahkDiff": "missing",
+        "realWindows": "required",
+        "intentionalDifference": "no"
+      },
+      "evidence": [
+        "tests/iKeyd.Core.Tests",
+        "tests/iKeyd.Windows.Tests",
+        "tests/COMPATIBILITY.md"
+      ]
+    },
+    {
+      "name": "macro engine behavior",
+      "match": {"tag": "macro"},
+      "set": {
+        "implementation": "partial",
+        "unit": "covered",
+        "scenario": "missing",
+        "exeDiff": "missing",
+        "ahkDiff": "missing",
+        "realWindows": "required",
+        "intentionalDifference": "no"
+      },
+      "evidence": [
+        "tests/iKeyd.Core.Tests",
+        "tests/iKeyd.Windows.Tests",
+        "tests/COMPATIBILITY.md"
+      ]
+    },
+    {
+      "name": "IME behavior requires a real Japanese IME for final verification",
+      "match": {"tag": "ime"},
+      "set": {
+        "implementation": "partial",
+        "unit": "partial",
+        "scenario": "partial",
+        "exeDiff": "partial",
+        "ahkDiff": "partial",
+        "realWindows": "required",
+        "intentionalDifference": "no"
+      },
+      "evidence": [
+        "tests/iKeyd.LegacySpec.Tests/LegacyRuntimeSpecTests.cs",
+        "tests/iKeyd.Windows.Tests",
+        "tests/COMPATIBILITY.md"
+      ]
+    },
+    {
+      "name": "process/application-specific legacy branches are not assumed covered",
+      "match": {"tag": "process-specific"},
+      "set": {
+        "implementation": "unknown",
+        "unit": "unknown",
+        "scenario": "missing",
+        "exeDiff": "missing",
+        "ahkDiff": "missing",
+        "realWindows": "required",
+        "intentionalDifference": "unknown"
+      },
+      "evidence": ["tests/COMPATIBILITY.md"]
+    }
+  ]
+}
