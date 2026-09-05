@@ -8,72 +8,40 @@ on:
       - '.github/workflows/bootstrap-release-v0.1.1.yml'
 
 permissions:
+  actions: read
   contents: write
 
 env:
   RELEASE_TAG: v0.1.1
   TARGET_SHA: 45e17f155226cfa8fb0160d28abbd4cdc1816d1b
+  ARTIFACT_RUN: '33990914476'
 
 jobs:
   release:
-    runs-on: windows-latest
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           ref: ${{ env.TARGET_SHA }}
-      - uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: 8.0.x
-      - run: dotnet restore iKeyd.sln
-      - run: dotnet test iKeyd.sln --no-restore --configuration Release
-      - name: Publish win-x64
-        run: >-
-          dotnet publish src/iKeyd.App/iKeyd.App.csproj
-          --configuration Release
-          --runtime win-x64
-          --self-contained true
-          -p:PublishSingleFile=true
-          -p:DebugType=None
-          -p:DebugSymbols=false
-          --output artifacts/iKeyd-win-x64
-      - name: Publish win-x64 embedded config
-        run: >-
-          dotnet publish src/iKeyd.App/iKeyd.App.csproj
-          --configuration Release
-          --runtime win-x64
-          --self-contained true
-          -p:PublishSingleFile=true
-          -p:DebugType=None
-          -p:DebugSymbols=false
-          -p:EmbedDefaultConfig=true
-          --output artifacts/iKeyd-win-x64-embedded
-      - name: Verify embedded package is standalone
-        shell: pwsh
+      - name: Create and push release tag
         run: |
-          if (-not (Test-Path artifacts/iKeyd-win-x64-embedded/iKeyd-embedded.exe)) { throw 'embedded executable missing' }
-          if (Test-Path artifacts/iKeyd-win-x64-embedded/iKeyd.json) { throw 'embedded package unexpectedly contains iKeyd.json' }
-      - name: Create release archive
-        shell: pwsh
-        run: Compress-Archive -Path artifacts/iKeyd-win-x64/* -DestinationPath artifacts/iKeyd-win-x64.zip -Force
-      - uses: actions/upload-artifact@v4
-        with:
-          name: iKeyd-v0.1.1
-          path: |
-            artifacts/iKeyd-win-x64.zip
-            artifacts/iKeyd-win-x64/iKeyd.exe
-            artifacts/iKeyd-win-x64/iKeyd.json
-            artifacts/iKeyd-win-x64-embedded/iKeyd-embedded.exe
-          if-no-files-found: error
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag "${RELEASE_TAG}" "${TARGET_SHA}"
+          git push origin "${RELEASE_TAG}"
+      - name: Download verified release artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh run download "${ARTIFACT_RUN}" --repo "${GITHUB_REPOSITORY}" --name iKeyd-v0.1.1 --dir artifacts
       - name: Create GitHub Release
-        shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
         run: >-
-          gh release create $env:RELEASE_TAG
+          gh release create "${RELEASE_TAG}"
           artifacts/iKeyd-win-x64.zip
           artifacts/iKeyd-win-x64/iKeyd.exe
           artifacts/iKeyd-win-x64/iKeyd.json
           artifacts/iKeyd-win-x64-embedded/iKeyd-embedded.exe
-          --target $env:TARGET_SHA
+          --verify-tag
           --notes "Adds iKeyd-embedded.exe, a self-contained Windows x64 build with the default iKeyd configuration embedded in the executable."
-          --title "iKeyd $env:RELEASE_TAG"
+          --title "iKeyd ${RELEASE_TAG}"
