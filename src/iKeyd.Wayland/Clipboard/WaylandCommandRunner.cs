@@ -23,12 +23,18 @@ public sealed class SystemWaylandCommandRunner : IWaylandCommandRunner
         ArgumentException.ThrowIfNullOrWhiteSpace(command);
         ArgumentNullException.ThrowIfNull(arguments);
 
+        // wl-copy normally forks a background selection owner after consuming stdin.
+        // If stdout/stderr are redirected, that child inherits the pipe handles and
+        // ReadToEndAsync never sees EOF even though the parent process has exited.
+        // Input-only commands therefore inherit the caller's stdout/stderr; commands
+        // without stdin (notably wl-paste) keep captured output for normal parsing.
+        var captureOutput = standardInput is null;
         var startInfo = new ProcessStartInfo
         {
             FileName = command,
             UseShellExecute = false,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
+            RedirectStandardOutput = captureOutput,
+            RedirectStandardError = captureOutput,
             RedirectStandardInput = standardInput is not null,
             CreateNoWindow = true
         };
@@ -38,8 +44,14 @@ public sealed class SystemWaylandCommandRunner : IWaylandCommandRunner
         using var process = Process.Start(startInfo)
             ?? throw new InvalidOperationException($"Could not start '{command}'.");
 
-        var stdoutTask = process.StandardOutput.ReadToEndAsync();
-        var stderrTask = process.StandardError.ReadToEndAsync();
+        Task<string>? stdoutTask = null;
+        Task<string>? stderrTask = null;
+        if (captureOutput)
+        {
+            stdoutTask = process.StandardOutput.ReadToEndAsync();
+            stderrTask = process.StandardError.ReadToEndAsync();
+        }
+
         if (standardInput is not null)
         {
             process.StandardInput.Write(standardInput);
@@ -53,7 +65,10 @@ public sealed class SystemWaylandCommandRunner : IWaylandCommandRunner
             throw new TimeoutException($"'{command}' did not exit within {effectiveTimeout}.");
         }
 
-        Task.WaitAll(stdoutTask, stderrTask);
-        return new WaylandCommandResult(process.ExitCode, stdoutTask.Result, stderrTask.Result);
+        if (!captureOutput)
+            return new WaylandCommandResult(process.ExitCode, string.Empty, string.Empty);
+
+        Task.WaitAll(stdoutTask!, stderrTask!);
+        return new WaylandCommandResult(process.ExitCode, stdoutTask!.Result, stderrTask!.Result);
     }
 }
