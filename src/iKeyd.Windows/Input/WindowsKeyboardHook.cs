@@ -66,7 +66,12 @@ public sealed class WindowsKeyboardHook : IKeyboardInputSource, IDisposable
 
         Exception? error;
         lock (_lifecycleGate)
+        {
             error = _startError;
+            if (ReferenceEquals(_started, started))
+                _started = null;
+        }
+        started.Dispose();
 
         if (error is not null)
         {
@@ -92,7 +97,8 @@ public sealed class WindowsKeyboardHook : IKeyboardInputSource, IDisposable
         if (threadId != 0 && !NativeMethods.PostThreadMessageW(threadId, WmQuit, 0, 0))
             throw new Win32Exception(Marshal.GetLastWin32Error(), "Could not stop keyboard hook thread.");
 
-        thread.Join();
+        if (!ReferenceEquals(Thread.CurrentThread, thread))
+            thread.Join();
     }
 
     public void Dispose()
@@ -164,7 +170,6 @@ public sealed class WindowsKeyboardHook : IKeyboardInputSource, IDisposable
                 _hookThreadId = 0;
                 _hookThread = null;
                 _handler = null;
-                _started?.Dispose();
                 _started = null;
             }
             _state.Clear();
