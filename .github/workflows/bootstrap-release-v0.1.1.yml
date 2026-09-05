@@ -33,6 +33,7 @@ jobs:
           artifacts/iKeyd-win-x64/iKeyd.exe
           artifacts/iKeyd-win-x64/iKeyd.json
           artifacts/iKeyd-win-x64-embedded/iKeyd-embedded.exe
+          --repo "${GITHUB_REPOSITORY}"
           --target "${TARGET_SHA}"
           --notes "Adds iKeyd-embedded.exe, a self-contained Windows x64 build with the default iKeyd configuration embedded in the executable."
           --title "iKeyd ${RELEASE_TAG}"
