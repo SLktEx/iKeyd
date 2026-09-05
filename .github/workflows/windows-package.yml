@@ -46,7 +46,6 @@ jobs:
           -p:DebugType=None
           -p:DebugSymbols=false
           -p:EmbedDefaultConfig=true
-          -p:AssemblyName=iKeyd-embedded
           --output artifacts/iKeyd-win-x64-embedded
       - name: Verify embedded package is standalone
         shell: pwsh
