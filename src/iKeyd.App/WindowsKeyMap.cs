@@ -66,7 +66,7 @@ internal static class WindowsKeyMap
             OemPeriod => new KeyId("Dot"),
             OemSlash => new KeyId("Slash"),
             OemAt => new KeyId("AT"),
-            _ => null
+            _ => (KeyId?)null
         };
     }
 
