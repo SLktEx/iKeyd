@@ -16,5 +16,5 @@
     "text": "i-",
     "events": []
   },
-  "tags": ["legacy", "chord", "realtime-safe", "windows"]
+  "tags": ["legacy", "chord", "realtime-safe", "windows", "hosted-legacy"]
 }
