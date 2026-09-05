@@ -13,6 +13,8 @@ public sealed class WindowsClipboardController : IDisposable
     private readonly IClipboardPicker _picker;
     private readonly IKeyboardOutput _keyboard;
     private string? _captured;
+    private string? _suppressedWriteValue;
+    private bool _suppressNextMatchingClipboardChange;
     private bool _disposed;
 
     public WindowsClipboardController(
@@ -44,7 +46,12 @@ public sealed class WindowsClipboardController : IDisposable
         if ((uint)selectedIndex.Value >= (uint)snapshot.Count)
             throw new InvalidOperationException("Clipboard picker returned an invalid index.");
 
-        PasteText(snapshot[selectedIndex.Value]);
+        // Legacy hotkeySKG records the selected row by index when the clipboard
+        // write notification arrives. Promote that exact row synchronously and
+        // suppress our own matching notification so duplicate values keep the
+        // same index-sensitive behavior without being inserted twice.
+        var text = _history.Promote(selectedIndex.Value);
+        WriteClipboardAndPaste(text);
         return true;
     }
 
@@ -60,7 +67,15 @@ public sealed class WindowsClipboardController : IDisposable
         ThrowIfDisposed();
         if (_captured is null)
             return false;
-        PasteText(_captured);
+
+        var snapshot = _history.Items;
+        var index = Array.FindIndex(snapshot.ToArray(), item => string.Equals(item, _captured, StringComparison.Ordinal));
+        if (index >= 0)
+            _history.Promote(index);
+        else
+            _history.Record(_captured);
+
+        WriteClipboardAndPaste(_captured);
         return true;
     }
 
@@ -80,14 +95,36 @@ public sealed class WindowsClipboardController : IDisposable
 
     private void OnClipboardChanged(object? sender, EventArgs e)
     {
-        if (!_disposed)
-            _history.Record(_clipboard.ReadText());
+        if (_disposed)
+            return;
+
+        var text = _clipboard.ReadText();
+        if (_suppressNextMatchingClipboardChange)
+        {
+            var suppress = string.Equals(text, _suppressedWriteValue, StringComparison.Ordinal);
+            _suppressNextMatchingClipboardChange = false;
+            _suppressedWriteValue = null;
+            if (suppress)
+                return;
+        }
+
+        _history.Record(text);
     }
 
-    private void PasteText(string text)
+    private void WriteClipboardAndPaste(string text)
     {
-        _history.Record(text);
-        _clipboard.WriteText(text);
+        _suppressedWriteValue = text;
+        _suppressNextMatchingClipboardChange = true;
+        try
+        {
+            _clipboard.WriteText(text);
+        }
+        catch
+        {
+            _suppressNextMatchingClipboardChange = false;
+            _suppressedWriteValue = null;
+            throw;
+        }
 
         var shift = new KeyboardKey(VkShift, 0);
         var insert = new KeyboardKey(VkInsert, 0, true);
