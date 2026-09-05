@@ -13,22 +13,13 @@ permissions:
 
 env:
   RELEASE_TAG: v0.1.1
-  TARGET_SHA: 45e17f155226cfa8fb0160d28abbd4cdc1816d1b
+  TARGET_SHA: f8b7363c305d3a34f24208a01fe71520ef178558
   ARTIFACT_RUN: '33990914476'
 
 jobs:
   release:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ env.TARGET_SHA }}
-      - name: Create and push release tag
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git tag "${RELEASE_TAG}" "${TARGET_SHA}"
-          git push origin "${RELEASE_TAG}"
       - name: Download verified release artifact
         env:
           GH_TOKEN: ${{ github.token }}
@@ -42,6 +33,6 @@ jobs:
           artifacts/iKeyd-win-x64/iKeyd.exe
           artifacts/iKeyd-win-x64/iKeyd.json
           artifacts/iKeyd-win-x64-embedded/iKeyd-embedded.exe
-          --verify-tag
+          --target "${TARGET_SHA}"
           --notes "Adds iKeyd-embedded.exe, a self-contained Windows x64 build with the default iKeyd configuration embedded in the executable."
           --title "iKeyd ${RELEASE_TAG}"
