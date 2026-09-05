@@ -1,0 +1,13 @@
+{
+  "id": "k-chord-j-r",
+  "description": "K mode J+R resolves to che.",
+  "initialState": { "mode": "K", "ime": "on", "modifiers": [] },
+  "input": [
+    { "atMs": 0, "kind": "keyDown", "key": "J" },
+    { "atMs": 0, "kind": "keyDown", "key": "R" },
+    { "atMs": 1, "kind": "keyUp", "key": "J" },
+    { "atMs": 1, "kind": "keyUp", "key": "R" }
+  ],
+  "expected": { "text": "che", "events": [] },
+  "tags": ["legacy", "chord", "k-mode", "realtime-safe", "windows", "hosted-legacy"]
+}
