@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - 'src/iKeyd.Core/**'
+      - 'src/iKeyd.Linux/**'
       - 'src/iKeyd.Wayland/**'
       - 'tests/iKeyd.Wayland.Tests/**'
       - '.github/workflows/wayland.yml'
@@ -11,6 +12,7 @@ on:
     branches: [main]
     paths:
       - 'src/iKeyd.Core/**'
+      - 'src/iKeyd.Linux/**'
       - 'src/iKeyd.Wayland/**'
       - 'tests/iKeyd.Wayland.Tests/**'
       - '.github/workflows/wayland.yml'
@@ -47,9 +49,7 @@ jobs:
           Xvfb :99 -screen 0 1024x768x24 >"$RUNNER_TEMP/xvfb.log" 2>&1 &
           echo $! > "$RUNNER_TEMP/xvfb.pid"
           for attempt in $(seq 1 50); do
-            if [ -S /tmp/.X11-unix/X99 ]; then
-              break
-            fi
+            if [ -S /tmp/.X11-unix/X99 ]; then break; fi
             sleep 0.1
           done
           if [ ! -S /tmp/.X11-unix/X99 ]; then
@@ -61,9 +61,7 @@ jobs:
             weston --backend=x11-backend.so --socket=wayland-9 --idle-time=0 --log="$RUNNER_TEMP/weston.log" &
           echo $! > "$RUNNER_TEMP/weston.pid"
           for attempt in $(seq 1 100); do
-            if [ -S "$runtime/wayland-9" ]; then
-              exit 0
-            fi
+            if [ -S "$runtime/wayland-9" ]; then exit 0; fi
             sleep 0.1
           done
           cat "$RUNNER_TEMP/weston.log"
