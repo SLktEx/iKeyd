@@ -14,4 +14,5 @@ jobs:
         with:
           dotnet-version: 8.0.x
       - run: dotnet restore iKeyd.sln
-      - run: dotnet test iKeyd.sln --no-restore --configuration Release
+      - run: dotnet build iKeyd.sln --no-restore --configuration Release
+      - run: dotnet test iKeyd.sln --no-build --configuration Release
