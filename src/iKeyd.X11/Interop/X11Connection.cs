@@ -59,7 +59,8 @@ public sealed class X11Connection : IBackendCapabilityProvider, IDisposable
 
         try
         {
-            var result = new nuint[(int)Math.Min(count, int.MaxValue)];
+            var length = count > (nuint)int.MaxValue ? int.MaxValue : (int)count;
+            var result = new nuint[length];
             var stride = format switch
             {
                 8 => 1,
