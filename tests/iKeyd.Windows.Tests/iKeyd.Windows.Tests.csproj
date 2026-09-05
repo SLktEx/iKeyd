@@ -23,7 +23,7 @@
     <None Include="../iKeyd.Compatibility.Tests/Scenarios/*.json" Link="Scenarios/%(Filename)%(Extension)">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
-    <None Include="../iKeyd.LegacySpec.Tests/Fixtures/hotkeySKG.behavior.json" Link="Fixtures/hotkeySKG.behavior.json">
+    <None Include="../../config/hotkeySKG.behavior.json" Link="Fixtures/hotkeySKG.behavior.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
   </ItemGroup>
