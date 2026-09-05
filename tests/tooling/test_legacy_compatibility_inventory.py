@@ -20,10 +20,13 @@ SAMPLE = r'''
 SMODE := 1
 gmode := SMODE
 singleStrokeS_Q=-
+singleStrokeK_Q := o
 flag_Q:=1<<1
 flag_W:=1<<2
 kCmbS1:=flag_Q|flag_W
 resultOfKCmbS1=foo
+kCmbK1=flag_Q|flag_W
+resultOfKCmbK1 = bar
 IME_IfRomaKana(){
   imeget := DllCall("SendMessage")
 }
@@ -71,6 +74,14 @@ class InventoryTests(unittest.TestCase):
         self.assertIn("mouse-operation", kinds)
         self.assertIn("label", kinds)
 
+    def test_control_flow_is_not_misclassified_as_function(self):
+        _, features = self.scan()
+        function_names = [f.details["name"].lower() for f in features if f.kind == "function"]
+        self.assertIn("onkeydown", function_names)
+        self.assertNotIn("if", function_names)
+        branch = next(f for f in features if f.kind == "branch" and "fstate" in f.text)
+        self.assertEqual("function:onKeyDown", branch.owner)
+
     def test_tracks_window_context_and_key_up(self):
         _, features = self.scan()
         console = next(f for f in features if f.kind == "hotkey" and f.details["trigger"] == "^v")
@@ -79,11 +90,19 @@ class InventoryTests(unittest.TestCase):
         key_up = next(f for f in features if f.kind == "hotkey" and f.details["trigger"].lower().endswith(" up"))
         self.assertIn("input-state", key_up.tags)
 
-    def test_chord_records_following_result(self):
+    def test_chords_accept_expression_and_legacy_assignment_forms(self):
         _, features = self.scan()
-        chord = next(f for f in features if f.kind == "chord")
-        self.assertEqual(["Q", "W"], chord.details["keys"])
-        self.assertEqual("foo", chord.details["output"])
+        chords = [f for f in features if f.kind == "chord"]
+        self.assertEqual(2, len(chords))
+        by_mode = {f.details["mode"]: f for f in chords}
+        self.assertEqual(["Q", "W"], by_mode["S"].details["keys"])
+        self.assertEqual("foo", by_mode["S"].details["output"])
+        self.assertEqual("bar", by_mode["K"].details["output"])
+
+    def test_single_strokes_accept_whitespace_and_both_assignments(self):
+        _, features = self.scan()
+        singles = [f for f in features if f.kind == "single-stroke"]
+        self.assertEqual({"S", "K"}, {f.details["mode"] for f in singles})
 
     def test_ids_are_stable_for_same_source(self):
         source, features = self.scan()
@@ -113,10 +132,24 @@ class InventoryTests(unittest.TestCase):
         module.apply_coverage(features, rules)
         single = next(f for f in features if f.kind == "single-stroke")
         self.assertEqual("implemented", single.coverage["implementation"])
-        self.assertEqual("real-windows-verification-required", single.classification)
+        self.assertEqual("partially-verified", single.classification)
         self.assertEqual(["fixture"], single.evidence)
         function = next(f for f in features if f.kind == "function")
         self.assertEqual("unknown", function.classification)
+
+    def test_required_real_windows_is_distinct_from_unverified(self):
+        coverage = {
+            "implementation": "implemented",
+            "unit": "covered",
+            "scenario": "covered",
+            "exeDiff": "covered",
+            "ahkDiff": "covered",
+            "realWindows": "required",
+            "intentionalDifference": "no",
+        }
+        self.assertEqual("real-windows-verification-required", module.derive_classification(coverage))
+        coverage["realWindows"] = "unverified"
+        self.assertEqual("partially-verified", module.derive_classification(coverage))
 
     def test_report_and_markdown_include_unknown_count(self):
         source, features = self.scan()
