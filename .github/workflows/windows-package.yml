@@ -5,6 +5,13 @@ on:
   push:
     tags:
       - 'v*'
+  pull_request:
+    paths:
+      - '.github/workflows/windows-package.yml'
+      - 'src/iKeyd.App/**'
+      - 'src/iKeyd.Core/**'
+      - 'src/iKeyd.Windows/**'
+      - 'config/**'
 
 permissions:
   contents: read
