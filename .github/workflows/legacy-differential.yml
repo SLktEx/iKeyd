@@ -3,7 +3,7 @@ name: Legacy differential
 on:
   workflow_dispatch:
   push:
-    branches: [main]
+    branches: [main, issue-46-hotkeyskg-full-compat]
     paths:
       - tests/legacy-binary/hotkeySKG.exe.gpg
       - tests/legacy-binary/hotkeySKG.ahk.gpg.asc
@@ -17,6 +17,10 @@ on:
       - tests/iKeyd.Windows.Tests/HostedLegacyDifferentialTests.cs
       - tests/iKeyd.Windows.Tests/HostedAutoHotkeySourceRunner.cs
       - tests/iKeyd.Windows.Tests/HostedAutoHotkeySourceDifferentialTests.cs
+      - tests/iKeyd.Windows.Tests/HotkeySkgRuntimeScenarioRunner.cs
+      - tests/iKeyd.Windows.Tests/RuntimeEventCaptureRunner.cs
+      - tests/iKeyd.Windows.Tests/RuntimeInputInjectionRunner.cs
+      - tests/iKeyd.Windows.Tests/ScenarioKeyboard.cs
   pull_request:
     paths:
       - tests/legacy-binary/hotkeySKG.exe.gpg
@@ -31,6 +35,10 @@ on:
       - tests/iKeyd.Windows.Tests/HostedLegacyDifferentialTests.cs
       - tests/iKeyd.Windows.Tests/HostedAutoHotkeySourceRunner.cs
       - tests/iKeyd.Windows.Tests/HostedAutoHotkeySourceDifferentialTests.cs
+      - tests/iKeyd.Windows.Tests/HotkeySkgRuntimeScenarioRunner.cs
+      - tests/iKeyd.Windows.Tests/RuntimeEventCaptureRunner.cs
+      - tests/iKeyd.Windows.Tests/RuntimeInputInjectionRunner.cs
+      - tests/iKeyd.Windows.Tests/ScenarioKeyboard.cs
 
 permissions:
   contents: read
