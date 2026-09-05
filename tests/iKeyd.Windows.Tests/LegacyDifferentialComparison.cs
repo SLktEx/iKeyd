@@ -39,8 +39,15 @@ public static class LegacyDifferentialComparison
         ArgumentNullException.ThrowIfNull(iKeydRunner);
         ArgumentNullException.ThrowIfNull(legacyRunner);
 
+        var iKeydBefore = WindowsExecutionSnapshot.Capture(scenario.InitialState.Modifiers);
         var iKeyd = await iKeydRunner.RunAsync(scenario, cancellationToken);
+        var iKeydAfter = WindowsExecutionSnapshot.Capture(scenario.InitialState.Modifiers);
+        iKeyd = AddExecutionDiagnostics(iKeyd, iKeydBefore, iKeydAfter);
+
+        var legacyBefore = WindowsExecutionSnapshot.Capture(scenario.InitialState.Modifiers);
         var legacy = await legacyRunner.RunAsync(scenario, cancellationToken);
+        var legacyAfter = WindowsExecutionSnapshot.Capture(scenario.InitialState.Modifiers);
+        legacy = AddExecutionDiagnostics(legacy, legacyBefore, legacyAfter);
 
         return new LegacyDifferentialReport
         {
@@ -104,5 +111,19 @@ public static class LegacyDifferentialComparison
         var path = Path.Combine(directory, $"{safeId}.json");
         File.WriteAllText(path, JsonSerializer.Serialize(report, JsonOptions));
         return path;
+    }
+
+    private static ScenarioRunResult AddExecutionDiagnostics(
+        ScenarioRunResult result,
+        IReadOnlyDictionary<string, string> before,
+        IReadOnlyDictionary<string, string> after)
+    {
+        var metadata = new Dictionary<string, string>(result.Metadata);
+        foreach (var (key, value) in before)
+            metadata[$"before.{key}"] = value;
+        foreach (var (key, value) in after)
+            metadata[$"after.{key}"] = value;
+
+        return result with { Metadata = metadata };
     }
 }
