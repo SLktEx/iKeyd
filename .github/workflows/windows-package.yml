@@ -64,8 +64,8 @@ jobs:
         run: >-
           gh release create "${GITHUB_REF_NAME}"
           artifacts/iKeyd-win-x64.zip
-          artifacts/iKeyd.exe
-          artifacts/iKeyd.json
+          artifacts/iKeyd-win-x64/iKeyd.exe
+          artifacts/iKeyd-win-x64/iKeyd.json
           --verify-tag
           --generate-notes
           --title "iKeyd ${GITHUB_REF_NAME}"
