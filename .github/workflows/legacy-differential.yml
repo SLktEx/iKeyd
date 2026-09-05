@@ -122,11 +122,27 @@ jobs:
             throw "AutoHotkey interpreter Git blob mismatch. Expected $expectedGitBlob, actual $gitBlob."
           }
 
+          $versionFile = Join-Path $env:RUNNER_TEMP 'ahk-version.txt'
+          $probeFile = Join-Path $env:RUNNER_TEMP 'ahk-version-probe.ahk'
+          @(
+            "FileAppend, %A_AhkVersion%, $versionFile",
+            'ExitApp'
+          ) | Set-Content -LiteralPath $probeFile -Encoding ASCII
+          $probe = Start-Process -FilePath $path -ArgumentList $probeFile -Wait -PassThru
+          if ($probe.ExitCode -ne 0 -or -not (Test-Path -LiteralPath $versionFile)) {
+            throw "AutoHotkey version probe failed with exit code $($probe.ExitCode)."
+          }
+          $runtimeVersion = (Get-Content -LiteralPath $versionFile -Raw).Trim()
+          if ($runtimeVersion -ne '1.1.16.05') {
+            throw "Unexpected AutoHotkey runtime version: $runtimeVersion."
+          }
+
           $sha256 = (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant()
           "path=$path" >> $env:GITHUB_OUTPUT
           "sha256=$sha256" >> $env:GITHUB_OUTPUT
-          Write-Host "Verified AutoHotkey v1.1.16.05 interpreter Git blob: $gitBlob"
-          Write-Host "AutoHotkey v1.1.16.05 interpreter SHA-256: $sha256"
+          Write-Host "Verified AutoHotkey interpreter Git blob: $gitBlob"
+          Write-Host "Verified AutoHotkey runtime version: $runtimeVersion"
+          Write-Host "AutoHotkey interpreter SHA-256: $sha256"
 
       - name: Restore
         run: dotnet restore iKeyd.sln
