@@ -6,18 +6,21 @@ on:
     branches: [main]
     paths:
       - tests/legacy-binary/hotkeySKG.exe.gpg
+      - .github/workflows/legacy-differential.yml
+      - tests/iKeyd.Windows.Tests/HostedTModeLegacyRunner.cs
+      - tests/iKeyd.Windows.Tests/HostedLegacyDifferentialTests.cs
 
 permissions:
   contents: read
 
 concurrency:
   group: legacy-differential
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   compare:
     runs-on: windows-latest
-    timeout-minutes: 30
+    timeout-minutes: 15
 
     steps:
       - uses: actions/checkout@v4
@@ -25,39 +28,6 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 8.0.x
-
-      - name: Prepare Japanese IME
-        shell: powershell
-        run: |
-          $ErrorActionPreference = 'Stop'
-
-          $basic = Get-WindowsCapability -Online |
-            Where-Object { $_.Name -like 'Language.Basic~~~ja-JP~*' } |
-            Select-Object -First 1
-
-          if ($null -eq $basic) {
-            throw 'Japanese Language.Basic capability was not found on this Windows runner.'
-          }
-
-          if ($basic.State -ne 'Installed') {
-            Add-WindowsCapability -Online -Name $basic.Name
-          }
-
-          $languages = New-WinUserLanguageList 'ja-JP'
-          $languages.Add('en-US')
-          Set-WinUserLanguageList $languages -Force
-
-          $ctfmon = Join-Path $env:WINDIR 'System32\ctfmon.exe'
-          if (Test-Path $ctfmon) {
-            Start-Process $ctfmon
-          }
-
-          Write-Host 'Installed language capabilities:'
-          Get-WindowsCapability -Online |
-            Where-Object { $_.Name -like 'Language.*~~~ja-JP~*' } |
-            Format-Table Name, State
-          Write-Host 'User language list:'
-          Get-WinUserLanguageList | Format-List *
 
       - name: Install GnuPG
         shell: powershell
@@ -106,13 +76,17 @@ jobs:
       - name: Restore
         run: dotnet restore iKeyd.sln
 
-      - name: Run direct legacy differential
+      - name: Run hosted direct legacy differential
         shell: powershell
+        env:
+          IKEYD_LEGACY_EXE: ${{ steps.legacy.outputs.path }}
+          IKEYD_LEGACY_EXE_SHA256: 5492198ce403d796c8588b17419bce82a0e6de3961bb40896a875ee5dee359ea
+          IKEYD_DIFFERENTIAL_REPORT_DIR: ${{ github.workspace }}\TestResults\legacy-differential
         run: |
-          .\tools\run-legacy-differential.ps1 `
-            -LegacyExe '${{ steps.legacy.outputs.path }}' `
-            -ExpectedSha256 '5492198ce403d796c8588b17419bce82a0e6de3961bb40896a875ee5dee359ea' `
-            -ReportDirectory (Join-Path $PWD 'TestResults\legacy-differential')
+          dotnet test tests/iKeyd.Windows.Tests/iKeyd.Windows.Tests.csproj `
+            --no-restore `
+            --configuration Release `
+            --filter 'Category=HostedLegacyDifferentialE2E'
 
       - name: Upload differential reports
         if: always()
