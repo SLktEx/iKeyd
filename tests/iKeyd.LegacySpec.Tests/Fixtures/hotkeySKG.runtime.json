@@ -43,7 +43,7 @@
     {"name":"kana-m","initialState":"M","initialFlag":0,"event":"KanaDown","finalState":"M","finalFlag":1,"actions":["Muhenkan"]},
     {"name":"kana-h","initialState":"H","initialFlag":0,"event":"KanaDown","finalState":"H","finalFlag":1,"actions":["Henkan"]},
     {"name":"kana-s","initialState":"S","initialFlag":0,"event":"KanaDown","finalState":"S","finalFlag":1,"actions":["Ctrl+Esc"]},
-    {"name":"alt-kana","initialState":"","initialFlag":0,"event":"AltKanaDown","finalState":"A","finalFlag":0,"actions":[]}
+    {"name":"alt-kana","initialState":"","initialFlag":0,"event":"AltKanaDown","finalState":"A","finalFlag":0,"actions":["Ctrl"]}
   ],
   "modifiedKeyDispatch": [
     {"state":"H","action":"Ctrl+key","clearsState":false},
@@ -149,6 +149,7 @@
     "KSH dispatches Ctrl+SHKey rather than Win+SHKey",
     "ASH dispatches Alt+SHKey",
     "whenSM right-button toggle source contains 'if s tate = U' typo",
+    "AutoHotkey emits a Ctrl menu-mask tap when Alt+Kana triggers the !sc070 A-layer hotkey",
     "macro hk token accepts only M/S/H state letters, not K/A",
     "clipboard history is selection-sensitive because clipNTmp affects the next insertion"
   ]
