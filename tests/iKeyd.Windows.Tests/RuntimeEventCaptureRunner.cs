@@ -36,13 +36,15 @@ public sealed class RuntimeEventCaptureRunner : ICompatibilityScenarioRunner
         {
             Runner = Name,
             Events = capture.Events.ToList(),
-            // Runtime scenarios compare non-text key behavior. Keep legacy's
-            // existing text observation for diagnostics, but normalize empty to
-            // the empty string used by the full iKeyd runtime runner.
-            Text = result.Text ?? string.Empty,
+            // Runtime-tagged scenarios intentionally compare the injected key
+            // sequence. LegacyExecutableScenarioRunner's old text probe maps a
+            // Ctrl+A/Shift+J key event back to "a"/"j" without modifier state,
+            // so retaining it here would double-count and mis-normalize output.
+            Text = string.Empty,
             Metadata = new Dictionary<string, string>(result.Metadata)
             {
-                ["eventCapture"] = "legacy-injected-keyboard-events"
+                ["eventCapture"] = "legacy-injected-keyboard-events",
+                ["legacyTextDiagnostic"] = result.Text ?? string.Empty
             }
         };
     }
@@ -50,11 +52,11 @@ public sealed class RuntimeEventCaptureRunner : ICompatibilityScenarioRunner
     private sealed class InjectedEventCapture : IDisposable
     {
         private const int WhKeyboardLl = 13;
-        private const uint WmQuit = 0x0012;
-        private const uint WmKeyDown = 0x0100;
-        private const uint WmKeyUp = 0x0101;
-        private const uint WmSysKeyDown = 0x0104;
-        private const uint WmSysKeyUp = 0x0105;
+        private const nuint WmQuit = 0x0012;
+        private const nuint WmKeyDown = 0x0100;
+        private const nuint WmKeyUp = 0x0101;
+        private const nuint WmSysKeyDown = 0x0104;
+        private const nuint WmSysKeyUp = 0x0105;
         private const uint PmNoRemove = 0x0000;
         private const uint LlkhfInjected = 0x00000010;
 
@@ -102,7 +104,7 @@ public sealed class RuntimeEventCaptureRunner : ICompatibilityScenarioRunner
             if (thread is not null)
             {
                 if (_threadId != 0)
-                    NativeMethods.PostThreadMessageW(_threadId, WmQuit, 0, 0);
+                    NativeMethods.PostThreadMessageW(_threadId, (uint)WmQuit, 0, 0);
                 if (!ReferenceEquals(Thread.CurrentThread, thread))
                     thread.Join(TimeSpan.FromSeconds(5));
             }
@@ -148,12 +150,14 @@ public sealed class RuntimeEventCaptureRunner : ICompatibilityScenarioRunner
 
         private nint HookCallback(int code, nuint wParam, nint lParam)
         {
-            if (code >= 0 && wParam is WmKeyDown or WmKeyUp or WmSysKeyDown or WmSysKeyUp)
+            var isKeyboardMessage = wParam == WmKeyDown || wParam == WmKeyUp ||
+                                    wParam == WmSysKeyDown || wParam == WmSysKeyUp;
+            if (code >= 0 && isKeyboardMessage)
             {
                 var native = Marshal.PtrToStructure<KbdLlHookStruct>(lParam);
                 if ((native.Flags & LlkhfInjected) != 0 && native.ExtraInfo != _foreignMarker)
                 {
-                    var kind = wParam is WmKeyDown or WmSysKeyDown ? "keyDown" : "keyUp";
+                    var kind = wParam == WmKeyDown || wParam == WmSysKeyDown ? "keyDown" : "keyUp";
                     lock (_gate)
                     {
                         _events.Add(new ObservedKeyEvent
