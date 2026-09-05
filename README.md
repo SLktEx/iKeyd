@@ -49,15 +49,13 @@ The Windows scenario runner uses the real `WH_KEYBOARD_LL` hook and the real `Se
 
 ### Legacy executable differential test
 
-The compiled legacy executable is intentionally not stored in this public repository. Tests discover it from a local path instead.
-
 The current reference `hotkeySKG.exe` is pinned by SHA-256:
 
 ```text
 5492198ce403d796c8588b17419bce82a0e6de3961bb40896a875ee5dee359ea
 ```
 
-On an interactive Windows session with a Japanese IME installed, the preferred command is:
+On Windows, the local one-command runner is:
 
 ```powershell
 .\tools\run-legacy-differential.ps1 -LegacyExe 'C:\path\to\hotkeySKG.exe'
@@ -72,6 +70,21 @@ A report separately records:
 - iKeyd vs `hotkeySKG.exe` directly
 - runner metadata including the legacy executable SHA-256
 
+#### GitHub-hosted Actions
+
+`.github/workflows/legacy-differential.yml` runs the same direct comparison on GitHub-hosted `windows-latest`; no self-hosted runner is required.
+
+Start **Legacy differential** from the Actions tab and provide a public download URL for the reference `hotkeySKG.exe`. The workflow:
+
+1. checks out iKeyd and installs .NET 8,
+2. ensures the Japanese `Language.Basic` Windows capability is present and configures `ja-JP`,
+3. downloads `hotkeySKG.exe`,
+4. rejects it unless its SHA-256 matches the pinned reference value,
+5. runs the iKeyd ↔ legacy EXE differential suite, and
+6. uploads `legacy-differential-reports` as a GitHub Actions artifact even when the comparison fails.
+
+The executable URL is only transport; the SHA-256 pin identifies the actual compatibility oracle.
+
 To invoke only the legacy executable runner without the direct iKeyd-vs-EXE comparison:
 
 ```powershell
@@ -80,8 +93,6 @@ dotnet test tests/iKeyd.Windows.Tests/iKeyd.Windows.Tests.csproj --filter 'Categ
 ```
 
 When intentionally testing a different legacy binary, pass its expected hash to the script or set `IKEYD_LEGACY_EXE_SHA256` explicitly.
-
-Normal CI does not require or download the legacy binary. The executable and direct differential tests are opt-in when the reference binary is available on an interactive Windows machine.
 
 Run all normal tests with:
 
