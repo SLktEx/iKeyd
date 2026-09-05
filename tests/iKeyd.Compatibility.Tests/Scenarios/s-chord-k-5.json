@@ -1,0 +1,13 @@
+{
+  "id": "s-chord-k-5",
+  "description": "S mode K+5 resolves to xo.",
+  "initialState": { "mode": "S", "ime": "on", "modifiers": [] },
+  "input": [
+    { "atMs": 0, "kind": "keyDown", "key": "K" },
+    { "atMs": 0, "kind": "keyDown", "key": "5" },
+    { "atMs": 1, "kind": "keyUp", "key": "K" },
+    { "atMs": 1, "kind": "keyUp", "key": "5" }
+  ],
+  "expected": { "text": "xo", "events": [] },
+  "tags": ["legacy", "chord", "digit", "realtime-safe", "windows", "hosted-legacy"]
+}
