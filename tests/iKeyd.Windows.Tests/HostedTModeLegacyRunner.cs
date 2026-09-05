@@ -31,8 +31,12 @@ public sealed class HostedTModeLegacyRunner : ICompatibilityScenarioRunner
         ArgumentNullException.ThrowIfNull(scenario);
 
         var hostedScenario = PrepareScenario(scenario);
+        var executablePath = Environment.GetEnvironmentVariable(
+            LegacyExecutableScenarioRunner.ExecutableEnvironmentVariable);
+        var processName = ResolveLegacyProcessName(executablePath);
+
         using var switchCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        var switchTask = SwitchLegacyToTModeWhenReadyAsync(switchCancellation.Token);
+        var switchTask = SwitchLegacyToTModeWhenReadyAsync(processName, switchCancellation.Token);
 
         try
         {
@@ -44,7 +48,8 @@ public sealed class HostedTModeLegacyRunner : ICompatibilityScenarioRunner
                 ["legacyMode"] = "T",
                 ["legacyKeymap"] = "S",
                 ["ime"] = "bypassed-via-T-mode",
-                ["hostedAdapter"] = nameof(HostedTModeLegacyRunner)
+                ["hostedAdapter"] = nameof(HostedTModeLegacyRunner),
+                ["legacyProcessName"] = processName
             };
 
             return result with { Metadata = metadata };
@@ -75,19 +80,30 @@ public sealed class HostedTModeLegacyRunner : ICompatibilityScenarioRunner
                 .ToList()
         };
 
-    private static async Task SwitchLegacyToTModeWhenReadyAsync(CancellationToken cancellationToken)
+    internal static string ResolveLegacyProcessName(string? executablePath)
+    {
+        if (string.IsNullOrWhiteSpace(executablePath))
+            return "hotkeySKG";
+
+        var name = Path.GetFileNameWithoutExtension(executablePath.Trim());
+        return string.IsNullOrWhiteSpace(name) ? "hotkeySKG" : name;
+    }
+
+    private static async Task SwitchLegacyToTModeWhenReadyAsync(
+        string processName,
+        CancellationToken cancellationToken)
     {
         var deadline = Stopwatch.StartNew();
         while (deadline.Elapsed < TimeSpan.FromSeconds(5))
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            var processes = Process.GetProcessesByName("hotkeySKG");
+            var processes = Process.GetProcessesByName(processName);
             try
             {
                 if (processes.Any(process => !process.HasExited))
                 {
-                    // Give the compiled AHK runtime enough time to install its hooks.
+                    // Give the AHK runtime enough time to install its hooks.
                     await Task.Delay(TimeSpan.FromMilliseconds(650), cancellationToken);
                     SendTModeChord();
                     return;
@@ -102,7 +118,8 @@ public sealed class HostedTModeLegacyRunner : ICompatibilityScenarioRunner
             await Task.Delay(TimeSpan.FromMilliseconds(25), cancellationToken);
         }
 
-        throw new TimeoutException("The legacy hotkeySKG process did not become available for T-mode activation.");
+        throw new TimeoutException(
+            $"The legacy process '{processName}' did not become available for T-mode activation.");
     }
 
     private static void SendTModeChord()
