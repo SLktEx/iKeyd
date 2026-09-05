@@ -1,0 +1,42 @@
+name: Native AOT evaluation
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - '.github/workflows/native-aot-evaluation.yml'
+      - 'global.json'
+      - 'tools/evaluate-native-aot.ps1'
+      - 'src/iKeyd.App/**'
+      - 'src/iKeyd.Core/**'
+      - 'src/iKeyd.Profiles.HotkeySkg/**'
+      - 'src/iKeyd.Windows/**'
+      - 'config/**'
+
+permissions:
+  contents: read
+
+jobs:
+  evaluate:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - name: Evaluate Native AOT viability
+        shell: pwsh
+        run: ./tools/evaluate-native-aot.ps1
+      - name: Show evaluation report
+        if: always()
+        shell: pwsh
+        run: |
+          if (Test-Path artifacts/native-aot-evaluation/report.json) {
+            Get-Content artifacts/native-aot-evaluation/report.json
+          }
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: native-aot-evaluation
+          path: artifacts/native-aot-evaluation/**
+          if-no-files-found: error
