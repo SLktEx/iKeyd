@@ -1,38 +1,37 @@
 using iKeyd.Core.Configuration;
-using iKeyd.Core.Keymaps;
-using iKeyd.Core.Modes;
+using iKeyd.Profiles.HotkeySkg.Modes;
 
 namespace iKeyd.App;
 
 /// <summary>
 /// Windows-app projection of the platform-neutral automation profile.
-/// The JSON/profile format and keymap declaration parsing live in iKeyd.Core;
-/// this type only selects the S/K modes required by the current Windows v1 UI.
+/// Core owns profile loading and named keymaps; this type only applies the
+/// hotkeySKG-compatible S/K/T/R startup-mode policy used by the Windows UI.
 /// </summary>
 public sealed record IKeydConfiguration(
-    int ChordWindowMs,
-    Keymap<string> SKeymap,
-    Keymap<string> KKeymap,
+    AutomationProfile Profile,
     InputMode StartupMode)
 {
+    public int ChordWindowMs => Profile.ChordWindowMs;
+
     public static IKeydConfiguration Load(string path)
     {
         var profile = AutomationProfileJson.Load(path);
         if (!Enum.TryParse<InputMode>(profile.StartupMode, ignoreCase: true, out var startupMode))
             throw new InvalidDataException($"Unsupported startupMode '{profile.StartupMode}' for the Windows app.");
 
-        return new IKeydConfiguration(
-            profile.ChordWindowMs,
-            profile.GetKeymap("S").BuildKeymap(),
-            profile.GetKeymap("K").BuildKeymap(),
-            startupMode);
+        // Windows v1 still exposes the hotkeySKG S/K modes. Validate those
+        // profile requirements here instead of teaching the generic runtime about them.
+        _ = profile.GetKeymap("S");
+        _ = profile.GetKeymap("K");
+        return new IKeydConfiguration(profile, startupMode);
     }
 
-    public Keymap<string> GetKeymap(KeymapMode mode)
+    public static string GetKeymapName(KeymapMode mode)
         => mode switch
         {
-            KeymapMode.S => SKeymap,
-            KeymapMode.K => KKeymap,
+            KeymapMode.S => "S",
+            KeymapMode.K => "K",
             _ => throw new ArgumentOutOfRangeException(nameof(mode))
         };
 }
