@@ -2,6 +2,10 @@ name: Legacy differential
 
 on:
   workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - tests/legacy-binary/hotkeySKG.exe.gpg
 
 permissions:
   contents: read
