@@ -1,0 +1,15 @@
+{
+  "id":"runtime-ams-release-alt-enter",
+  "description":"A+M+Space emits Alt+Enter after the A-layer menu-mask tap.",
+  "initialState":{"mode":"S","ime":"off","modifiers":[]},
+  "input":[
+    {"atMs":0,"kind":"keyDown","key":"ALT"},{"atMs":20,"kind":"keyDown","key":"KANA"},{"atMs":30,"kind":"keyUp","key":"KANA"},{"atMs":40,"kind":"keyUp","key":"ALT"},
+    {"atMs":60,"kind":"keyDown","key":"NONCONVERT"},{"atMs":80,"kind":"keyDown","key":"SPACE"},
+    {"atMs":120,"kind":"keyUp","key":"SPACE"},{"atMs":150,"kind":"keyUp","key":"NONCONVERT"}
+  ],
+  "expected":{"text":"","events":[
+    {"kind":"keyDown","key":"CTRL"},{"kind":"keyUp","key":"CTRL"},
+    {"kind":"keyDown","key":"ALT"},{"kind":"keyDown","key":"ENTER"},{"kind":"keyUp","key":"ENTER"},{"kind":"keyUp","key":"ALT"}
+  ]},
+  "tags":["hosted-legacy","hosted-legacy-runtime","layer-AMS","tap","long-tail"]
+}

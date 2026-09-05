@@ -1,0 +1,13 @@
+{
+  "id":"runtime-hs-release-ctrl-space",
+  "description":"H then Space emits Ctrl+Space on Space release.",
+  "initialState":{"mode":"S","ime":"off","modifiers":[]},
+  "input":[
+    {"atMs":0,"kind":"keyDown","key":"CONVERT"},{"atMs":30,"kind":"keyDown","key":"SPACE"},
+    {"atMs":70,"kind":"keyUp","key":"SPACE"},{"atMs":100,"kind":"keyUp","key":"CONVERT"}
+  ],
+  "expected":{"text":"","events":[
+    {"kind":"keyDown","key":"CTRL"},{"kind":"keyDown","key":"SPACE"},{"kind":"keyUp","key":"SPACE"},{"kind":"keyUp","key":"CTRL"}
+  ]},
+  "tags":["hosted-legacy","hosted-legacy-runtime","layer-HS","tap","long-tail"]
+}

@@ -1,0 +1,13 @@
+{
+  "id":"runtime-hm-release-shift-tab",
+  "description":"H then M emits Shift+Tab when M is released unused.",
+  "initialState":{"mode":"S","ime":"off","modifiers":[]},
+  "input":[
+    {"atMs":0,"kind":"keyDown","key":"CONVERT"},{"atMs":30,"kind":"keyDown","key":"NONCONVERT"},
+    {"atMs":70,"kind":"keyUp","key":"NONCONVERT"},{"atMs":100,"kind":"keyUp","key":"CONVERT"}
+  ],
+  "expected":{"text":"","events":[
+    {"kind":"keyDown","key":"SHIFT"},{"kind":"keyDown","key":"TAB"},{"kind":"keyUp","key":"TAB"},{"kind":"keyUp","key":"SHIFT"}
+  ]},
+  "tags":["hosted-legacy","hosted-legacy-runtime","layer-HM","tap","long-tail"]
+}

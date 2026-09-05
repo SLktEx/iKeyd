@@ -1,0 +1,15 @@
+{
+  "id":"runtime-am-j-alt-left",
+  "description":"A then M (AM) + J emits Alt+Left after the AHK Alt menu-mask tap.",
+  "initialState":{"mode":"S","ime":"off","modifiers":[]},
+  "input":[
+    {"atMs":0,"kind":"keyDown","key":"ALT"},{"atMs":20,"kind":"keyDown","key":"KANA"},{"atMs":30,"kind":"keyUp","key":"KANA"},{"atMs":40,"kind":"keyUp","key":"ALT"},
+    {"atMs":60,"kind":"keyDown","key":"NONCONVERT"},
+    {"atMs":90,"kind":"keyDown","key":"J"},{"atMs":110,"kind":"keyUp","key":"J"},{"atMs":130,"kind":"keyUp","key":"NONCONVERT"}
+  ],
+  "expected":{"text":"","events":[
+    {"kind":"keyDown","key":"CTRL"},{"kind":"keyUp","key":"CTRL"},
+    {"kind":"keyDown","key":"ALT"},{"kind":"keyDown","key":"LEFT"},{"kind":"keyUp","key":"LEFT"},{"kind":"keyUp","key":"ALT"}
+  ]},
+  "tags":["hosted-legacy","hosted-legacy-runtime","layer-AM","long-tail"]
+}

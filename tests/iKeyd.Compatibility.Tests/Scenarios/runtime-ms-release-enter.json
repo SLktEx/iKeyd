@@ -1,0 +1,11 @@
+{
+  "id":"runtime-ms-release-enter",
+  "description":"M then Space emits Enter on Space release.",
+  "initialState":{"mode":"S","ime":"off","modifiers":[]},
+  "input":[
+    {"atMs":0,"kind":"keyDown","key":"NONCONVERT"},{"atMs":30,"kind":"keyDown","key":"SPACE"},
+    {"atMs":70,"kind":"keyUp","key":"SPACE"},{"atMs":100,"kind":"keyUp","key":"NONCONVERT"}
+  ],
+  "expected":{"text":"","events":[{"kind":"keyDown","key":"ENTER"},{"kind":"keyUp","key":"ENTER"}]},
+  "tags":["hosted-legacy","hosted-legacy-runtime","layer-MS","tap","long-tail"]
+}

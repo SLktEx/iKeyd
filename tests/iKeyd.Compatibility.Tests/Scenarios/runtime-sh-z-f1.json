@@ -1,0 +1,12 @@
+{
+  "id":"runtime-sh-z-f1",
+  "description":"Space then Henkan (SH) + Z emits SHKey F1.",
+  "initialState":{"mode":"S","ime":"off","modifiers":[]},
+  "input":[
+    {"atMs":0,"kind":"keyDown","key":"SPACE"},{"atMs":30,"kind":"keyDown","key":"CONVERT"},
+    {"atMs":60,"kind":"keyDown","key":"Z"},{"atMs":80,"kind":"keyUp","key":"Z"},
+    {"atMs":100,"kind":"keyUp","key":"CONVERT"},{"atMs":120,"kind":"keyUp","key":"SPACE"}
+  ],
+  "expected":{"text":"","events":[{"kind":"keyDown","key":"F1"},{"kind":"keyUp","key":"F1"}]},
+  "tags":["hosted-legacy","hosted-legacy-runtime","layer-SH","long-tail"]
+}

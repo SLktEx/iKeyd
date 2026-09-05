@@ -1,0 +1,10 @@
+{
+  "id":"runtime-h-kana-henkan",
+  "description":"H + Kana emits Henkan and consumes the H tap.",
+  "initialState":{"mode":"S","ime":"off","modifiers":[]},
+  "input":[
+    {"atMs":0,"kind":"keyDown","key":"CONVERT"},{"atMs":40,"kind":"keyDown","key":"KANA"},{"atMs":60,"kind":"keyUp","key":"KANA"},{"atMs":90,"kind":"keyUp","key":"CONVERT"}
+  ],
+  "expected":{"text":"","events":[{"kind":"keyDown","key":"CONVERT"},{"kind":"keyUp","key":"CONVERT"}]},
+  "tags":["hosted-legacy","hosted-legacy-runtime","layer-H","kana","long-tail"]
+}

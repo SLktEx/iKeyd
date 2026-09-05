@@ -1,0 +1,11 @@
+{
+  "id":"runtime-mh-release-tab",
+  "description":"M then H emits Tab when H is released unused.",
+  "initialState":{"mode":"S","ime":"off","modifiers":[]},
+  "input":[
+    {"atMs":0,"kind":"keyDown","key":"NONCONVERT"},{"atMs":30,"kind":"keyDown","key":"CONVERT"},
+    {"atMs":70,"kind":"keyUp","key":"CONVERT"},{"atMs":100,"kind":"keyUp","key":"NONCONVERT"}
+  ],
+  "expected":{"text":"","events":[{"kind":"keyDown","key":"TAB"},{"kind":"keyUp","key":"TAB"}]},
+  "tags":["hosted-legacy","hosted-legacy-runtime","layer-MH","tap","long-tail"]
+}

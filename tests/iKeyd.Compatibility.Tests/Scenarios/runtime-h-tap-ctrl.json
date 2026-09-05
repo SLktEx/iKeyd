@@ -1,0 +1,8 @@
+{
+  "id":"runtime-h-tap-ctrl",
+  "description":"A bare Henkan H tap emits Ctrl on release.",
+  "initialState":{"mode":"S","ime":"off","modifiers":[]},
+  "input":[{"atMs":0,"kind":"keyDown","key":"CONVERT"},{"atMs":60,"kind":"keyUp","key":"CONVERT"}],
+  "expected":{"text":"","events":[{"kind":"keyDown","key":"CTRL"},{"kind":"keyUp","key":"CTRL"}]},
+  "tags":["hosted-legacy","hosted-legacy-runtime","layer-H","tap","long-tail"]
+}

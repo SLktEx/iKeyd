@@ -1,0 +1,15 @@
+{
+  "id":"runtime-km-j-ctrl-left",
+  "description":"K then M (KM) + J preserves Ctrl across the M-layer Left action.",
+  "initialState":{"mode":"S","ime":"off","modifiers":[]},
+  "input":[
+    {"atMs":0,"kind":"keyDown","key":"KANA"},{"atMs":20,"kind":"keyUp","key":"KANA"},
+    {"atMs":40,"kind":"keyDown","key":"NONCONVERT"},
+    {"atMs":70,"kind":"keyDown","key":"J"},{"atMs":90,"kind":"keyUp","key":"J"},
+    {"atMs":110,"kind":"keyUp","key":"NONCONVERT"}
+  ],
+  "expected":{"text":"","events":[
+    {"kind":"keyDown","key":"CTRL"},{"kind":"keyDown","key":"LEFT"},{"kind":"keyUp","key":"LEFT"},{"kind":"keyUp","key":"CTRL"}
+  ]},
+  "tags":["hosted-legacy","hosted-legacy-runtime","layer-KM","long-tail"]
+}

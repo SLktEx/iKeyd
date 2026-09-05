@@ -1,0 +1,15 @@
+{
+  "id":"runtime-ksh-z-ctrl-f1",
+  "description":"KSH + Z preserves the legacy quirk: Ctrl+SHKey F1, not Win+F1.",
+  "initialState":{"mode":"S","ime":"off","modifiers":[]},
+  "input":[
+    {"atMs":0,"kind":"keyDown","key":"KANA"},{"atMs":20,"kind":"keyUp","key":"KANA"},
+    {"atMs":40,"kind":"keyDown","key":"SPACE"},{"atMs":60,"kind":"keyDown","key":"CONVERT"},
+    {"atMs":90,"kind":"keyDown","key":"Z"},{"atMs":110,"kind":"keyUp","key":"Z"},
+    {"atMs":130,"kind":"keyUp","key":"CONVERT"},{"atMs":150,"kind":"keyUp","key":"SPACE"}
+  ],
+  "expected":{"text":"","events":[
+    {"kind":"keyDown","key":"CTRL"},{"kind":"keyDown","key":"F1"},{"kind":"keyUp","key":"F1"},{"kind":"keyUp","key":"CTRL"}
+  ]},
+  "tags":["hosted-legacy","hosted-legacy-runtime","layer-KSH","legacy-quirk","long-tail"]
+}
