@@ -44,6 +44,11 @@ public sealed class ClipboardHistory
         }
     }
 
+    /// <summary>
+    /// Records a clipboard-change notification using the legacy hotkeySKG
+    /// semantics: every non-empty change is prepended, even when the same text
+    /// already exists elsewhere (or is already the current first item).
+    /// </summary>
     public bool Record(string? text)
     {
         if (string.IsNullOrEmpty(text))
@@ -51,12 +56,6 @@ public sealed class ClipboardHistory
 
         lock (_gate)
         {
-            var existing = _items.FindIndex(item => string.Equals(item, text, StringComparison.Ordinal));
-            if (existing == 0)
-                return false;
-            if (existing > 0)
-                _items.RemoveAt(existing);
-
             _items.Insert(0, text);
             if (_items.Count > Capacity)
                 _items.RemoveRange(Capacity, _items.Count - Capacity);
@@ -64,6 +63,11 @@ public sealed class ClipboardHistory
         }
     }
 
+    /// <summary>
+    /// Promotes the exact selected row, not the first equal string. This mirrors
+    /// hotkeySKG's clipNTmp/index-based picker behavior and therefore preserves
+    /// duplicate clipboard entries faithfully.
+    /// </summary>
     public string Promote(int index)
     {
         lock (_gate)
