@@ -1,6 +1,6 @@
 {
   "id": "runtime-a-j-alt-j",
-  "description": "Alt+Kana toggles A layer and the next J emits Alt+J.",
+  "description": "Alt+Kana toggles A layer with the AHK Ctrl menu-mask tap, then J emits Alt+J.",
   "initialState": { "mode": "S", "ime": "off", "modifiers": [] },
   "input": [
     { "atMs": 0, "kind": "keyDown", "key": "ALT" },
@@ -13,6 +13,8 @@
   "expected": {
     "text": "",
     "events": [
+      { "kind": "keyDown", "key": "CTRL" },
+      { "kind": "keyUp", "key": "CTRL" },
       { "kind": "keyDown", "key": "ALT" },
       { "kind": "keyDown", "key": "J" },
       { "kind": "keyUp", "key": "J" },
