@@ -1,3 +1,4 @@
+using System.Globalization;
 using iKeyd.Core.Chords;
 using iKeyd.Core.Input;
 
@@ -5,6 +6,9 @@ namespace iKeyd.App;
 
 internal static class WindowsKeyMap
 {
+    public const ushort Backspace = 0x08;
+    public const ushort Tab = 0x09;
+    public const ushort Enter = 0x0D;
     public const ushort Shift = 0x10;
     public const ushort Control = 0x11;
     public const ushort Alt = 0x12;
@@ -26,13 +30,17 @@ internal static class WindowsKeyMap
     public const ushort Insert = 0x2D;
     public const ushort Delete = 0x2E;
     public const ushort LeftWin = 0x5B;
+    public const ushort RightWin = 0x5C;
     public const ushort Apps = 0x5D;
     public const ushort Numpad0 = 0x60;
     public const ushort F1 = 0x70;
     public const ushort F12 = 0x7B;
-    public const ushort Backspace = 0x08;
-    public const ushort Tab = 0x09;
-    public const ushort Enter = 0x0D;
+    public const ushort VolumeMute = 0xAD;
+    public const ushort VolumeDown = 0xAE;
+    public const ushort VolumeUp = 0xAF;
+    public const ushort MediaNext = 0xB0;
+    public const ushort MediaPrevious = 0xB1;
+    public const ushort MediaPlayPause = 0xB3;
     public const ushort OemSemicolon = 0xBA;
     public const ushort OemPlus = 0xBB;
     public const ushort OemComma = 0xBC;
@@ -70,9 +78,12 @@ internal static class WindowsKeyMap
         var normalized = name.Trim().ToUpperInvariant();
         ushort virtualKey;
 
-        if (normalized.Length > 1 && normalized[0] == 'F' &&
-            int.TryParse(normalized[1..], out var functionNumber) &&
-            functionNumber is >= 1 and <= 12)
+        if (TryResolveVirtualKeyToken(normalized, out virtualKey))
+        {
+        }
+        else if (normalized.Length > 1 && normalized[0] == 'F' &&
+                 int.TryParse(normalized[1..], NumberStyles.None, CultureInfo.InvariantCulture, out var functionNumber) &&
+                 functionNumber is >= 1 and <= 12)
         {
             virtualKey = (ushort)(F1 + functionNumber - 1);
         }
@@ -96,6 +107,21 @@ internal static class WindowsKeyMap
                 "ESC" or "ESCAPE" => Escape,
                 "APPSKEY" or "APPS" => Apps,
                 "SPACE" => Space,
+                "SHIFT" => Shift,
+                "CTRL" or "CONTROL" => Control,
+                "ALT" => Alt,
+                "LWIN" => LeftWin,
+                "RWIN" => RightWin,
+                "CAPSLOCK" => CapsLock,
+                "KANA" => Kana,
+                "CONVERT" or "HENKAN" => Convert,
+                "NONCONVERT" or "MUHENKAN" => NonConvert,
+                "VOLUME_UP" or "VOLUMEUP" => VolumeUp,
+                "VOLUME_DOWN" or "VOLUMEDOWN" => VolumeDown,
+                "VOLUME_MUTE" or "VOLUMEMUTE" => VolumeMute,
+                "MEDIA_NEXT" or "MEDIANEXT" => MediaNext,
+                "MEDIA_PREV" or "MEDIA_PREVIOUS" or "MEDIAPREV" => MediaPrevious,
+                "MEDIA_PLAY_PAUSE" or "MEDIAPLAYPAUSE" => MediaPlayPause,
                 _ => 0
             };
         }
@@ -136,6 +162,17 @@ internal static class WindowsKeyMap
         return true;
     }
 
+    private static bool TryResolveVirtualKeyToken(string normalized, out ushort virtualKey)
+    {
+        virtualKey = 0;
+        if (!normalized.StartsWith("VK", StringComparison.Ordinal) || normalized.Length < 4)
+            return false;
+
+        var scanIndex = normalized.IndexOf("SC", 2, StringComparison.Ordinal);
+        var hex = scanIndex >= 0 ? normalized[2..scanIndex] : normalized[2..];
+        return ushort.TryParse(hex, NumberStyles.AllowHexSpecifier, CultureInfo.InvariantCulture, out virtualKey) && virtualKey != 0;
+    }
+
     private static bool IsExtended(ushort virtualKey)
-        => virtualKey is Left or Right or Up or Down or Home or End or PageUp or PageDown or Insert or Delete or LeftWin or Apps;
+        => virtualKey is Left or Right or Up or Down or Home or End or PageUp or PageDown or Insert or Delete or LeftWin or RightWin or Apps;
 }
