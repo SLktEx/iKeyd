@@ -1,0 +1,13 @@
+{
+  "id": "k-chord-h-v",
+  "description": "K mode H+V resolves to va.",
+  "initialState": { "mode": "K", "ime": "on", "modifiers": [] },
+  "input": [
+    { "atMs": 0, "kind": "keyDown", "key": "H" },
+    { "atMs": 0, "kind": "keyDown", "key": "V" },
+    { "atMs": 1, "kind": "keyUp", "key": "H" },
+    { "atMs": 1, "kind": "keyUp", "key": "V" }
+  ],
+  "expected": { "text": "va", "events": [] },
+  "tags": ["legacy", "chord", "k-mode", "realtime-safe", "windows", "hosted-legacy"]
+}
