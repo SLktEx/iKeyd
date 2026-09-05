@@ -1,0 +1,20 @@
+{
+  "id": "s-k-q-after-100ms",
+  "description": "S mode K then Q after 100ms resolves as two single-stroke outputs.",
+  "initialState": {
+    "mode": "S",
+    "ime": "on",
+    "modifiers": []
+  },
+  "input": [
+    { "atMs": 0, "kind": "keyDown", "key": "K" },
+    { "atMs": 1, "kind": "keyUp", "key": "K" },
+    { "atMs": 100, "kind": "keyDown", "key": "Q" },
+    { "atMs": 101, "kind": "keyUp", "key": "Q" }
+  ],
+  "expected": {
+    "text": "i-",
+    "events": []
+  },
+  "tags": ["legacy", "chord", "realtime-safe", "windows"]
+}
