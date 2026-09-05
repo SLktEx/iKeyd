@@ -86,10 +86,10 @@ public sealed class MacroExpressionEvaluator
         {
             if (TryConsume('('))
             {
-                var value = ParseExpression();
+                var parenthesizedValue = ParseExpression();
                 if (!TryConsume(')'))
                     throw Error("Missing closing parenthesis");
-                return value;
+                return parenthesizedValue;
             }
 
             SkipWhitespace();
@@ -99,9 +99,9 @@ public sealed class MacroExpressionEvaluator
             if (start == _position)
                 throw Error("Expected an integer");
 
-            if (!long.TryParse(source.AsSpan(start, _position - start), out var value))
+            if (!long.TryParse(source.AsSpan(start, _position - start), out var parsedValue))
                 throw Error("Integer is outside Int64 range");
-            return value;
+            return parsedValue;
         }
 
         private bool TryConsume(char expected)
