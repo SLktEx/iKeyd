@@ -51,40 +51,50 @@ public sealed class X11IntegrationTests
         }));
 
         using var xterm = StartXterm();
-        var window = WaitForXterm(desktop);
-        Assert.False(window.IsEmpty);
-        Assert.Contains("XTerm", desktop.GetWindowClass(window) ?? string.Empty, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains(window, desktop.EnumerateTopLevelWindows());
-
-        desktop.Activate(window);
-        Assert.True(WaitUntil(() => desktop.GetActiveWindow() == window));
-
-        var workArea = desktop.GetPrimaryWorkArea();
-        Assert.True(workArea.Width > 0 && workArea.Height > 0);
-
-        desktop.MoveResize(window, new DesktopRect(80, 90, 520, 320));
-        Assert.True(WaitUntil(() =>
+        try
         {
-            var bounds = desktop.GetWindowBounds(window);
-            return bounds.Width >= 500 && bounds.Height >= 280;
-        }));
+            var window = WaitForXterm(desktop);
+            Assert.False(window.IsEmpty);
+            Assert.Contains("XTerm", desktop.GetWindowClass(window) ?? string.Empty, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains(window, desktop.EnumerateTopLevelWindows());
 
-        desktop.SetTopMost(window, true);
-        Assert.True(WaitUntil(() => desktop.IsTopMost(window)));
-        desktop.SetTopMost(window, false);
-        Assert.True(WaitUntil(() => !desktop.IsTopMost(window)));
+            desktop.Activate(window);
+            Assert.True(WaitUntil(() => desktop.GetActiveWindow() == window));
 
-        desktop.SetOpacity(window, 128);
-        Assert.True(WaitUntil(() => desktop.GetOpacity(window) is >= 126 and <= 130));
-        desktop.SetOpacity(window, null);
-        Assert.Null(desktop.GetOpacity(window));
+            var workArea = desktop.GetPrimaryWorkArea();
+            Assert.True(workArea.Width > 0 && workArea.Height > 0);
 
-        desktop.Maximize(window);
-        Assert.True(WaitUntil(() => desktop.GetWindowState(window) == DesktopWindowState.Maximized));
-        desktop.Restore(window);
-        Assert.True(WaitUntil(() => desktop.GetWindowState(window) != DesktopWindowState.Maximized));
+            desktop.MoveResize(window, new DesktopRect(80, 90, 520, 320));
+            Assert.True(WaitUntil(() =>
+            {
+                var bounds = desktop.GetWindowBounds(window);
+                return bounds.Width >= 500 && bounds.Height >= 280;
+            }));
 
-        desktop.MovePointer(originalPointer);
+            desktop.SetTopMost(window, true);
+            Assert.True(WaitUntil(() => desktop.IsTopMost(window)));
+            desktop.SetTopMost(window, false);
+            Assert.True(WaitUntil(() => !desktop.IsTopMost(window)));
+
+            desktop.SetOpacity(window, 128);
+            Assert.True(WaitUntil(() => desktop.GetOpacity(window) is >= 126 and <= 130));
+            desktop.SetOpacity(window, null);
+            Assert.Null(desktop.GetOpacity(window));
+
+            desktop.Maximize(window);
+            Assert.True(WaitUntil(() => desktop.GetWindowState(window) == DesktopWindowState.Maximized));
+            desktop.Restore(window);
+            Assert.True(WaitUntil(() => desktop.GetWindowState(window) != DesktopWindowState.Maximized));
+        }
+        finally
+        {
+            desktop.MovePointer(originalPointer);
+            if (!xterm.HasExited)
+            {
+                try { xterm.Kill(entireProcessTree: true); } catch { }
+                try { xterm.WaitForExit(2000); } catch { }
+            }
+        }
     }
 
     private static bool Enabled()
