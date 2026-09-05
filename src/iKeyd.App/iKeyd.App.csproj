@@ -10,6 +10,7 @@
     <EmbedDefaultConfig Condition="'$(EmbedDefaultConfig)' == ''">false</EmbedDefaultConfig>
   </PropertyGroup>
   <PropertyGroup Condition="'$(EmbedDefaultConfig)' == 'true'">
+    <AssemblyName>iKeyd-embedded</AssemblyName>
     <DefineConstants>$(DefineConstants);IKEYD_EMBEDDED_CONFIG</DefineConstants>
   </PropertyGroup>
   <ItemGroup>
