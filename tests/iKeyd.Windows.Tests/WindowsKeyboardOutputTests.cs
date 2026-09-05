@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using iKeyd.Core.Input;
 using iKeyd.Windows.Input;
 using Xunit;
@@ -6,6 +7,12 @@ namespace iKeyd.Windows.Tests;
 
 public sealed class WindowsKeyboardOutputTests
 {
+    [Fact]
+    public void Native_input_layout_matches_Win32_INPUT_size()
+    {
+        Assert.Equal(IntPtr.Size == 8 ? 40 : 28, Marshal.SizeOf<WindowsKeyboardOutput.NativeInput>());
+    }
+
     [Fact]
     public void Scan_code_output_uses_scan_code_and_own_injection_marker()
     {
