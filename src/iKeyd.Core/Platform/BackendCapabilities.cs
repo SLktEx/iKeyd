@@ -3,6 +3,7 @@ namespace iKeyd.Core.Platform;
 public enum BackendCapability
 {
     KeyboardInput,
+    KeyboardSuppression,
     KeyboardOutput,
     TextOutputAscii,
     PointerRelative,
