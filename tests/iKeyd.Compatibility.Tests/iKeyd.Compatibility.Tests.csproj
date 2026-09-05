@@ -15,7 +15,14 @@
     </PackageReference>
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="..\..\src\iKeyd.Core\iKeyd.Core.csproj" />
+  </ItemGroup>
+  <ItemGroup>
     <None Update="Scenarios/*.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Include="..\iKeyd.LegacySpec.Tests\Fixtures\hotkeySKG.behavior.json"
+          Link="Fixtures\hotkeySKG.behavior.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
   </ItemGroup>
