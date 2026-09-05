@@ -1,0 +1,13 @@
+{
+  "id": "k-chord-scolon-v-duplicate",
+  "description": "K mode SColon+V preserves the legacy first-match duplicate chord result nya (before later pya).",
+  "initialState": { "mode": "K", "ime": "on", "modifiers": [] },
+  "input": [
+    { "atMs": 0, "kind": "keyDown", "key": "SColon" },
+    { "atMs": 0, "kind": "keyDown", "key": "V" },
+    { "atMs": 1, "kind": "keyUp", "key": "SColon" },
+    { "atMs": 1, "kind": "keyUp", "key": "V" }
+  ],
+  "expected": { "text": "nya", "events": [] },
+  "tags": ["legacy", "chord", "k-mode", "quirk", "duplicate", "realtime-safe", "windows", "hosted-legacy"]
+}
