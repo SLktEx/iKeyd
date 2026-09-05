@@ -1,0 +1,13 @@
+{
+  "id": "k-chord-k-q",
+  "description": "K mode K+Q resolves to ti.",
+  "initialState": { "mode": "K", "ime": "on", "modifiers": [] },
+  "input": [
+    { "atMs": 0, "kind": "keyDown", "key": "K" },
+    { "atMs": 0, "kind": "keyDown", "key": "Q" },
+    { "atMs": 1, "kind": "keyUp", "key": "K" },
+    { "atMs": 1, "kind": "keyUp", "key": "Q" }
+  ],
+  "expected": { "text": "ti", "events": [] },
+  "tags": ["legacy", "chord", "k-mode", "realtime-safe", "windows", "hosted-legacy"]
+}

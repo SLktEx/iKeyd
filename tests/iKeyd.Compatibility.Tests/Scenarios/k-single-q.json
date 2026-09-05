@@ -1,0 +1,11 @@
+{
+  "id": "k-single-q",
+  "description": "K mode single Q resolves to o.",
+  "initialState": { "mode": "K", "ime": "on", "modifiers": [] },
+  "input": [
+    { "atMs": 0, "kind": "keyDown", "key": "Q" },
+    { "atMs": 1, "kind": "keyUp", "key": "Q" }
+  ],
+  "expected": { "text": "o", "events": [] },
+  "tags": ["legacy", "single", "k-mode", "realtime-safe", "windows", "hosted-legacy"]
+}

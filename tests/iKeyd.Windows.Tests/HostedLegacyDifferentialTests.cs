@@ -55,18 +55,18 @@ public sealed class HostedLegacyDifferentialTests
     }
 
     [Fact]
-    public void Hosted_adapter_keeps_S_keymap_but_disables_IME_dependency()
+    public void Hosted_adapter_bootstraps_inner_runner_in_S_mode_and_disables_IME_dependency()
     {
         var scenario = new CompatibilityScenario
         {
             Id = "hosted-adapter-contract",
-            InitialState = new ScenarioInitialState { Mode = "S", Ime = "on" },
+            InitialState = new ScenarioInitialState { Mode = "K", Ime = "on" },
             Input =
             [
                 new ScenarioInputEvent { AtMs = 0, Kind = "keyDown", Key = "K" },
                 new ScenarioInputEvent { AtMs = 10, Kind = "keyDown", Key = "Q" }
             ],
-            Expected = new ScenarioExpected { Text = "fa" }
+            Expected = new ScenarioExpected { Text = "ti" }
         };
 
         var adapted = HostedTModeLegacyRunner.PrepareScenario(scenario);
@@ -75,8 +75,20 @@ public sealed class HostedLegacyDifferentialTests
         Assert.Equal("off", adapted.InitialState.Ime);
         Assert.Equal(500, adapted.Input[0].AtMs);
         Assert.Equal(510, adapted.Input[1].AtMs);
+        Assert.Equal("K", scenario.InitialState.Mode);
         Assert.Equal("on", scenario.InitialState.Ime);
         Assert.Equal(0, scenario.Input[0].AtMs);
+    }
+
+    [Fact]
+    public void Hosted_adapter_uses_M3_for_S_and_M4_then_M3_for_K()
+    {
+        Assert.Equal(
+            new byte[] { 0x33 },
+            HostedTModeLegacyRunner.ResolveModeSelectionDigits("S"));
+        Assert.Equal(
+            new byte[] { 0x34, 0x33 },
+            HostedTModeLegacyRunner.ResolveModeSelectionDigits("K"));
     }
 
     [Theory]
