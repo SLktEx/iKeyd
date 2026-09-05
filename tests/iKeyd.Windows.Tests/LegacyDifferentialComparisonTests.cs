@@ -29,7 +29,7 @@ public sealed class LegacyDifferentialComparisonTests
     }
 
     [Fact]
-    public void WriteReport_emits_machine_readable_comparison()
+    public void WriteReport_emits_machine_readable_comparison_with_timeline_and_initial_state()
     {
         var directory = Path.Combine(Path.GetTempPath(), $"ikeyd-diff-{Guid.NewGuid():N}");
         try
@@ -38,6 +38,17 @@ public sealed class LegacyDifferentialComparisonTests
             {
                 ScenarioId = "test-scenario",
                 GeneratedAtUtc = DateTimeOffset.UtcNow,
+                InitialState = new ScenarioInitialState
+                {
+                    Mode = "S",
+                    Ime = "on",
+                    Modifiers = ["Ctrl"]
+                },
+                Input =
+                [
+                    new ScenarioInputEvent { AtMs = 0, Kind = "keyDown", Key = "K" },
+                    new ScenarioInputEvent { AtMs = 10, Kind = "keyDown", Key = "Q" }
+                ],
                 Expected = new ScenarioExpected { Text = "fa" },
                 IKeyd = Result("iKeyd.Windows", "fa"),
                 LegacyExe = Result("hotkeySKG.exe", "fi", "abc123"),
@@ -52,6 +63,10 @@ public sealed class LegacyDifferentialComparisonTests
 
             Assert.Equal("test-scenario", root.GetProperty("ScenarioId").GetString());
             Assert.False(root.GetProperty("IsMatch").GetBoolean());
+            Assert.Equal("S", root.GetProperty("InitialState").GetProperty("Mode").GetString());
+            Assert.Equal("Ctrl", root.GetProperty("InitialState").GetProperty("Modifiers")[0].GetString());
+            Assert.Equal(2, root.GetProperty("Input").GetArrayLength());
+            Assert.Equal(10, root.GetProperty("Input")[1].GetProperty("AtMs").GetInt64());
             Assert.Equal("fa", root.GetProperty("IKeyd").GetProperty("Text").GetString());
             Assert.Equal("fi", root.GetProperty("LegacyExe").GetProperty("Text").GetString());
             Assert.Equal(
