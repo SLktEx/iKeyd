@@ -12,7 +12,7 @@ permissions:
 
 env:
   RELEASE_TAG: v0.1.1
-  TARGET_SHA: 446ffa7f165fa43302a60caf69c5f21e92880a14
+  TARGET_SHA: 45e17f155226cfa8fb0160d28abbd4cdc1816d1b
 
 jobs:
   release:
@@ -46,7 +46,6 @@ jobs:
           -p:DebugType=None
           -p:DebugSymbols=false
           -p:EmbedDefaultConfig=true
-          -p:AssemblyName=iKeyd-embedded
           --output artifacts/iKeyd-win-x64-embedded
       - name: Verify embedded package is standalone
         shell: pwsh
