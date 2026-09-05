@@ -46,6 +46,26 @@ public sealed class LegacySendOutputTests
     }
 
     [Fact]
+    public void HeldModifier_UsesRealKeyEventsForPlainShortcutCharacters()
+    {
+        var keyboard = new RecordingKeyboardOutput();
+        var send = new LegacySendOutput(keyboard);
+
+        send.SendWithHeldModifier(WindowsKeyMap.Control, "a{LEFT}");
+
+        Assert.Empty(keyboard.Text);
+        Assert.Equal(
+            new[]
+            {
+                Down(WindowsKeyMap.Control),
+                Press((ushort)'A'),
+                Press(WindowsKeyMap.Left),
+                Up(WindowsKeyMap.Control)
+            },
+            keyboard.Events);
+    }
+
+    [Fact]
     public void LiteralBraceTokens_AreEmittedAsText()
     {
         var keyboard = new RecordingKeyboardOutput();
