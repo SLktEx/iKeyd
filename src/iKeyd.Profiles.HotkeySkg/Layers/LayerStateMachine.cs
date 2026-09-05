@@ -1,3 +1,5 @@
+using System.Collections;
+
 namespace iKeyd.Profiles.HotkeySkg.Layers;
 
 public enum LayerEvent
@@ -36,13 +38,68 @@ public enum LayerAction
     UpEndEnter
 }
 
-public sealed record LayerRuntimeState(LayerState Layers, bool Consumed)
+public readonly record struct LayerRuntimeState(LayerState Layers, bool Consumed)
 {
-    public static LayerRuntimeState Empty { get; } = new(LayerState.Empty, false);
+    public static LayerRuntimeState Empty => new(LayerState.Empty, false);
     public LayerRuntimeState MarkConsumed() => this with { Consumed = true };
 }
 
-public sealed record LayerTransition(LayerRuntimeState State, IReadOnlyList<LayerAction> Actions);
+/// <summary>
+/// A zero-or-one action collection. Layer transitions in the hotkeySKG state
+/// machine never emit more than one logical action per input event.
+/// </summary>
+public readonly struct LayerActionList : IReadOnlyList<LayerAction>
+{
+    private readonly LayerAction _action;
+
+    public LayerActionList(LayerAction action)
+    {
+        _action = action;
+        Count = 1;
+    }
+
+    public int Count { get; }
+
+    public LayerAction this[int index]
+        => Count == 1 && index == 0
+            ? _action
+            : throw new ArgumentOutOfRangeException(nameof(index));
+
+    public Enumerator GetEnumerator() => new(this);
+
+    IEnumerator<LayerAction> IEnumerable<LayerAction>.GetEnumerator() => EnumerateBoxed();
+    IEnumerator IEnumerable.GetEnumerator() => EnumerateBoxed();
+
+    private IEnumerator<LayerAction> EnumerateBoxed()
+    {
+        if (Count == 1)
+            yield return _action;
+    }
+
+    public struct Enumerator
+    {
+        private readonly LayerActionList _list;
+        private bool _moved;
+
+        internal Enumerator(LayerActionList list)
+        {
+            _list = list;
+            _moved = false;
+        }
+
+        public LayerAction Current => _list._action;
+
+        public bool MoveNext()
+        {
+            if (_moved || _list.Count == 0)
+                return false;
+            _moved = true;
+            return true;
+        }
+    }
+}
+
+public readonly record struct LayerTransition(LayerRuntimeState State, LayerActionList Actions);
 
 public static class LayerStateMachine
 {
@@ -69,17 +126,17 @@ public static class LayerStateMachine
 
     private static LayerTransition ReleaseM(LayerRuntimeState state)
     {
-        var actions = new List<LayerAction>();
         var consumed = state.Consumed;
+        LayerAction? action = null;
 
         if (!consumed && state.Layers.IsExact(LayerKey.H, LayerKey.M))
         {
-            actions.Add(LayerAction.ShiftTab);
+            action = LayerAction.ShiftTab;
             consumed = true;
         }
         else if (!consumed && state.Layers.IsExact(LayerKey.S, LayerKey.M))
         {
-            actions.Add(LayerAction.ShiftEnter);
+            action = LayerAction.ShiftEnter;
             consumed = true;
         }
 
@@ -89,40 +146,40 @@ public static class LayerStateMachine
                 Layers = state.Layers.Release(LayerKey.K, LayerKey.A, LayerKey.M),
                 Consumed = consumed
             },
-            actions);
+            action);
     }
 
     private static LayerTransition PressH(LayerRuntimeState state)
     {
-        var actions = new List<LayerAction>();
+        LayerAction? action = null;
         var consumed = false;
 
         if (state.Layers.IsExact(LayerKey.M, LayerKey.S))
         {
-            actions.Add(LayerAction.ShiftSpace);
+            action = LayerAction.ShiftSpace;
             consumed = true;
         }
 
-        return Result(state with { Layers = state.Layers.Press(LayerKey.H), Consumed = consumed }, actions);
+        return Result(state with { Layers = state.Layers.Press(LayerKey.H), Consumed = consumed }, action);
     }
 
     private static LayerTransition ReleaseH(LayerRuntimeState state)
     {
-        var actions = new List<LayerAction>();
         var consumed = state.Consumed;
+        LayerAction? action = null;
 
         if (!consumed && state.Layers.IsExact(LayerKey.M, LayerKey.H))
         {
-            actions.Add(LayerAction.Tab);
+            action = LayerAction.Tab;
             consumed = true;
         }
         else if (!consumed && state.Layers.IsExact(LayerKey.H))
         {
-            actions.Add(LayerAction.Ctrl);
+            action = LayerAction.Ctrl;
         }
         else if (!consumed && state.Layers.IsExact(LayerKey.K, LayerKey.H))
         {
-            actions.Add(LayerAction.Henkan);
+            action = LayerAction.Henkan;
             consumed = true;
         }
 
@@ -132,7 +189,7 @@ public static class LayerStateMachine
                 Layers = state.Layers.Release(LayerKey.K, LayerKey.A, LayerKey.H),
                 Consumed = consumed
             },
-            actions);
+            action);
     }
 
     private static LayerTransition PressAltH(LayerRuntimeState state)
@@ -148,53 +205,53 @@ public static class LayerStateMachine
 
     private static LayerTransition PressSpace(LayerRuntimeState state)
     {
-        var actions = new List<LayerAction>();
+        LayerAction? action = null;
         var consumed = false;
 
         if (state.Layers.IsExact(LayerKey.M, LayerKey.H))
         {
-            actions.Add(LayerAction.EndEnter);
+            action = LayerAction.EndEnter;
             consumed = true;
         }
         else if (state.Layers.IsExact(LayerKey.H, LayerKey.M))
         {
-            actions.Add(LayerAction.UpEndEnter);
+            action = LayerAction.UpEndEnter;
             consumed = true;
         }
 
-        return Result(state with { Layers = state.Layers.Press(LayerKey.S), Consumed = consumed }, actions);
+        return Result(state with { Layers = state.Layers.Press(LayerKey.S), Consumed = consumed }, action);
     }
 
     private static LayerTransition ReleaseSpace(LayerRuntimeState state)
     {
-        var actions = new List<LayerAction>();
         var consumed = state.Consumed;
+        LayerAction? action = null;
 
         if (!consumed && state.Layers.IsExact(LayerKey.S))
-            actions.Add(LayerAction.Space);
+            action = LayerAction.Space;
         else if (!consumed && state.Layers.IsExact(LayerKey.M, LayerKey.S))
         {
-            actions.Add(LayerAction.Enter);
+            action = LayerAction.Enter;
             consumed = true;
         }
         else if (!consumed && state.Layers.IsExact(LayerKey.H, LayerKey.S))
         {
-            actions.Add(LayerAction.CtrlSpace);
+            action = LayerAction.CtrlSpace;
             consumed = true;
         }
         else if (!consumed && state.Layers.IsExact(LayerKey.K, LayerKey.S))
         {
-            actions.Add(LayerAction.ShiftSpace);
+            action = LayerAction.ShiftSpace;
             consumed = true;
         }
         else if (!consumed && state.Layers.IsExact(LayerKey.K, LayerKey.M, LayerKey.S))
         {
-            actions.Add(LayerAction.CtrlEnter);
+            action = LayerAction.CtrlEnter;
             consumed = true;
         }
         else if (!consumed && state.Layers.IsExact(LayerKey.A, LayerKey.M, LayerKey.S))
         {
-            actions.Add(LayerAction.AltEnter);
+            action = LayerAction.AltEnter;
             consumed = true;
         }
 
@@ -204,7 +261,7 @@ public static class LayerStateMachine
                 Layers = state.Layers.Release(LayerKey.K, LayerKey.A, LayerKey.S),
                 Consumed = consumed
             },
-            actions);
+            action);
     }
 
     private static LayerTransition PressAltSpace(LayerRuntimeState state)
@@ -212,12 +269,12 @@ public static class LayerStateMachine
 
     private static LayerTransition ReleaseAltSpace(LayerRuntimeState state)
     {
-        var actions = new List<LayerAction>();
         var consumed = state.Consumed;
+        LayerAction? action = null;
 
         if (!consumed && state.Layers.IsExact(LayerKey.A, LayerKey.M, LayerKey.S))
         {
-            actions.Add(LayerAction.AltSpace);
+            action = LayerAction.AltSpace;
             consumed = true;
         }
 
@@ -225,17 +282,17 @@ public static class LayerStateMachine
             ? LayerState.Empty
             : state.Layers.Release(LayerKey.S);
 
-        return Result(state with { Layers = layers, Consumed = consumed }, actions);
+        return Result(state with { Layers = layers, Consumed = consumed }, action);
     }
 
     private static LayerTransition PressKana(LayerRuntimeState state)
     {
         if (state.Layers.IsExact(LayerKey.M))
-            return Result(state.MarkConsumed(), [LayerAction.Muhenkan]);
+            return Result(state.MarkConsumed(), LayerAction.Muhenkan);
         if (state.Layers.IsExact(LayerKey.H))
-            return Result(state.MarkConsumed(), [LayerAction.Henkan]);
+            return Result(state.MarkConsumed(), LayerAction.Henkan);
         if (state.Layers.IsExact(LayerKey.S))
-            return Result(state.MarkConsumed(), [LayerAction.CtrlEsc]);
+            return Result(state.MarkConsumed(), LayerAction.CtrlEsc);
         if (!state.Layers.Contains(LayerKey.K))
             return Result(state with { Layers = state.Layers.Press(LayerKey.K) });
         if (state.Layers.IsExact(LayerKey.K))
@@ -246,6 +303,6 @@ public static class LayerStateMachine
     private static LayerTransition PressAltKana(LayerRuntimeState state)
         => Result(state with { Layers = state.Layers.Press(LayerKey.A) });
 
-    private static LayerTransition Result(LayerRuntimeState state, IReadOnlyList<LayerAction>? actions = null)
-        => new(state, actions ?? []);
+    private static LayerTransition Result(LayerRuntimeState state, LayerAction? action = null)
+        => new(state, action is { } value ? new LayerActionList(value) : default);
 }

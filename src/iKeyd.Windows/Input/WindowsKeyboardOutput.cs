@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.ComponentModel;
 using System.Runtime.InteropServices;
 using iKeyd.Core.Input;
@@ -11,16 +12,26 @@ public sealed class WindowsKeyboardOutput : IKeyboardOutput
     private const uint KeyEventKeyUp = 0x0002;
     private const uint KeyEventUnicode = 0x0004;
     private const uint KeyEventScanCode = 0x0008;
+    private const int MaxStackTextLength = 128;
 
     public static nuint InjectionMarker { get; } = IntPtr.Size == 8
         ? unchecked((nuint)0x694B657964UL)
         : (nuint)0x694B6579U;
 
     public void SendKey(KeyboardKey key, KeyEventKind kind)
-        => Send(BuildKeyInput(key, kind));
+    {
+        Span<NativeInput> inputs = stackalloc NativeInput[1];
+        inputs[0] = BuildKeyInput(key, kind);
+        Send(inputs);
+    }
 
     public void SendKeyPress(KeyboardKey key)
-        => Send(BuildKeyInput(key, KeyEventKind.Down), BuildKeyInput(key, KeyEventKind.Up));
+    {
+        Span<NativeInput> inputs = stackalloc NativeInput[2];
+        inputs[0] = BuildKeyInput(key, KeyEventKind.Down);
+        inputs[1] = BuildKeyInput(key, KeyEventKind.Up);
+        Send(inputs);
+    }
 
     public void SendText(string text)
     {
@@ -28,14 +39,26 @@ public sealed class WindowsKeyboardOutput : IKeyboardOutput
         if (text.Length == 0)
             return;
 
-        var inputs = new List<NativeInput>(text.Length * 2);
-        foreach (var codeUnit in text)
+        var inputCount = checked(text.Length * 2);
+        if (text.Length <= MaxStackTextLength)
         {
-            inputs.Add(BuildUnicodeInput(codeUnit, KeyEventKind.Down));
-            inputs.Add(BuildUnicodeInput(codeUnit, KeyEventKind.Up));
+            Span<NativeInput> inputs = stackalloc NativeInput[inputCount];
+            FillUnicodeInputs(text, inputs);
+            Send(inputs);
+            return;
         }
 
-        Send(inputs.ToArray());
+        var rented = ArrayPool<NativeInput>.Shared.Rent(inputCount);
+        try
+        {
+            var inputs = rented.AsSpan(0, inputCount);
+            FillUnicodeInputs(text, inputs);
+            Send(inputs);
+        }
+        finally
+        {
+            ArrayPool<NativeInput>.Shared.Return(rented, clearArray: false);
+        }
     }
 
     public bool IsToggleOn(ushort virtualKey)
@@ -67,6 +90,16 @@ public sealed class WindowsKeyboardOutput : IKeyboardOutput
         return KeyboardInput(0, codeUnit, flags);
     }
 
+    private static void FillUnicodeInputs(string text, Span<NativeInput> inputs)
+    {
+        var index = 0;
+        foreach (var codeUnit in text)
+        {
+            inputs[index++] = BuildUnicodeInput(codeUnit, KeyEventKind.Down);
+            inputs[index++] = BuildUnicodeInput(codeUnit, KeyEventKind.Up);
+        }
+    }
+
     private static NativeInput KeyboardInput(ushort virtualKey, ushort scanCode, uint flags)
         => new()
         {
@@ -84,14 +117,17 @@ public sealed class WindowsKeyboardOutput : IKeyboardOutput
             }
         };
 
-    private static void Send(params NativeInput[] inputs)
+    private static unsafe void Send(ReadOnlySpan<NativeInput> inputs)
     {
         if (inputs.Length == 0)
             return;
 
-        var sent = NativeMethods.SendInput((uint)inputs.Length, inputs, Marshal.SizeOf<NativeInput>());
-        if (sent != (uint)inputs.Length)
-            throw new Win32Exception(Marshal.GetLastWin32Error(), $"SendInput sent {sent} of {inputs.Length} events.");
+        fixed (NativeInput* pointer = inputs)
+        {
+            var sent = NativeMethods.SendInput((uint)inputs.Length, pointer, sizeof(NativeInput));
+            if (sent != (uint)inputs.Length)
+                throw new Win32Exception(Marshal.GetLastWin32Error(), $"SendInput sent {sent} of {inputs.Length} events.");
+        }
     }
 
     [StructLayout(LayoutKind.Sequential)]
@@ -104,7 +140,7 @@ public sealed class WindowsKeyboardOutput : IKeyboardOutput
     // INPUT contains a union of MOUSEINPUT, KEYBDINPUT and HARDWAREINPUT.
     // Including all members is important: on x64 MOUSEINPUT is 32 bytes, so the
     // union is 32 bytes and INPUT itself is 40 bytes. Defining only KEYBDINPUT
-    // makes Marshal.SizeOf<INPUT>() too small and SendInput rejects the buffer.
+    // makes sizeof(INPUT) too small and SendInput rejects the buffer.
     [StructLayout(LayoutKind.Explicit)]
     internal struct InputUnion
     {
@@ -150,7 +186,7 @@ public sealed class WindowsKeyboardOutput : IKeyboardOutput
     private static class NativeMethods
     {
         [DllImport("user32.dll", SetLastError = true)]
-        public static extern uint SendInput(uint inputCount, [In] NativeInput[] inputs, int inputSize);
+        public static extern unsafe uint SendInput(uint inputCount, NativeInput* inputs, int inputSize);
 
         [DllImport("user32.dll")]
         public static extern short GetKeyState(int virtualKey);

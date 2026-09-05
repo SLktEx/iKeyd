@@ -20,7 +20,7 @@ internal sealed class IKeydRuntimeHandler : IKeyboardEventHandler, IMacroActionD
     private readonly DesktopActionService _desktopActions;
     private readonly ChordEngine<string> _sEngine;
     private readonly ChordEngine<string> _kEngine;
-    private readonly HashSet<ushort> _suppressedKeys = [];
+    private readonly HashSet<ushort> _suppressedKeys = new(64);
     private readonly Timer _chordTimer;
 
     private InputModeState _mode;
@@ -115,8 +115,10 @@ internal sealed class IKeydRuntimeHandler : IKeyboardEventHandler, IMacroActionD
             }
 
             var engine = GetEngine(route.Keymap.Value);
-            SendOutputs(engine.AdvanceTo(keyboardEvent.TimestampMs));
-            SendOutputs(engine.OnKeyDown(keyId.Value, keyboardEvent.TimestampMs));
+            if (engine.TryAdvanceTo(keyboardEvent.TimestampMs, out var timedOutOutput))
+                _send.Send(timedOutOutput);
+            if (engine.TryOnKeyDown(keyId.Value, keyboardEvent.TimestampMs, out var output))
+                _send.Send(output);
 
             if (engine.State == ChordEngineState.PendingSingle)
                 ScheduleTimeout(route.Keymap.Value);
@@ -134,7 +136,7 @@ internal sealed class IKeydRuntimeHandler : IKeyboardEventHandler, IMacroActionD
         lock (_gate)
         {
             ThrowIfDisposed();
-            if (!DispatchFunctionKey(new KeyId(hotkey.Key.ToString()), hotkey.State))
+            if (!KeyId.TryFromCharacter(hotkey.Key, out var key) || !DispatchFunctionKey(key, hotkey.State))
                 throw new NotSupportedException($"Macro hotkey '{{hk {hotkey.State}{hotkey.Key}}}' is not mapped by the Windows v1 runtime.");
         }
 
@@ -186,45 +188,130 @@ internal sealed class IKeydRuntimeHandler : IKeyboardEventHandler, IMacroActionD
 
     private bool DispatchLayeredKey(KeyId key, ushort virtualKey)
     {
-        var state = _layers.Layers.ToString();
-        switch (state)
+        var state = _layers.Layers;
+
+        if (state.IsExact(LayerKey.H))
         {
-            case "H":
-                _send.SendChord(WindowsKeyMap.Control, virtualKey);
-                return true;
-            case "S":
-                _send.SendChord(WindowsKeyMap.Shift, virtualKey);
-                return true;
-            case "HS":
-                _send.SendChord(WindowsKeyMap.Control, WindowsKeyMap.Shift, virtualKey);
-                return true;
-            case "K":
-                _send.SendChord(WindowsKeyMap.LeftWin, virtualKey);
-                _layers = _layers with { Layers = _layers.Layers.Release(LayerKey.K), Consumed = true };
-                return true;
-            case "A":
-                _send.SendChord(WindowsKeyMap.Alt, virtualKey);
-                _layers = _layers with { Layers = _layers.Layers.Release(LayerKey.A), Consumed = true };
-                return true;
-            case "KH":
-                _send.SendChord(WindowsKeyMap.LeftWin, WindowsKeyMap.Control, virtualKey);
-                return true;
-            case "KS":
-                _send.SendChord(WindowsKeyMap.LeftWin, WindowsKeyMap.Shift, virtualKey);
-                return true;
-            case "AH":
-                _send.SendChord(WindowsKeyMap.Alt, WindowsKeyMap.Control, virtualKey);
-                return true;
-            case "AS":
-                _send.SendChord(WindowsKeyMap.Alt, WindowsKeyMap.Shift, virtualKey);
-                return true;
-            case "SM":
-                return DispatchMouseMedia(key);
-            default:
-                return DispatchFunctionKey(key, state);
+            _send.SendChord(WindowsKeyMap.Control, virtualKey);
+            return true;
         }
+        if (state.IsExact(LayerKey.S))
+        {
+            _send.SendChord(WindowsKeyMap.Shift, virtualKey);
+            return true;
+        }
+        if (state.IsExact(LayerKey.H, LayerKey.S))
+        {
+            _send.SendChord(WindowsKeyMap.Control, WindowsKeyMap.Shift, virtualKey);
+            return true;
+        }
+        if (state.IsExact(LayerKey.K))
+        {
+            _send.SendChord(WindowsKeyMap.LeftWin, virtualKey);
+            _layers = _layers with { Layers = _layers.Layers.Release(LayerKey.K), Consumed = true };
+            return true;
+        }
+        if (state.IsExact(LayerKey.A))
+        {
+            _send.SendChord(WindowsKeyMap.Alt, virtualKey);
+            _layers = _layers with { Layers = _layers.Layers.Release(LayerKey.A), Consumed = true };
+            return true;
+        }
+        if (state.IsExact(LayerKey.K, LayerKey.H))
+        {
+            _send.SendChord(WindowsKeyMap.LeftWin, WindowsKeyMap.Control, virtualKey);
+            return true;
+        }
+        if (state.IsExact(LayerKey.K, LayerKey.S))
+        {
+            _send.SendChord(WindowsKeyMap.LeftWin, WindowsKeyMap.Shift, virtualKey);
+            return true;
+        }
+        if (state.IsExact(LayerKey.A, LayerKey.H))
+        {
+            _send.SendChord(WindowsKeyMap.Alt, WindowsKeyMap.Control, virtualKey);
+            return true;
+        }
+        if (state.IsExact(LayerKey.A, LayerKey.S))
+        {
+            _send.SendChord(WindowsKeyMap.Alt, WindowsKeyMap.Shift, virtualKey);
+            return true;
+        }
+        if (state.IsExact(LayerKey.S, LayerKey.M))
+            return DispatchMouseMedia(key);
+
+        return DispatchFunctionKey(key, state);
     }
 
+    private bool DispatchFunctionKey(KeyId key, LayerState state)
+    {
+        switch (key.Code)
+        {
+            case KeyCode.Q:
+                if (state.IsExact(LayerKey.M)) { _send.Send("("); return true; }
+                if (state.IsExact(LayerKey.M, LayerKey.H)) { _send.Send("\""); return true; }
+                if (state.IsExact(LayerKey.H, LayerKey.M)) { _send.Send("'"); return true; }
+                break;
+
+            case KeyCode.W:
+                if (state.IsExact(LayerKey.M)) { _send.SendChord(WindowsKeyMap.Alt, 0x73); return true; }
+                if (state.IsExact(LayerKey.M, LayerKey.H)) { _send.SendChord(WindowsKeyMap.Control, 0x73); return true; }
+                break;
+
+            case KeyCode.J:
+                if (state.IsExact(LayerKey.M)) { _send.SendKey(WindowsKeyMap.Left); return true; }
+                if (state.IsExact(LayerKey.M, LayerKey.H)) { _send.SendChord(WindowsKeyMap.Shift, WindowsKeyMap.Left); return true; }
+                if (state.IsExact(LayerKey.H, LayerKey.M)) { _send.SendChord(WindowsKeyMap.Control, WindowsKeyMap.Left); return true; }
+                if (state.IsExact(LayerKey.M, LayerKey.S)) { _send.SendChord(WindowsKeyMap.Control, WindowsKeyMap.Shift, WindowsKeyMap.Left); return true; }
+                break;
+
+            case KeyCode.M:
+                if (state.IsExact(LayerKey.M)) { _send.SendKey(WindowsKeyMap.Delete); return true; }
+                break;
+
+            case KeyCode.Comma:
+                if (state.IsExact(LayerKey.M)) { _send.SendKey(WindowsKeyMap.Space); return true; }
+                if (state.IsExact(LayerKey.M, LayerKey.H)) { _send.SendKey(WindowsKeyMap.Tab); return true; }
+                if (state.IsExact(LayerKey.H, LayerKey.M)) { _send.SendKey(WindowsKeyMap.Enter); return true; }
+                break;
+
+            case KeyCode.E:
+                if (state.IsExact(LayerKey.M)) { _desktopActions.MinimizeActive(); return true; }
+                if (state.IsExact(LayerKey.M, LayerKey.H)) { _desktopActions.PlaceActive(DesktopPlacement.TopHalf); return true; }
+                if (state.IsExact(LayerKey.H, LayerKey.M)) { _desktopActions.PlaceActive(DesktopPlacement.BottomHalf); return true; }
+                break;
+
+            case KeyCode.R:
+                if (state.IsExact(LayerKey.M)) { _desktopActions.ToggleMaximizeActive(); return true; }
+                if (state.IsExact(LayerKey.M, LayerKey.H)) { _desktopActions.PlaceActive(DesktopPlacement.RightHalf); return true; }
+                if (state.IsExact(LayerKey.H, LayerKey.M)) { _desktopActions.PlaceActive(DesktopPlacement.LeftHalf); return true; }
+                if (state.IsExact(LayerKey.M, LayerKey.S)) { _send.SendChord(WindowsKeyMap.LeftWin, (ushort)'R'); return true; }
+                break;
+
+            case KeyCode.T:
+                if (state.IsExact(LayerKey.M)) { _desktopActions.ToggleTopMostActive(); return true; }
+                if (state.IsExact(LayerKey.M, LayerKey.H)) { _desktopActions.AdjustOpacityActive(-30); return true; }
+                if (state.IsExact(LayerKey.H, LayerKey.M)) { _desktopActions.AdjustOpacityActive(30); return true; }
+                if (state.IsExact(LayerKey.M, LayerKey.S)) { _desktopActions.ToggleCaptionActive(); return true; }
+                break;
+
+            case KeyCode.G:
+                if (state.IsExact(LayerKey.M, LayerKey.H)) { _send.SendChord(WindowsKeyMap.Control, WindowsKeyMap.Tab); return true; }
+                if (state.IsExact(LayerKey.H, LayerKey.M)) { _send.SendChord(WindowsKeyMap.Control, WindowsKeyMap.Shift, WindowsKeyMap.Tab); return true; }
+                break;
+
+            case KeyCode.B:
+                if (state.IsExact(LayerKey.M, LayerKey.H)) { _send.SendChord(WindowsKeyMap.Alt, WindowsKeyMap.Escape); return true; }
+                if (state.IsExact(LayerKey.H, LayerKey.M)) { _send.SendChord(WindowsKeyMap.Alt, WindowsKeyMap.Shift, WindowsKeyMap.Escape); return true; }
+                break;
+        }
+
+        return false;
+    }
+
+    // Macro actions use legacy state strings and are not on the physical keyboard
+    // hot path. Keep this overload for compatibility without making layered input
+    // stringify LayerState on every event.
     private bool DispatchFunctionKey(KeyId key, string state)
     {
         var name = key.Value;
@@ -304,61 +391,61 @@ internal sealed class IKeydRuntimeHandler : IKeyboardEventHandler, IMacroActionD
     private bool DispatchMouseMedia(KeyId key)
     {
         var amount = GetMouseMoveAmount();
-        switch (key.Value)
+        switch (key.Code)
         {
-            case "D":
-            case "E":
-            case "C":
+            case KeyCode.D:
+            case KeyCode.E:
+            case KeyCode.C:
                 return true;
-            case "J":
+            case KeyCode.J:
                 _desktop.MovePointerBy(-amount, 0);
                 return true;
-            case "K":
+            case KeyCode.K:
                 _desktop.MovePointerBy(0, amount);
                 return true;
-            case "L":
+            case KeyCode.L:
                 _desktop.MovePointerBy(amount, 0);
                 return true;
-            case "I":
+            case KeyCode.I:
                 _desktop.MovePointerBy(0, -amount);
                 return true;
-            case "U":
+            case KeyCode.U:
                 _desktop.Click(DesktopMouseButton.Left);
                 return true;
-            case "O":
+            case KeyCode.O:
                 _desktop.Click(DesktopMouseButton.Right);
                 return true;
-            case "COMMA":
+            case KeyCode.Comma:
                 _desktop.Click(DesktopMouseButton.Middle);
                 return true;
-            case "P":
+            case KeyCode.P:
                 _desktop.ScrollVertical(120);
                 return true;
-            case "SCOLON":
+            case KeyCode.SColon:
                 _desktop.ScrollVertical(-120);
                 return true;
-            case "AT":
+            case KeyCode.At:
                 _desktop.ScrollVertical(120, controlModifier: true);
                 return true;
-            case "COLON":
+            case KeyCode.Colon:
                 _desktop.ScrollVertical(-120, controlModifier: true);
                 return true;
-            case "Q":
+            case KeyCode.Q:
                 _desktop.SendMediaCommand(DesktopMediaCommand.VolumeUp);
                 return true;
-            case "A":
+            case KeyCode.A:
                 _desktop.SendMediaCommand(DesktopMediaCommand.VolumeMute);
                 return true;
-            case "Z":
+            case KeyCode.Z:
                 _desktop.SendMediaCommand(DesktopMediaCommand.VolumeDown);
                 return true;
-            case "R":
+            case KeyCode.R:
                 _desktop.SendMediaCommand(DesktopMediaCommand.NextTrack);
                 return true;
-            case "F":
+            case KeyCode.F:
                 _desktop.SendMediaCommand(DesktopMediaCommand.PlayPause);
                 return true;
-            case "V":
+            case KeyCode.V:
                 _desktop.SendMediaCommand(DesktopMediaCommand.PreviousTrack);
                 return true;
             default:
@@ -412,16 +499,12 @@ internal sealed class IKeydRuntimeHandler : IKeyboardEventHandler, IMacroActionD
     private ChordEngine<string> GetEngine(KeymapMode mode)
         => mode == KeymapMode.S ? _sEngine : _kEngine;
 
-    private void SendOutputs(IReadOnlyList<string> outputs)
-    {
-        foreach (var output in outputs)
-            _send.Send(output);
-    }
-
     private void FlushAllPending()
     {
-        SendOutputs(_sEngine.Flush());
-        SendOutputs(_kEngine.Flush());
+        if (_sEngine.TryFlush(out var sOutput))
+            _send.Send(sOutput);
+        if (_kEngine.TryFlush(out var kOutput))
+            _send.Send(kOutput);
         CancelTimeout();
     }
 
@@ -456,7 +539,8 @@ internal sealed class IKeydRuntimeHandler : IKeyboardEventHandler, IMacroActionD
             var mode = _timerMode.Value;
             _timerMode = null;
             _timerDueAt = 0;
-            SendOutputs(GetEngine(mode).Flush());
+            if (GetEngine(mode).TryFlush(out var output))
+                _send.Send(output);
         }
     }
 
