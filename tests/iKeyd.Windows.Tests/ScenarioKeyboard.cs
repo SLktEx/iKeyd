@@ -57,6 +57,20 @@ internal static class ScenarioKeyboard
         };
     }
 
+    /// <summary>
+    /// Physical scan codes that matter to the legacy AHK hotkey declarations.
+    /// hotkeySKG binds Kana as sc070 and the thumb keys as vk1Csc079/vk1Dsc07B,
+    /// so VK-only synthetic input does not faithfully exercise those branches.
+    /// </summary>
+    public static byte ResolveScanCode(string key)
+        => key.Trim().ToUpperInvariant() switch
+        {
+            "KANA" => 0x70,
+            "CONVERT" or "HENKAN" => 0x79,
+            "NONCONVERT" or "MUHENKAN" => 0x7B,
+            _ => 0
+        };
+
     public static string ResolveName(ushort virtualKey)
     {
         if (virtualKey is >= 0x41 and <= 0x5A or >= 0x30 and <= 0x39)
@@ -69,9 +83,9 @@ internal static class ScenarioKeyboard
             0x08 => "BACKSPACE",
             0x09 => "TAB",
             0x0D => "ENTER",
-            0x10 => "SHIFT",
-            0x11 => "CTRL",
-            0x12 => "ALT",
+            0x10 or 0xA0 or 0xA1 => "SHIFT",
+            0x11 or 0xA2 or 0xA3 => "CTRL",
+            0x12 or 0xA4 or 0xA5 => "ALT",
             0x15 => "KANA",
             0x1B => "ESC",
             0x1C => "CONVERT",
@@ -102,7 +116,10 @@ internal static class ScenarioKeyboard
     }
 
     public static KeyboardKey Keyboard(string key)
-        => new(ResolveVirtualKey(key), 0, IsExtended(ResolveVirtualKey(key)));
+    {
+        var virtualKey = ResolveVirtualKey(key);
+        return new KeyboardKey(virtualKey, ResolveScanCode(key), IsExtended(virtualKey));
+    }
 
     public static bool IsExtended(ushort virtualKey)
         => virtualKey is 0x21 or 0x22 or 0x23 or 0x24 or 0x25 or 0x26 or 0x27 or 0x28 or 0x2D or 0x2E or 0x5B or 0x5C or 0x5D;
