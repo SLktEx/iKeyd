@@ -1,0 +1,58 @@
+{
+  "k-chord-f-u-duplicate": {
+    "inventoryIds": [
+      "legacy-chord-1a818bdefb",
+      "legacy-chord-f063e4bdf2"
+    ],
+    "requiredEnvironment": ["hosted-windows"],
+    "oracleTargets": ["compiled-exe", "ahk-source", "ikeyd"]
+  },
+  "k-chord-h-v": {
+    "inventoryIds": ["legacy-chord-51156704be"],
+    "requiredEnvironment": ["hosted-windows"],
+    "oracleTargets": ["compiled-exe", "ahk-source", "ikeyd"]
+  },
+  "k-chord-j-r": {
+    "inventoryIds": ["legacy-chord-9cfd95863f"],
+    "requiredEnvironment": ["hosted-windows"],
+    "oracleTargets": ["compiled-exe", "ahk-source", "ikeyd"]
+  },
+  "k-chord-scolon-v-duplicate": {
+    "inventoryIds": [
+      "legacy-chord-723040d61b",
+      "legacy-chord-e789b6f341"
+    ],
+    "requiredEnvironment": ["hosted-windows"],
+    "oracleTargets": ["compiled-exe", "ahk-source", "ikeyd"]
+  },
+  "k-single-q": {
+    "inventoryIds": ["legacy-single-stroke-b0434eef54"],
+    "requiredEnvironment": ["hosted-windows"],
+    "oracleTargets": ["compiled-exe", "ahk-source", "ikeyd"]
+  },
+  "s-chord-i-v": {
+    "inventoryIds": ["legacy-chord-6f6dff24ea"],
+    "requiredEnvironment": ["hosted-windows"],
+    "oracleTargets": ["compiled-exe", "ahk-source", "ikeyd"]
+  },
+  "s-chord-k-5": {
+    "inventoryIds": ["legacy-chord-f2fa0da67b"],
+    "requiredEnvironment": ["hosted-windows"],
+    "oracleTargets": ["compiled-exe", "ahk-source", "ikeyd"]
+  },
+  "s-chord-o-b": {
+    "inventoryIds": ["legacy-chord-ba1e4711c8"],
+    "requiredEnvironment": ["hosted-windows"],
+    "oracleTargets": ["compiled-exe", "ahk-source", "ikeyd"]
+  },
+  "s-single-k": {
+    "inventoryIds": ["legacy-single-stroke-0532fd9ed9"],
+    "requiredEnvironment": ["hosted-windows"],
+    "oracleTargets": ["compiled-exe", "ahk-source", "ikeyd"]
+  },
+  "s-single-w": {
+    "inventoryIds": ["legacy-single-stroke-e1cb2619ec"],
+    "requiredEnvironment": ["hosted-windows"],
+    "oracleTargets": ["compiled-exe", "ahk-source", "ikeyd"]
+  }
+}

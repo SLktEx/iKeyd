@@ -10,6 +10,9 @@ public sealed record CompatibilityScenario
     public required List<ScenarioInputEvent> Input { get; init; }
     public required ScenarioExpected Expected { get; init; }
     public List<string> Tags { get; init; } = [];
+    public List<string> InventoryIds { get; init; } = [];
+    public List<string> RequiredEnvironment { get; init; } = [];
+    public List<string> OracleTargets { get; init; } = [];
 }
 
 public sealed record ScenarioInitialState
@@ -17,6 +20,7 @@ public sealed record ScenarioInitialState
     public string Mode { get; init; } = "S";
     public string Ime { get; init; } = "unchanged";
     public List<string> Modifiers { get; init; } = [];
+    public List<string> Layers { get; init; } = [];
 }
 
 public sealed record ScenarioInputEvent
@@ -54,8 +58,17 @@ public interface ICompatibilityScenarioRunner
     Task<ScenarioRunResult> RunAsync(CompatibilityScenario scenario, CancellationToken cancellationToken = default);
 }
 
+internal sealed record ScenarioInventoryLink
+{
+    public List<string> InventoryIds { get; init; } = [];
+    public List<string> RequiredEnvironment { get; init; } = [];
+    public List<string> OracleTargets { get; init; } = [];
+}
+
 public static class CompatibilityScenarioCatalog
 {
+    private const string InventoryLinksFileName = "ScenarioInventoryLinks.json";
+
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNameCaseInsensitive = true
@@ -79,6 +92,12 @@ public static class CompatibilityScenarioCatalog
         if (duplicate is not null)
             throw new InvalidDataException($"Duplicate scenario id: {duplicate.Key}");
 
+        var linkPath = Path.Combine(
+            Directory.GetParent(directory)?.FullName ?? directory,
+            InventoryLinksFileName);
+        if (File.Exists(linkPath))
+            scenarios = ApplyInventoryLinks(scenarios, linkPath);
+
         return scenarios;
     }
 
@@ -90,6 +109,44 @@ public static class CompatibilityScenarioCatalog
         Validate(scenario, path);
         return scenario;
     }
+
+    private static CompatibilityScenario[] ApplyInventoryLinks(
+        CompatibilityScenario[] scenarios,
+        string linkPath)
+    {
+        var links = JsonSerializer.Deserialize<Dictionary<string, ScenarioInventoryLink>>(
+            File.ReadAllText(linkPath), JsonOptions)
+            ?? throw new InvalidDataException($"Could not deserialize scenario inventory links: {linkPath}");
+
+        var known = scenarios.Select(item => item.Id).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var unknown = links.Keys.Where(id => !known.Contains(id)).OrderBy(id => id).ToArray();
+        if (unknown.Length != 0)
+        {
+            throw new InvalidDataException(
+                $"Scenario inventory links reference unknown scenario ids: {string.Join(", ", unknown)}");
+        }
+
+        return scenarios.Select(scenario =>
+        {
+            if (!links.TryGetValue(scenario.Id, out var link))
+                return scenario;
+
+            var linked = scenario with
+            {
+                InventoryIds = Merge(scenario.InventoryIds, link.InventoryIds),
+                RequiredEnvironment = Merge(scenario.RequiredEnvironment, link.RequiredEnvironment),
+                OracleTargets = Merge(scenario.OracleTargets, link.OracleTargets)
+            };
+            ValidateMetadata(linked, linkPath);
+            return linked;
+        }).ToArray();
+    }
+
+    private static List<string> Merge(IEnumerable<string> first, IEnumerable<string> second)
+        => first.Concat(second)
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
 
     private static void Validate(CompatibilityScenario scenario, string source)
     {
@@ -123,6 +180,23 @@ public static class CompatibilityScenarioCatalog
             !string.Equals(ime, "off", StringComparison.OrdinalIgnoreCase) &&
             !string.Equals(ime, "unchanged", StringComparison.OrdinalIgnoreCase))
             throw new InvalidDataException($"Unsupported IME state '{ime}': {source}");
+
+        ValidateMetadata(scenario, source);
+    }
+
+    private static void ValidateMetadata(CompatibilityScenario scenario, string source)
+    {
+        ValidateDistinctNonEmpty(scenario.InventoryIds, "inventoryIds", source);
+        ValidateDistinctNonEmpty(scenario.RequiredEnvironment, "requiredEnvironment", source);
+        ValidateDistinctNonEmpty(scenario.OracleTargets, "oracleTargets", source);
+    }
+
+    private static void ValidateDistinctNonEmpty(IReadOnlyList<string> values, string name, string source)
+    {
+        if (values.Any(string.IsNullOrWhiteSpace))
+            throw new InvalidDataException($"{name} cannot contain empty values: {source}");
+        if (values.Count != values.Distinct(StringComparer.OrdinalIgnoreCase).Count())
+            throw new InvalidDataException($"{name} cannot contain duplicate values: {source}");
     }
 }
 

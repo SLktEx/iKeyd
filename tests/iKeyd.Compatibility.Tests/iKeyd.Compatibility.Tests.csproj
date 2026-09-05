@@ -21,6 +21,9 @@
     <None Update="Scenarios/*.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
+    <None Update="ScenarioInventoryLinks.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
     <None Include="..\..\config\hotkeySKG.behavior.json"
           Link="Fixtures\hotkeySKG.behavior.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
