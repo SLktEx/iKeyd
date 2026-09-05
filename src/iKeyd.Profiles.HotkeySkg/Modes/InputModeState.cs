@@ -1,6 +1,6 @@
 using iKeyd.Core.Input;
 
-namespace iKeyd.Core.Modes;
+namespace iKeyd.Profiles.HotkeySkg.Modes;
 
 public enum InputMode
 {

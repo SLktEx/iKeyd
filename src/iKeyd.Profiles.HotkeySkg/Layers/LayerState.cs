@@ -1,4 +1,4 @@
-namespace iKeyd.Core.Layers;
+namespace iKeyd.Profiles.HotkeySkg.Layers;
 
 [Flags]
 public enum LayerModifiers
