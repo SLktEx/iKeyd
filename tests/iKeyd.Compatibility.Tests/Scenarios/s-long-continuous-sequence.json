@@ -1,0 +1,58 @@
+{
+  "id": "s-long-continuous-sequence",
+  "description": "S mode runs ten representative chords continuously to catch stale pending state or output loss across a longer sequence.",
+  "initialState": { "mode": "S", "ime": "on", "modifiers": [] },
+  "input": [
+    { "atMs": 0, "kind": "keyDown", "key": "K" },
+    { "atMs": 0, "kind": "keyDown", "key": "Q" },
+    { "atMs": 1, "kind": "keyUp", "key": "K" },
+    { "atMs": 1, "kind": "keyUp", "key": "Q" },
+
+    { "atMs": 60, "kind": "keyDown", "key": "D" },
+    { "atMs": 60, "kind": "keyDown", "key": "J" },
+    { "atMs": 61, "kind": "keyUp", "key": "D" },
+    { "atMs": 61, "kind": "keyUp", "key": "J" },
+
+    { "atMs": 120, "kind": "keyDown", "key": "L" },
+    { "atMs": 120, "kind": "keyDown", "key": "V" },
+    { "atMs": 121, "kind": "keyUp", "key": "L" },
+    { "atMs": 121, "kind": "keyUp", "key": "V" },
+
+    { "atMs": 180, "kind": "keyDown", "key": "S" },
+    { "atMs": 180, "kind": "keyDown", "key": "N" },
+    { "atMs": 181, "kind": "keyUp", "key": "S" },
+    { "atMs": 181, "kind": "keyUp", "key": "N" },
+
+    { "atMs": 240, "kind": "keyDown", "key": "I" },
+    { "atMs": 240, "kind": "keyDown", "key": "V" },
+    { "atMs": 241, "kind": "keyUp", "key": "I" },
+    { "atMs": 241, "kind": "keyUp", "key": "V" },
+
+    { "atMs": 300, "kind": "keyDown", "key": "O" },
+    { "atMs": 300, "kind": "keyDown", "key": "B" },
+    { "atMs": 301, "kind": "keyUp", "key": "O" },
+    { "atMs": 301, "kind": "keyUp", "key": "B" },
+
+    { "atMs": 360, "kind": "keyDown", "key": "K" },
+    { "atMs": 360, "kind": "keyDown", "key": "W" },
+    { "atMs": 361, "kind": "keyUp", "key": "K" },
+    { "atMs": 361, "kind": "keyUp", "key": "W" },
+
+    { "atMs": 420, "kind": "keyDown", "key": "D" },
+    { "atMs": 420, "kind": "keyDown", "key": "I" },
+    { "atMs": 421, "kind": "keyUp", "key": "D" },
+    { "atMs": 421, "kind": "keyUp", "key": "I" },
+
+    { "atMs": 480, "kind": "keyDown", "key": "L" },
+    { "atMs": 480, "kind": "keyDown", "key": "W" },
+    { "atMs": 481, "kind": "keyUp", "key": "L" },
+    { "atMs": 481, "kind": "keyUp", "key": "W" },
+
+    { "atMs": 540, "kind": "keyDown", "key": "S" },
+    { "atMs": 540, "kind": "keyDown", "key": "H" },
+    { "atMs": 541, "kind": "keyUp", "key": "S" },
+    { "atMs": 541, "kind": "keyUp", "key": "H" }
+  ],
+  "expected": { "text": "faarowakyanyagoyomebi", "events": [] },
+  "tags": ["legacy", "chord", "long-input", "realtime-safe", "windows", "hosted-legacy"]
+}
