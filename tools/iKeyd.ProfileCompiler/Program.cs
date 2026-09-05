@@ -108,9 +108,9 @@ internal static class ProfileCompiler
             builder.AppendLine("                    {");
             foreach (var item in singlesElement.EnumerateObject())
             {
-                ValidateKeyName(item.Name, $"singleStroke.{mode}");
+                var key = KeyExpression(item.Name, $"singleStroke.{mode}");
                 var output = item.Value.GetString() ?? string.Empty;
-                builder.AppendLine($"                        new SingleMapping<string>({Literal(item.Name)}, {Literal(output)}),");
+                builder.AppendLine($"                        new SingleMapping<string>({key}, {Literal(output)}),");
             }
             builder.AppendLine("                    },");
             builder.AppendLine("                    chordMappings: new ChordMapping<string>[]");
@@ -121,12 +121,12 @@ internal static class ProfileCompiler
                 if (item.ValueKind != JsonValueKind.Array || item.GetArrayLength() != 3)
                     throw new InvalidDataException($"A chords.{mode} entry must contain [first, second, output].");
 
-                var first = item[0].GetString() ?? throw new InvalidDataException("Chord first key is missing.");
-                var second = item[1].GetString() ?? throw new InvalidDataException("Chord second key is missing.");
+                var firstName = item[0].GetString() ?? throw new InvalidDataException("Chord first key is missing.");
+                var secondName = item[1].GetString() ?? throw new InvalidDataException("Chord second key is missing.");
                 var output = item[2].GetString() ?? string.Empty;
-                ValidateKeyName(first, $"chords.{mode}");
-                ValidateKeyName(second, $"chords.{mode}");
-                builder.AppendLine($"                        new ChordMapping<string>({Literal(first)}, {Literal(second)}, {Literal(output)}),");
+                var first = KeyExpression(firstName, $"chords.{mode}");
+                var second = KeyExpression(secondName, $"chords.{mode}");
+                builder.AppendLine($"                        new ChordMapping<string>({first}, {second}, {Literal(output)}),");
             }
 
             builder.AppendLine("                    }),");
@@ -186,10 +186,37 @@ internal static class ProfileCompiler
         return false;
     }
 
-    private static void ValidateKeyName(string key, string location)
+    private static string KeyExpression(string key, string location)
     {
         if (string.IsNullOrWhiteSpace(key))
             throw new InvalidDataException($"{location} contains an empty key name.");
+
+        var normalized = key.Trim().ToUpperInvariant();
+        string? token = null;
+        if (normalized.Length == 1 && normalized[0] is >= 'A' and <= 'Z')
+            token = normalized;
+        else if (normalized.Length == 1 && normalized[0] is >= '0' and <= '9')
+            token = $"Digit{normalized}";
+        else if (normalized.Length is 2 or 3 && normalized[0] == 'F' &&
+                 int.TryParse(normalized.AsSpan(1), out var functionNumber) &&
+                 functionNumber is >= 1 and <= 12)
+            token = normalized;
+        else
+            token = normalized switch
+            {
+                "SCOLON" => "SColon",
+                "COLON" => "Colon",
+                "COMMA" => "Comma",
+                "DOT" => "Dot",
+                "SLASH" => "Slash",
+                "AT" => "At",
+                _ => null
+            };
+
+        if (token is null)
+            throw new InvalidDataException($"{location} contains unsupported key '{key}' for the compiled Windows profile.");
+
+        return $"new KeyId(KeyCode.{token})";
     }
 
     private static string Literal(string value)

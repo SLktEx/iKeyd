@@ -44,20 +44,20 @@ internal static class WindowsKeyMap
     public static KeyId? TryResolveKeyId(ushort virtualKey)
     {
         if (virtualKey is >= 0x41 and <= 0x5A)
-            return new KeyId(((char)virtualKey).ToString());
+            return new KeyId((KeyCode)((int)KeyCode.A + virtualKey - 0x41));
         if (virtualKey is >= 0x30 and <= 0x39)
-            return new KeyId(((char)virtualKey).ToString());
+            return new KeyId((KeyCode)((int)KeyCode.Digit0 + virtualKey - 0x30));
         if (virtualKey is >= F1 and <= F12)
-            return new KeyId($"F{virtualKey - F1 + 1}");
+            return new KeyId((KeyCode)((int)KeyCode.F1 + virtualKey - F1));
 
         return virtualKey switch
         {
-            OemSemicolon => new KeyId("SColon"),
-            OemPlus => new KeyId("Colon"),
-            OemComma => new KeyId("Comma"),
-            OemPeriod => new KeyId("Dot"),
-            OemSlash => new KeyId("Slash"),
-            OemAt => new KeyId("AT"),
+            OemSemicolon => new KeyId(KeyCode.SColon),
+            OemPlus => new KeyId(KeyCode.Colon),
+            OemComma => new KeyId(KeyCode.Comma),
+            OemPeriod => new KeyId(KeyCode.Dot),
+            OemSlash => new KeyId(KeyCode.Slash),
+            OemAt => new KeyId(KeyCode.At),
             _ => null
         };
     }
