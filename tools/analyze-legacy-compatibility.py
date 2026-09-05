@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
-"""Inventory legacy hotkeySKG behavior and render a compatibility matrix.
+"""Inventory hotkeySKG behavior and render a compatibility matrix.
 
-This is intentionally a targeted AutoHotkey v1 scanner, not a general AHK parser.
-It extracts the behavior surfaces that matter to iKeyd compatibility and overlays
-conservative coverage rules. Unknowns are preserved so #46 has a measurable
-remaining-work list instead of silently assuming compatibility.
+This is a deliberately targeted AutoHotkey v1 scanner rather than a general AHK
+parser. Unknown coverage stays unknown so the output remains a useful work queue
+for #46 instead of silently assuming compatibility.
 """
 from __future__ import annotations
 
@@ -26,21 +25,22 @@ STATUS_FIELDS = (
     "realWindows",
     "intentionalDifference",
 )
+DEFAULT_STATUS = {name: "unknown" for name in STATUS_FIELDS}
 
-DEFAULT_STATUS = {field: "unknown" for field in STATUS_FIELDS}
-
-SINGLE_RE = re.compile(r"singleStroke([SK])_([A-Za-z0-9]+)=(.*)$", re.I)
+ASSIGN = r"\s*(?::=|=)\s*"
+SINGLE_RE = re.compile(rf"singleStroke([SK])_([A-Za-z0-9]+){ASSIGN}(.*)$", re.I)
 CHORD_RE = re.compile(
-    r"kCmb([SK])(\d+)\s*:=\s*flag_([A-Za-z0-9]+)\|flag_([A-Za-z0-9]+)",
+    rf"kCmb([SK])(\d+){ASSIGN}flag_([A-Za-z0-9]+)\s*\|\s*flag_([A-Za-z0-9]+)",
     re.I,
 )
-CHORD_RESULT_RE = re.compile(r"resultOfKCmb([SK])(\d+)=(.*)$", re.I)
+CHORD_RESULT_RE = re.compile(rf"resultOfKCmb([SK])(\d+){ASSIGN}(.*)$", re.I)
 FUNCTION_RE = re.compile(r"^([A-Za-z_][A-Za-z0-9_]*)\s*\(([^)]*)\)\s*\{\s*$")
 LABEL_RE = re.compile(r"^([A-Za-z_][A-Za-z0-9_]*):\s*$")
 HOTKEY_RE = re.compile(r"^(?!#)(.+?)::(.*)$")
 SEND_RE = re.compile(r"\b(Send|SendInput|SendRaw|SendPlay|SendEvent)\s*,?\s*(.*)$", re.I)
 COMMAND_RE = re.compile(r"^([A-Za-z_][A-Za-z0-9_]*)\s*,?\s*(.*)$")
 BRANCH_RE = re.compile(r"^(?:}\s*)?(?:else\s+)?if\b|^#If\b", re.I)
+CONTROL_FLOW_NAMES = {"if", "while", "for", "loop", "switch", "catch", "try", "else"}
 
 WINDOW_COMMANDS = {
     "winactivate", "winget", "wingetpos", "wingettitle", "winhide", "winmaximize",
@@ -51,8 +51,8 @@ CLIPBOARD_COMMANDS = {"clipwait"}
 MEDIA_COMMANDS = {"soundget", "soundset"}
 PROCESS_COMMANDS = {"process", "run", "runwait"}
 LIFECYCLE_COMMANDS = {"exitapp", "reload", "suspend"}
-UI_COMMANDS = {"gui", "menu", "msgbox"}
-TIMER_INPUT_COMMANDS = {"getkeystate", "keywait", "settimer", "input"}
+UI_COMMANDS = {"gui", "menu", "msgbox", "inputbox"}
+INPUT_STATE_COMMANDS = {"getkeystate", "keywait", "settimer", "input"}
 MEDIA_TOKENS = ("VOLUME_", "MEDIA_", "VOLUME_MUTE")
 MODE_TOKENS = ("gmode", "gimode", "SMODE", "RMODE", "TMODE", "KMODE")
 LAYER_TOKENS = ("fstate", "flag", '"M"', '"H"', '"S"', '"K"', '"A"')
@@ -92,13 +92,13 @@ class Feature:
         }
 
 
-def normalized(line: str) -> str:
-    return re.sub(r"\s+", " ", line.strip())
+def normalized(text: str) -> str:
+    return re.sub(r"\s+", " ", text.strip())
 
 
 def contains_any(text: str, tokens: Iterable[str]) -> bool:
-    lowered = text.lower()
-    return any(token.lower() in lowered for token in tokens)
+    lower = text.lower()
+    return any(token.lower() in lower for token in tokens)
 
 
 def add_unique(items: list[str], *values: str) -> None:
@@ -109,22 +109,22 @@ def add_unique(items: list[str], *values: str) -> None:
 
 def semantic_tags(text: str, command: str | None, window_context: str | None) -> list[str]:
     tags: list[str] = []
-    lower_command = (command or "").lower()
+    cmd = (command or "").lower()
     if SEND_RE.search(text):
         add_unique(tags, "send")
-    if lower_command in WINDOW_COMMANDS or contains_any(text, ("Win", "PostMessage")):
+    if cmd in WINDOW_COMMANDS or contains_any(text, ("Win", "PostMessage")):
         add_unique(tags, "window")
-    if lower_command in MOUSE_COMMANDS or contains_any(text, ("MouseMove", "MouseGetPos", "click,")):
+    if cmd in MOUSE_COMMANDS or contains_any(text, ("MouseMove", "MouseGetPos", "click,")):
         add_unique(tags, "mouse")
-    if lower_command in MEDIA_COMMANDS or contains_any(text, MEDIA_TOKENS):
+    if cmd in MEDIA_COMMANDS or contains_any(text, MEDIA_TOKENS):
         add_unique(tags, "media")
-    if lower_command in PROCESS_COMMANDS:
+    if cmd in PROCESS_COMMANDS:
         add_unique(tags, "process")
-    if lower_command in LIFECYCLE_COMMANDS:
+    if cmd in LIFECYCLE_COMMANDS:
         add_unique(tags, "lifecycle")
-    if lower_command in UI_COMMANDS:
+    if cmd in UI_COMMANDS:
         add_unique(tags, "ui")
-    if lower_command in CLIPBOARD_COMMANDS or contains_any(text, CLIPBOARD_TOKENS):
+    if cmd in CLIPBOARD_COMMANDS or contains_any(text, CLIPBOARD_TOKENS):
         add_unique(tags, "clipboard")
     if contains_any(text, MACRO_TOKENS):
         add_unique(tags, "macro")
@@ -134,7 +134,7 @@ def semantic_tags(text: str, command: str | None, window_context: str | None) ->
         add_unique(tags, "mode")
     if contains_any(text, LAYER_TOKENS):
         add_unique(tags, "layer")
-    if lower_command in TIMER_INPUT_COMMANDS or re.search(r"\bup\b", text, re.I):
+    if cmd in INPUT_STATE_COMMANDS or re.search(r"\bup\b", text, re.I):
         add_unique(tags, "input-state")
     if window_context or contains_any(text, PROCESS_TOKENS):
         add_unique(tags, "process-specific")
@@ -143,31 +143,33 @@ def semantic_tags(text: str, command: str | None, window_context: str | None) ->
     return tags
 
 
-def classify_kind(line: str, command: str | None, tags: list[str]) -> str | None:
-    if SEND_RE.search(line):
+def classify_kind(text: str, command: str | None, tags: list[str]) -> str | None:
+    if SEND_RE.search(text):
         return "send"
-    lower_command = (command or "").lower()
-    if lower_command in WINDOW_COMMANDS:
+    cmd = (command or "").lower()
+    if cmd in WINDOW_COMMANDS:
         return "window-operation"
-    if lower_command in MOUSE_COMMANDS:
+    if cmd in MOUSE_COMMANDS:
         return "mouse-operation"
-    if lower_command in MEDIA_COMMANDS or "media" in tags:
+    if cmd in MEDIA_COMMANDS or "media" in tags:
         return "media-operation"
-    if lower_command in PROCESS_COMMANDS:
+    if cmd in PROCESS_COMMANDS:
         return "process-operation"
-    if lower_command in LIFECYCLE_COMMANDS:
+    if cmd in LIFECYCLE_COMMANDS:
         return "lifecycle-operation"
-    if lower_command in UI_COMMANDS:
+    if cmd in UI_COMMANDS:
         return "ui-operation"
-    if lower_command in CLIPBOARD_COMMANDS or "clipboard" in tags:
+    if cmd in CLIPBOARD_COMMANDS or "clipboard" in tags:
         return "clipboard-operation"
     if "macro" in tags:
         return "macro-operation"
-    if "ime" in tags and ("DllCall" in line or "IME_" in line or "imeget" in line.lower()):
+    if "ime" in tags and ("DllCall" in text or "IME_" in text or "imeget" in text.lower()):
         return "ime-operation"
-    if lower_command in TIMER_INPUT_COMMANDS:
+    if cmd in INPUT_STATE_COMMANDS:
         return "input-state-operation"
-    if BRANCH_RE.search(line) and any(tag in tags for tag in ("mode", "layer", "ime", "process-specific", "os-specific", "input-state")):
+    if BRANCH_RE.search(text) and any(
+        tag in tags for tag in ("mode", "layer", "ime", "process-specific", "os-specific", "input-state")
+    ):
         return "branch"
     return None
 
@@ -184,6 +186,13 @@ def stable_ids(features: list[Feature]) -> None:
         feature.feature_id = f"legacy-{feature.kind}-{digest}{suffix}"
 
 
+def function_match(text: str) -> re.Match[str] | None:
+    match = FUNCTION_RE.fullmatch(text)
+    if match and match.group(1).lower() not in CONTROL_FLOW_NAMES:
+        return match
+    return None
+
+
 def scan_source(source: Path) -> list[Feature]:
     lines = source.read_text(encoding="utf-8-sig").splitlines()
     features: list[Feature] = []
@@ -198,25 +207,26 @@ def scan_source(source: Path) -> list[Feature]:
 
         if text.lower().startswith("#ifwin") or re.match(r"^#If\b", text, re.I):
             window_context = text if text.lower() not in {"#ifwinactive", "#ifwinexist", "#if"} else None
-            tags = semantic_tags(text, None, window_context)
-            features.append(Feature("context", line_no, text, owner, window_context, tags))
+            features.append(Feature(
+                "context", line_no, text, owner, window_context,
+                semantic_tags(text, None, window_context),
+            ))
             continue
 
-        if match := FUNCTION_RE.fullmatch(text):
+        if match := function_match(text):
             owner = f"function:{match.group(1)}"
-            tags = semantic_tags(text, None, window_context)
             features.append(Feature(
-                "function", line_no, text, owner, window_context, tags,
+                "function", line_no, text, owner, window_context,
+                semantic_tags(text, None, window_context),
                 {"name": match.group(1), "parameters": match.group(2).strip()},
             ))
             continue
 
         if match := LABEL_RE.fullmatch(text):
             owner = f"label:{match.group(1)}"
-            tags = semantic_tags(text, None, window_context)
             features.append(Feature(
-                "label", line_no, text, owner, window_context, tags,
-                {"name": match.group(1)},
+                "label", line_no, text, owner, window_context,
+                semantic_tags(text, None, window_context), {"name": match.group(1)},
             ))
             continue
 
@@ -239,7 +249,12 @@ def scan_source(source: Path) -> list[Feature]:
             features.append(Feature(
                 "chord", line_no, text, owner, window_context,
                 ["keymap", "chord", f"mode-{mode.upper()}"],
-                {"mode": mode.upper(), "ordinal": int(ordinal), "keys": [first, second], "output": output},
+                {
+                    "mode": mode.upper(),
+                    "ordinal": int(ordinal),
+                    "keys": [first, second],
+                    "output": output,
+                },
             ))
             continue
 
@@ -256,33 +271,29 @@ def scan_source(source: Path) -> list[Feature]:
             ))
             body_text = body.strip()
             if body_text:
-                body_command = None
-                if command_match := COMMAND_RE.match(body_text):
-                    body_command = command_match.group(1)
-                body_tags = semantic_tags(body_text, body_command, window_context)
-                body_kind = classify_kind(body_text, body_command, body_tags)
-                if body_kind:
+                command_match = COMMAND_RE.match(body_text)
+                command = command_match.group(1) if command_match else None
+                body_tags = semantic_tags(body_text, command, window_context)
+                kind = classify_kind(body_text, command, body_tags)
+                if kind:
                     details: dict[str, Any] = {"inlineHotkey": trigger}
                     if send := SEND_RE.search(body_text):
-                        details["sendCommand"] = send.group(1)
-                        details["expression"] = send.group(2).strip()
-                    if body_command:
-                        details.setdefault("command", body_command)
+                        details.update(sendCommand=send.group(1), expression=send.group(2).strip())
+                    if command:
+                        details.setdefault("command", command)
                     features.append(Feature(
-                        body_kind, line_no, body_text, owner, window_context, body_tags, details
+                        kind, line_no, body_text, owner, window_context, body_tags, details,
                     ))
             continue
 
-        command = None
-        if command_match := COMMAND_RE.match(text):
-            command = command_match.group(1)
+        command_match = COMMAND_RE.match(text)
+        command = command_match.group(1) if command_match else None
         tags = semantic_tags(text, command, window_context)
         kind = classify_kind(text, command, tags)
         if kind:
             details: dict[str, Any] = {}
             if send := SEND_RE.search(text):
-                details["sendCommand"] = send.group(1)
-                details["expression"] = send.group(2).strip()
+                details.update(sendCommand=send.group(1), expression=send.group(2).strip())
             if command:
                 details.setdefault("command", command)
             features.append(Feature(kind, line_no, text, owner, window_context, tags, details))
@@ -312,25 +323,11 @@ def matches_rule(feature: Feature, match: dict[str, Any]) -> bool:
         return False
     if "ownerRegex" in match and not re.search(match["ownerRegex"], feature.owner, re.I):
         return False
-    if "windowContextRegex" in match and not re.search(match["windowContextRegex"], feature.window_context or "", re.I):
+    if "windowContextRegex" in match and not re.search(
+        match["windowContextRegex"], feature.window_context or "", re.I
+    ):
         return False
     return True
-
-
-def apply_coverage(features: list[Feature], coverage_config: dict[str, Any]) -> None:
-    defaults = dict(DEFAULT_STATUS)
-    defaults.update(coverage_config.get("defaults", {}))
-    rules = coverage_config.get("rules", [])
-
-    for feature in features:
-        feature.coverage = dict(defaults)
-        for rule in rules:
-            if matches_rule(feature, rule.get("match", {})):
-                feature.coverage.update(rule.get("set", {}))
-                for evidence in rule.get("evidence", []):
-                    if evidence not in feature.evidence:
-                        feature.evidence.append(evidence)
-        feature.classification = derive_classification(feature.coverage)
 
 
 def derive_classification(coverage: dict[str, str]) -> str:
@@ -348,13 +345,27 @@ def derive_classification(coverage: dict[str, str]) -> str:
         return "scenario-missing"
     if unit in {"missing", "unknown"} and scenario in {"missing", "unknown"}:
         return "implemented-but-untested"
-    if real in {"required", "unverified"}:
+    if real == "required":
         return "real-windows-verification-required"
     if intentional == "yes":
         return "intentional-difference"
-    if any(value in {"unknown", "partial"} for value in coverage.values()):
+    if any(value in {"unknown", "partial", "unverified"} for value in coverage.values()):
         return "partially-verified"
     return "implemented-and-verified"
+
+
+def apply_coverage(features: list[Feature], config: dict[str, Any]) -> None:
+    defaults = dict(DEFAULT_STATUS)
+    defaults.update(config.get("defaults", {}))
+    for feature in features:
+        feature.coverage = dict(defaults)
+        for rule in config.get("rules", []):
+            if matches_rule(feature, rule.get("match", {})):
+                feature.coverage.update(rule.get("set", {}))
+                for evidence in rule.get("evidence", []):
+                    if evidence not in feature.evidence:
+                        feature.evidence.append(evidence)
+        feature.classification = derive_classification(feature.coverage)
 
 
 def scenario_index(directory: Path | None) -> dict[str, Any]:
@@ -362,7 +373,7 @@ def scenario_index(directory: Path | None) -> dict[str, Any]:
         return {"count": 0, "files": [], "inventoryIds": []}
     files = sorted(directory.glob("*.json"))
     inventory_ids: set[str] = set()
-    entries = []
+    entries: list[dict[str, Any]] = []
     for path in files:
         try:
             data = json.loads(path.read_text(encoding="utf-8"))
@@ -400,11 +411,9 @@ def build_report(
     scenarios: dict[str, Any],
     profile: dict[str, Any],
 ) -> dict[str, Any]:
-    kind_counts = Counter(feature.kind for feature in features)
-    classification_counts = Counter(feature.classification for feature in features)
-    tag_counts = Counter(tag for feature in features for tag in feature.tags)
-    unknown = [feature.feature_id for feature in features if feature.classification == "unknown"]
-    missing = [feature.feature_id for feature in features if feature.classification in {"implementation-missing", "scenario-missing"}]
+    by_kind = Counter(feature.kind for feature in features)
+    by_classification = Counter(feature.classification for feature in features)
+    by_tag = Counter(tag for feature in features for tag in feature.tags)
     return {
         "schemaVersion": 1,
         "source": {
@@ -414,11 +423,13 @@ def build_report(
         },
         "summary": {
             "featureCount": len(features),
-            "byKind": dict(sorted(kind_counts.items())),
-            "byClassification": dict(sorted(classification_counts.items())),
-            "byTag": dict(sorted(tag_counts.items())),
-            "unknownCount": len(unknown),
-            "missingCount": len(missing),
+            "byKind": dict(sorted(by_kind.items())),
+            "byClassification": dict(sorted(by_classification.items())),
+            "byTag": dict(sorted(by_tag.items())),
+            "unknownCount": sum(f.classification == "unknown" for f in features),
+            "missingCount": sum(
+                f.classification in {"implementation-missing", "scenario-missing"} for f in features
+            ),
             "scenarioCount": scenarios["count"],
         },
         "profile": profile,
@@ -456,16 +467,22 @@ def markdown(report: dict[str, Any]) -> str:
         "| --- | ---: | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
     ])
     for feature in report["features"]:
-        coverage = feature["coverage"]
-        tags = ", ".join(feature["tags"])
-        owner = feature["owner"].replace("|", "\\|")
+        c = feature["coverage"]
         lines.append(
-            "| `{id}` | {line} | {kind} | {owner} | {tags} | {implementation} | {unit} | "
-            "{scenario} | {exe} | {ahk} | {real} | {classification} |".format(
-                id=feature["id"], line=feature["line"], kind=feature["kind"], owner=owner,
-                tags=tags, implementation=coverage["implementation"], unit=coverage["unit"],
-                scenario=coverage["scenario"], exe=coverage["exeDiff"], ahk=coverage["ahkDiff"],
-                real=coverage["realWindows"], classification=feature["classification"],
+            "| `{id}` | {line} | {kind} | {owner} | {tags} | {impl} | {unit} | {scenario} | "
+            "{exe} | {ahk} | {real} | {classification} |".format(
+                id=feature["id"],
+                line=feature["line"],
+                kind=feature["kind"],
+                owner=feature["owner"].replace("|", "\\|"),
+                tags=", ".join(feature["tags"]),
+                impl=c["implementation"],
+                unit=c["unit"],
+                scenario=c["scenario"],
+                exe=c["exeDiff"],
+                ahk=c["ahkDiff"],
+                real=c["realWindows"],
+                classification=feature["classification"],
             )
         )
     lines.extend([
@@ -492,16 +509,13 @@ def parse_args() -> argparse.Namespace:
 def main() -> None:
     args = parse_args()
     features = scan_source(args.source)
-    coverage = load_json(args.coverage, {})
-    apply_coverage(features, coverage)
+    apply_coverage(features, load_json(args.coverage, {}))
     scenarios = scenario_index(args.scenarios)
     report = build_report(args.source, features, scenarios, profile_summary(args.profile))
-
     args.json_output.parent.mkdir(parents=True, exist_ok=True)
     args.markdown_output.parent.mkdir(parents=True, exist_ok=True)
     args.json_output.write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     args.markdown_output.write_text(markdown(report), encoding="utf-8")
-
     summary = report["summary"]
     print(
         f"compatibility inventory: {summary['featureCount']} features, "
