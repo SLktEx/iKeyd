@@ -32,12 +32,18 @@ public sealed class ChordEngine<TOutput> where TOutput : notnull
 
     public KeyId? PendingKeyId => _pending?.Key;
 
-    public IReadOnlyList<TOutput> OnKeyDown(KeyId key, long timestampMs)
+    /// <summary>
+    /// Processes a key-down without allocating a result collection. The engine can
+    /// produce at most one output for a single input event, so the result is exposed
+    /// as the conventional Try-pattern instead of an IReadOnlyList.
+    /// </summary>
+    public bool TryOnKeyDown(KeyId key, long timestampMs, out TOutput output)
     {
         if (_pending is null)
         {
             _pending = new PendingKey(key, timestampMs);
-            return [];
+            output = default!;
+            return false;
         }
 
         EnsureMonotonic(timestampMs);
@@ -48,18 +54,26 @@ public sealed class ChordEngine<TOutput> where TOutput : notnull
         if (elapsed <= _chordWindowMs && _keymap.TryGetChord(pending.Key, key, out var chordOutput))
         {
             _pending = null;
-            return [chordOutput];
+            output = chordOutput;
+            return true;
         }
 
-        var outputs = ResolveSingle(pending.Key);
+        var hasOutput = _keymap.TryGetSingle(pending.Key, out var singleOutput);
         _pending = new PendingKey(key, timestampMs);
-        return outputs;
+        output = hasOutput ? singleOutput : default!;
+        return hasOutput;
     }
 
-    public IReadOnlyList<TOutput> AdvanceTo(long timestampMs)
+    /// <summary>
+    /// Advances the chord timeout without allocating a result collection.
+    /// </summary>
+    public bool TryAdvanceTo(long timestampMs, out TOutput output)
     {
         if (_pending is null)
-            return [];
+        {
+            output = default!;
+            return false;
+        }
 
         EnsureMonotonic(timestampMs);
 
@@ -67,27 +81,44 @@ public sealed class ChordEngine<TOutput> where TOutput : notnull
         // pending key at exactly the boundary allows a key-down at 40 ms to be
         // processed before timeout expiry in a deterministic event loop.
         if (timestampMs - _pending.Value.TimestampMs <= _chordWindowMs)
-            return [];
+        {
+            output = default!;
+            return false;
+        }
 
         var pending = _pending.Value;
         _pending = null;
-        return ResolveSingle(pending.Key);
+        return _keymap.TryGetSingle(pending.Key, out output!);
     }
 
-    public IReadOnlyList<TOutput> Flush()
+    /// <summary>
+    /// Flushes a pending single without allocating a result collection.
+    /// </summary>
+    public bool TryFlush(out TOutput output)
     {
         if (_pending is null)
-            return [];
+        {
+            output = default!;
+            return false;
+        }
 
         var pending = _pending.Value;
         _pending = null;
-        return ResolveSingle(pending.Key);
+        return _keymap.TryGetSingle(pending.Key, out output!);
     }
 
-    public void Cancel() => _pending = null;
+    // Compatibility wrappers for tooling/tests that still consume collection-shaped
+    // results. The production keyboard path uses the Try APIs above.
+    public IReadOnlyList<TOutput> OnKeyDown(KeyId key, long timestampMs)
+        => TryOnKeyDown(key, timestampMs, out var output) ? [output] : [];
 
-    private IReadOnlyList<TOutput> ResolveSingle(KeyId key)
-        => _keymap.TryGetSingle(key, out var output) ? [output] : [];
+    public IReadOnlyList<TOutput> AdvanceTo(long timestampMs)
+        => TryAdvanceTo(timestampMs, out var output) ? [output] : [];
+
+    public IReadOnlyList<TOutput> Flush()
+        => TryFlush(out var output) ? [output] : [];
+
+    public void Cancel() => _pending = null;
 
     private void EnsureMonotonic(long timestampMs)
     {
