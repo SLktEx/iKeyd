@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Runtime.InteropServices;
 using System.Text;
 using iKeyd.Core.Desktop;
 using iKeyd.Core.Input;
@@ -8,8 +9,10 @@ namespace iKeyd.App;
 
 internal sealed class LegacySendOutput : IMacroOutput
 {
+    private readonly object _sendGate = new();
     private readonly IKeyboardOutput _keyboard;
     private readonly IDesktopBackend? _desktop;
+    private readonly HashSet<ushort> _heldModifiers = [];
 
     public LegacySendOutput(IKeyboardOutput keyboard, IDesktopBackend? desktop = null)
     {
@@ -27,6 +30,58 @@ internal sealed class LegacySendOutput : IMacroOutput
     public void Send(string legacySendText)
     {
         ArgumentNullException.ThrowIfNull(legacySendText);
+        lock (_sendGate)
+            SendCore(legacySendText);
+    }
+
+    public void SendWithHeldModifier(ushort modifier, string legacySendText)
+    {
+        ArgumentNullException.ThrowIfNull(legacySendText);
+        lock (_sendGate)
+        {
+            var modifierKey = WindowsKeyMap.Keyboard(modifier);
+            var wasAlreadyHeld = _heldModifiers.Contains(modifier);
+            if (!wasAlreadyHeld)
+            {
+                _keyboard.SendKey(modifierKey, KeyEventKind.Down);
+                _heldModifiers.Add(modifier);
+            }
+
+            try
+            {
+                SendCore(legacySendText);
+            }
+            finally
+            {
+                if (!wasAlreadyHeld)
+                {
+                    _keyboard.SendKey(modifierKey, KeyEventKind.Up);
+                    _heldModifiers.Remove(modifier);
+                }
+            }
+        }
+    }
+
+    public void SendKey(ushort virtualKey)
+    {
+        lock (_sendGate)
+            _keyboard.SendKeyPress(WindowsKeyMap.Keyboard(virtualKey));
+    }
+
+    public void SendChord(IReadOnlyList<ushort> modifiers, ushort virtualKey)
+    {
+        lock (_sendGate)
+            SendKeyWithModifiers(WindowsKeyMap.Keyboard(virtualKey), modifiers);
+    }
+
+    public void SendChord(ushort modifier, ushort virtualKey)
+        => SendChord([modifier], virtualKey);
+
+    public void SendChord(ushort modifier1, ushort modifier2, ushort virtualKey)
+        => SendChord([modifier1, modifier2], virtualKey);
+
+    private void SendCore(string legacySendText)
+    {
         if (legacySendText.Length == 0)
             return;
 
@@ -36,7 +91,7 @@ internal sealed class LegacySendOutput : IMacroOutput
         {
             if (plain.Length == 0)
                 return;
-            _keyboard.SendText(plain.ToString());
+            SendPlain(plain.ToString());
             plain.Clear();
         }
 
@@ -53,7 +108,7 @@ internal sealed class LegacySendOutput : IMacroOutput
             if (index >= legacySendText.Length)
             {
                 FlushPlain();
-                _keyboard.SendText(legacySendText[modifierStart..]);
+                SendPlain(legacySendText[modifierStart..]);
                 break;
             }
 
@@ -85,13 +140,13 @@ internal sealed class LegacySendOutput : IMacroOutput
                 var close = legacySendText.IndexOf('}', index + 1);
                 if (close < 0)
                 {
-                    _keyboard.SendText(legacySendText[modifierStart..]);
+                    SendPlain(legacySendText[modifierStart..]);
                     break;
                 }
 
                 var token = legacySendText[(index + 1)..close];
                 if (!TrySendBraceToken(token, modifiers))
-                    _keyboard.SendText(legacySendText[modifierStart..(close + 1)]);
+                    SendPlain(legacySendText[modifierStart..(close + 1)]);
 
                 index = close + 1;
                 continue;
@@ -101,24 +156,12 @@ internal sealed class LegacySendOutput : IMacroOutput
             if (WindowsKeyMap.TryResolveCharacter(character, out var characterKey))
                 SendKeyWithModifiers(characterKey, modifiers);
             else
-                _keyboard.SendText(legacySendText[modifierStart..(index + 1)]);
+                SendPlain(legacySendText[modifierStart..(index + 1)]);
             index++;
         }
 
         FlushPlain();
     }
-
-    public void SendKey(ushort virtualKey)
-        => _keyboard.SendKeyPress(WindowsKeyMap.Keyboard(virtualKey));
-
-    public void SendChord(IReadOnlyList<ushort> modifiers, ushort virtualKey)
-        => SendKeyWithModifiers(WindowsKeyMap.Keyboard(virtualKey), modifiers);
-
-    public void SendChord(ushort modifier, ushort virtualKey)
-        => SendChord([modifier], virtualKey);
-
-    public void SendChord(ushort modifier1, ushort modifier2, ushort virtualKey)
-        => SendChord([modifier1, modifier2], virtualKey);
 
     private bool TrySendBraceToken(string token, IReadOnlyList<ushort> modifiers)
     {
@@ -158,12 +201,14 @@ internal sealed class LegacySendOutput : IMacroOutput
         if (parts.Length == 2 && parts[1].Equals("DOWN", StringComparison.OrdinalIgnoreCase))
         {
             SendKeyStateWithModifiers(namedKey, KeyEventKind.Down, modifiers);
+            TrackExplicitModifier(namedKey.VirtualKey, down: true, modifiers.Count);
             return true;
         }
 
         if (parts.Length == 2 && parts[1].Equals("UP", StringComparison.OrdinalIgnoreCase))
         {
             SendKeyStateWithModifiers(namedKey, KeyEventKind.Up, modifiers);
+            TrackExplicitModifier(namedKey.VirtualKey, down: false, modifiers.Count);
             return true;
         }
 
@@ -184,7 +229,7 @@ internal sealed class LegacySendOutput : IMacroOutput
             return true;
         }
 
-        var controlModifier = modifiers.Contains(WindowsKeyMap.Control);
+        var controlModifier = modifiers.Contains(WindowsKeyMap.Control) || _heldModifiers.Contains(WindowsKeyMap.Control);
         var first = fields[1];
         if (first.Equals("WU", StringComparison.OrdinalIgnoreCase) || first.Equals("WHEELUP", StringComparison.OrdinalIgnoreCase))
         {
@@ -249,47 +294,135 @@ internal sealed class LegacySendOutput : IMacroOutput
     {
         if (modifiers.Count == 0)
         {
-            _keyboard.SendText(text);
+            SendPlain(text);
             return;
         }
 
         if (text.Length == 1 && WindowsKeyMap.TryResolveCharacter(text[0], out var key))
             SendKeyWithModifiers(key, modifiers);
         else
+            SendPlain(text);
+    }
+
+    private void SendPlain(string text)
+    {
+        if (text.Length == 0)
+            return;
+
+        if (_heldModifiers.Count == 0)
+        {
             _keyboard.SendText(text);
+            return;
+        }
+
+        foreach (var character in text)
+        {
+            if (!TryTranslateCharacter(character, out var key, out var characterModifiers))
+            {
+                _keyboard.SendText(character.ToString());
+                continue;
+            }
+
+            SendKeyWithModifiers(key, characterModifiers);
+        }
+    }
+
+    private bool TryTranslateCharacter(char character, out KeyboardKey key, out IReadOnlyList<ushort> modifiers)
+    {
+        var layout = GetTargetKeyboardLayout();
+        var encoded = NativeMethods.VkKeyScanExW(character, layout);
+        if (encoded == -1)
+        {
+            key = default;
+            modifiers = [];
+            return false;
+        }
+
+        var virtualKey = (ushort)(encoded & 0xff);
+        var shiftState = (encoded >> 8) & 0xff;
+        key = WindowsKeyMap.Keyboard(virtualKey);
+
+        var list = new List<ushort>(3);
+        if ((shiftState & 1) != 0)
+            list.Add(WindowsKeyMap.Shift);
+        if ((shiftState & 2) != 0)
+            list.Add(WindowsKeyMap.Control);
+        if ((shiftState & 4) != 0)
+            list.Add(WindowsKeyMap.Alt);
+        modifiers = list;
+        return true;
+    }
+
+    private nint GetTargetKeyboardLayout()
+    {
+        var window = _desktop?.GetActiveWindow().Value ?? NativeMethods.GetForegroundWindow();
+        if (window != 0)
+        {
+            var threadId = NativeMethods.GetWindowThreadProcessId(window, out _);
+            if (threadId != 0)
+                return NativeMethods.GetKeyboardLayout(threadId);
+        }
+
+        return NativeMethods.GetKeyboardLayout(0);
     }
 
     private void SendKeyStateWithModifiers(KeyboardKey key, KeyEventKind kind, IReadOnlyList<ushort> modifiers)
     {
-        foreach (var modifier in modifiers)
-            _keyboard.SendKey(WindowsKeyMap.Keyboard(modifier), KeyEventKind.Down);
-
+        var temporaryModifiers = PressTemporaryModifiers(modifiers);
         try
         {
             _keyboard.SendKey(key, kind);
         }
         finally
         {
-            for (var index = modifiers.Count - 1; index >= 0; index--)
-                _keyboard.SendKey(WindowsKeyMap.Keyboard(modifiers[index]), KeyEventKind.Up);
+            ReleaseTemporaryModifiers(temporaryModifiers);
         }
     }
 
     private void SendKeyWithModifiers(KeyboardKey key, IReadOnlyList<ushort> modifiers)
     {
-        foreach (var modifier in modifiers)
-            _keyboard.SendKey(WindowsKeyMap.Keyboard(modifier), KeyEventKind.Down);
-
+        var temporaryModifiers = PressTemporaryModifiers(modifiers);
         try
         {
             _keyboard.SendKeyPress(key);
         }
         finally
         {
-            for (var index = modifiers.Count - 1; index >= 0; index--)
-                _keyboard.SendKey(WindowsKeyMap.Keyboard(modifiers[index]), KeyEventKind.Up);
+            ReleaseTemporaryModifiers(temporaryModifiers);
         }
     }
+
+    private List<ushort> PressTemporaryModifiers(IReadOnlyList<ushort> modifiers)
+    {
+        var pressed = new List<ushort>(modifiers.Count);
+        foreach (var modifier in modifiers)
+        {
+            if (_heldModifiers.Contains(modifier) || pressed.Contains(modifier))
+                continue;
+            _keyboard.SendKey(WindowsKeyMap.Keyboard(modifier), KeyEventKind.Down);
+            pressed.Add(modifier);
+        }
+        return pressed;
+    }
+
+    private void ReleaseTemporaryModifiers(IReadOnlyList<ushort> modifiers)
+    {
+        for (var index = modifiers.Count - 1; index >= 0; index--)
+            _keyboard.SendKey(WindowsKeyMap.Keyboard(modifiers[index]), KeyEventKind.Up);
+    }
+
+    private void TrackExplicitModifier(ushort virtualKey, bool down, int prefixModifierCount)
+    {
+        if (prefixModifierCount != 0 || !IsModifier(virtualKey))
+            return;
+        if (down)
+            _heldModifiers.Add(virtualKey);
+        else
+            _heldModifiers.Remove(virtualKey);
+    }
+
+    private static bool IsModifier(ushort virtualKey)
+        => virtualKey is WindowsKeyMap.Control or WindowsKeyMap.Alt or WindowsKeyMap.Shift or WindowsKeyMap.LeftWin or WindowsKeyMap.RightWin;
 
     private static bool TryModifier(char character, out ushort virtualKey)
     {
@@ -302,5 +435,20 @@ internal sealed class LegacySendOutput : IMacroOutput
             _ => 0
         };
         return virtualKey != 0;
+    }
+
+    private static class NativeMethods
+    {
+        [DllImport("user32.dll")]
+        public static extern nint GetForegroundWindow();
+
+        [DllImport("user32.dll")]
+        public static extern uint GetWindowThreadProcessId(nint window, out uint processId);
+
+        [DllImport("user32.dll")]
+        public static extern nint GetKeyboardLayout(uint threadId);
+
+        [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+        public static extern short VkKeyScanExW(char character, nint keyboardLayout);
     }
 }
