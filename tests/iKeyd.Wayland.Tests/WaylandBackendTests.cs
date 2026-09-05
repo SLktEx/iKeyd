@@ -1,9 +1,9 @@
 using iKeyd.Core.Desktop;
 using iKeyd.Core.Input;
 using iKeyd.Core.Platform;
+using iKeyd.Linux.Input;
 using iKeyd.Wayland.Clipboard;
 using iKeyd.Wayland.Desktop;
-using iKeyd.Wayland.Input;
 using Xunit;
 
 namespace iKeyd.Wayland.Tests;
@@ -14,14 +14,11 @@ public sealed class WaylandBackendTests
     public void Evdev_map_normalizes_common_keyboard_keys()
     {
         var map = new LinuxEvdevKeyMap();
-
         Assert.True(map.TryFromEvdev(30, out var a));
         Assert.Equal((ushort)'A', a.VirtualKey);
         Assert.Equal((ushort)30, a.ScanCode);
-
         Assert.True(map.TryFromEvdev(94, out var muhenkan));
         Assert.Equal((ushort)0x1D, muhenkan.VirtualKey);
-
         Assert.True(map.TryToEvdev(new KeyboardKey(0x26, 0), out var up));
         Assert.Equal((ushort)103, up);
     }
@@ -35,7 +32,6 @@ public sealed class WaylandBackendTests
     public void Ascii_output_is_reduced_to_evdev_strokes(char character, ushort expectedCode, bool expectedShift)
     {
         var map = new LinuxEvdevKeyMap();
-
         Assert.True(map.TryGetAsciiStroke(character, out var code, out var shift));
         Assert.Equal(expectedCode, code);
         Assert.Equal(expectedShift, shift);
@@ -45,11 +41,9 @@ public sealed class WaylandBackendTests
     public void Capability_model_reports_unsupported_operations_explicitly()
     {
         var capabilities = new BackendCapabilities([BackendCapability.KeyboardInput]);
-
         Assert.True(capabilities.Supports(BackendCapability.KeyboardInput));
         Assert.False(capabilities.Supports(BackendCapability.WindowMoveResize));
-        var error = Assert.Throws<BackendCapabilityException>(
-            () => capabilities.Require(BackendCapability.WindowMoveResize, "compositor adapter required"));
+        var error = Assert.Throws<BackendCapabilityException>(() => capabilities.Require(BackendCapability.WindowMoveResize, "compositor adapter required"));
         Assert.Equal(BackendCapability.WindowMoveResize, error.Capability);
         Assert.Contains("compositor adapter required", error.Message);
     }
@@ -59,16 +53,10 @@ public sealed class WaylandBackendTests
     {
         var runner = new FakeCommandRunner { CurrentText = "before" };
         var options = new WaylandBackendOptions([], WlCopyCommand: "copy", WlPasteCommand: "paste");
-        using var clipboard = new WaylandClipboardService(
-            options,
-            runner,
-            TimeSpan.FromHours(1),
-            isWaylandSession: true);
-
+        using var clipboard = new WaylandClipboardService(options, runner, TimeSpan.FromHours(1), isWaylandSession: true);
         Assert.True(clipboard.Capabilities.Supports(BackendCapability.ClipboardRead));
         Assert.True(clipboard.Capabilities.Supports(BackendCapability.ClipboardWrite));
         Assert.Equal("before", clipboard.ReadText());
-
         clipboard.WriteText("after");
         Assert.Equal("after", runner.CurrentText);
         Assert.Equal("after", clipboard.ReadText());
@@ -79,16 +67,10 @@ public sealed class WaylandBackendTests
     {
         var runner = new FakeCommandRunner { CurrentText = "one" };
         var options = new WaylandBackendOptions([], WlCopyCommand: "copy", WlPasteCommand: "paste");
-        using var clipboard = new WaylandClipboardService(
-            options,
-            runner,
-            TimeSpan.FromMilliseconds(10),
-            isWaylandSession: true);
+        using var clipboard = new WaylandClipboardService(options, runner, TimeSpan.FromMilliseconds(10), isWaylandSession: true);
         using var changed = new ManualResetEventSlim();
         clipboard.Changed += (_, _) => changed.Set();
-
         runner.CurrentText = "two";
-
         Assert.True(changed.Wait(TimeSpan.FromSeconds(2)));
         Assert.Equal("two", clipboard.ReadText());
     }
@@ -98,12 +80,7 @@ public sealed class WaylandBackendTests
     {
         var runner = new FakeCommandRunner();
         var options = new WaylandBackendOptions([], WlCopyCommand: "copy", WlPasteCommand: "paste");
-        using var clipboard = new WaylandClipboardService(
-            options,
-            runner,
-            TimeSpan.FromHours(1),
-            isWaylandSession: false);
-
+        using var clipboard = new WaylandClipboardService(options, runner, TimeSpan.FromHours(1), isWaylandSession: false);
         Assert.False(clipboard.Capabilities.Supports(BackendCapability.ClipboardRead));
         var error = Assert.Throws<BackendCapabilityException>(() => clipboard.ReadText());
         Assert.Equal(BackendCapability.ClipboardRead, error.Capability);
@@ -114,18 +91,15 @@ public sealed class WaylandBackendTests
     {
         var input = new FakeVirtualInput();
         var desktop = new WaylandDesktopBackend(input);
-
         desktop.MovePointerBy(12, -8);
         desktop.Click(DesktopMouseButton.Left);
         desktop.ScrollVertical(240, controlModifier: true);
         desktop.SendMediaCommand(DesktopMediaCommand.PlayPause);
-
         Assert.Contains((12, -8), input.Moves);
         Assert.Single(input.Clicks);
         Assert.Contains(2, input.Scrolls);
-        Assert.Equal(2, input.KeyEvents.Count); // Ctrl down/up around scroll.
+        Assert.Equal(2, input.KeyEvents.Count);
         Assert.Single(input.MediaKeys);
-
         var error = Assert.Throws<BackendCapabilityException>(() => desktop.Minimize(default));
         Assert.Equal(BackendCapability.WindowState, error.Capability);
         Assert.False(desktop.Capabilities.Supports(BackendCapability.WindowQuery));
@@ -135,46 +109,30 @@ public sealed class WaylandBackendTests
     {
         private readonly object _gate = new();
         public string? CurrentText { get; set; }
-
         public bool Exists(string command) => command is "copy" or "paste";
-
-        public WaylandCommandResult Run(
-            string command,
-            IReadOnlyList<string> arguments,
-            string? standardInput = null,
-            TimeSpan? timeout = null)
+        public WaylandCommandResult Run(string command, IReadOnlyList<string> arguments, string? standardInput = null, TimeSpan? timeout = null)
         {
             lock (_gate)
             {
-                if (command == "copy")
-                {
-                    CurrentText = standardInput ?? string.Empty;
-                    return new WaylandCommandResult(0, string.Empty, string.Empty);
-                }
-                if (command == "paste")
-                    return new WaylandCommandResult(0, CurrentText ?? string.Empty, string.Empty);
+                if (command == "copy") { CurrentText = standardInput ?? string.Empty; return new WaylandCommandResult(0, string.Empty, string.Empty); }
+                if (command == "paste") return new WaylandCommandResult(0, CurrentText ?? string.Empty, string.Empty);
                 return new WaylandCommandResult(127, string.Empty, "not found");
             }
         }
     }
 
-    private sealed class FakeVirtualInput : IWaylandVirtualInput
+    private sealed class FakeVirtualInput : ILinuxVirtualInput
     {
         public List<(int X, int Y)> Moves { get; } = [];
         public List<ushort> Clicks { get; } = [];
         public List<int> Scrolls { get; } = [];
         public List<ushort> MediaKeys { get; } = [];
         public List<(KeyboardKey Key, KeyEventKind Kind)> KeyEvents { get; } = [];
-
         public BackendCapabilities Capabilities { get; } = new([
-            BackendCapability.KeyboardOutput,
-            BackendCapability.TextOutputAscii,
-            BackendCapability.PointerRelative,
-            BackendCapability.PointerButtons,
-            BackendCapability.PointerScroll,
-            BackendCapability.MediaKeys
+            BackendCapability.KeyboardOutput, BackendCapability.TextOutputAscii,
+            BackendCapability.PointerRelative, BackendCapability.PointerButtons,
+            BackendCapability.PointerScroll, BackendCapability.MediaKeys
         ]);
-
         public void EmitKeyCode(ushort evdevCode, int value) { }
         public void MovePointerBy(int deltaX, int deltaY) => Moves.Add((deltaX, deltaY));
         public void SetMouseButton(ushort buttonCode, bool down) { }
