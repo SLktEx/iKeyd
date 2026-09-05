@@ -74,6 +74,8 @@ public static class WaylandBackendProbe
         var capabilities = new List<BackendCapability>();
         if (readable)
             capabilities.Add(BackendCapability.KeyboardInput);
+        if (readable && uinput && options.GrabPhysicalKeyboards)
+            capabilities.Add(BackendCapability.KeyboardSuppression);
         if (uinput)
         {
             capabilities.AddRange([
