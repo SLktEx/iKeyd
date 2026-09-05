@@ -29,10 +29,6 @@ jobs:
         with:
           dotnet-version: 8.0.x
 
-      - name: Install GnuPG
-        shell: powershell
-        run: choco install gnupg -y --no-progress
-
       - name: Decrypt pinned legacy executable
         id: legacy
         shell: powershell
@@ -50,8 +46,18 @@ jobs:
             throw "Encrypted legacy executable was not found: $encrypted"
           }
 
+          $gpg = Join-Path $env:ProgramFiles 'Git\usr\bin\gpg.exe'
+          if (-not (Test-Path -LiteralPath $gpg -PathType Leaf)) {
+            $command = Get-Command gpg.exe -ErrorAction SilentlyContinue
+            if ($null -eq $command) {
+              throw 'GnuPG was not found in Git for Windows or PATH.'
+            }
+            $gpg = $command.Source
+          }
+          Write-Host "Using GnuPG: $gpg"
+
           $path = Join-Path $env:RUNNER_TEMP 'hotkeySKG.exe'
-          & gpg.exe `
+          & $gpg `
             --batch `
             --yes `
             --pinentry-mode loopback `
