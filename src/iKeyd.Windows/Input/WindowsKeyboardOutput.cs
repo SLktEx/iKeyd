@@ -13,7 +13,7 @@ public sealed class WindowsKeyboardOutput : IKeyboardOutput
     private const uint KeyEventScanCode = 0x0008;
 
     public static nuint InjectionMarker { get; } = IntPtr.Size == 8
-        ? (nuint)0x694B657964UL
+        ? unchecked((nuint)0x694B657964UL)
         : (nuint)0x694B6579U;
 
     public void SendKey(KeyboardKey key, KeyEventKind kind)
@@ -101,11 +101,32 @@ public sealed class WindowsKeyboardOutput : IKeyboardOutput
         public InputUnion Data;
     }
 
+    // INPUT contains a union of MOUSEINPUT, KEYBDINPUT and HARDWAREINPUT.
+    // Including all members is important: on x64 MOUSEINPUT is 32 bytes, so the
+    // union is 32 bytes and INPUT itself is 40 bytes. Defining only KEYBDINPUT
+    // makes Marshal.SizeOf<INPUT>() too small and SendInput rejects the buffer.
     [StructLayout(LayoutKind.Explicit)]
     internal struct InputUnion
     {
         [FieldOffset(0)]
+        public MouseInputData Mouse;
+
+        [FieldOffset(0)]
         public KeyboardInputData Keyboard;
+
+        [FieldOffset(0)]
+        public HardwareInputData Hardware;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    internal struct MouseInputData
+    {
+        public int X;
+        public int Y;
+        public uint MouseData;
+        public uint Flags;
+        public uint Time;
+        public nuint ExtraInfo;
     }
 
     [StructLayout(LayoutKind.Sequential)]
@@ -116,6 +137,14 @@ public sealed class WindowsKeyboardOutput : IKeyboardOutput
         public uint Flags;
         public uint Time;
         public nuint ExtraInfo;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    internal struct HardwareInputData
+    {
+        public uint Message;
+        public ushort ParamLow;
+        public ushort ParamHigh;
     }
 
     private static class NativeMethods
