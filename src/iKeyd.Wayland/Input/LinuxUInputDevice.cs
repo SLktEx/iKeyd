@@ -3,7 +3,7 @@ using iKeyd.Core.Platform;
 
 namespace iKeyd.Wayland.Input;
 
-public sealed class LinuxUInputDevice : IKeyboardOutput, IBackendCapabilityProvider, IDisposable
+public sealed class LinuxUInputDevice : IWaylandVirtualInput, IDisposable
 {
     private readonly object _gate = new();
     private readonly LinuxEvdevKeyMap _keyMap;
