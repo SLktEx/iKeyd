@@ -1,0 +1,11 @@
+{
+  "id": "s-single-k",
+  "description": "S mode single K resolves to i.",
+  "initialState": { "mode": "S", "ime": "on", "modifiers": [] },
+  "input": [
+    { "atMs": 0, "kind": "keyDown", "key": "K" },
+    { "atMs": 1, "kind": "keyUp", "key": "K" }
+  ],
+  "expected": { "text": "i", "events": [] },
+  "tags": ["legacy", "single", "realtime-safe", "windows", "hosted-legacy"]
+}

@@ -1,0 +1,13 @@
+{
+  "id": "s-undefined-q-w",
+  "description": "Undefined S mode Q+W chord falls back to the two single-stroke outputs - and ni.",
+  "initialState": { "mode": "S", "ime": "on", "modifiers": [] },
+  "input": [
+    { "atMs": 0, "kind": "keyDown", "key": "Q" },
+    { "atMs": 10, "kind": "keyDown", "key": "W" },
+    { "atMs": 11, "kind": "keyUp", "key": "Q" },
+    { "atMs": 12, "kind": "keyUp", "key": "W" }
+  ],
+  "expected": { "text": "-ni", "events": [] },
+  "tags": ["legacy", "fallback", "realtime-safe", "windows", "hosted-legacy"]
+}

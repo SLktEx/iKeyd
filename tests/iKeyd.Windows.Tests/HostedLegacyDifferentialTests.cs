@@ -5,13 +5,12 @@ namespace iKeyd.Windows.Tests;
 
 public sealed class HostedLegacyDifferentialTests
 {
+    private const string HostedLegacyTag = "hosted-legacy";
     private static string ScenarioDirectory => Path.Combine(AppContext.BaseDirectory, "Scenarios");
 
-    [Theory]
+    [Fact]
     [Trait("Category", "HostedLegacyDifferentialE2E")]
-    [InlineData("s-chord-k-q-immediate")]
-    [InlineData("s-k-q-after-100ms")]
-    public async Task IKeyd_and_legacy_exe_match_on_hosted_windows_without_IME(string scenarioId)
+    public async Task Tagged_scenarios_match_the_real_legacy_exe_on_hosted_windows()
     {
         if (!OperatingSystem.IsWindows())
             return;
@@ -20,16 +19,39 @@ public sealed class HostedLegacyDifferentialTests
         if (!legacyRunner.IsAvailable)
             return;
 
-        var scenario = CompatibilityScenarioCatalog.LoadDirectory(ScenarioDirectory)
-            .Single(item => item.Id == scenarioId);
+        var scenarios = CompatibilityScenarioCatalog.LoadDirectory(ScenarioDirectory)
+            .Where(item => item.Tags.Any(tag =>
+                string.Equals(tag, HostedLegacyTag, StringComparison.OrdinalIgnoreCase)))
+            .OrderBy(item => item.Id, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
 
-        var report = await LegacyDifferentialComparison.RunAsync(
-            scenario,
-            new WindowsScenarioRunner(),
-            legacyRunner);
-        var reportPath = LegacyDifferentialComparison.WriteReport(report);
+        Assert.NotEmpty(scenarios);
 
-        Assert.True(report.IsMatch, BuildFailureMessage(report, reportPath));
+        var failures = new List<string>();
+        foreach (var scenario in scenarios)
+        {
+            try
+            {
+                var report = await LegacyDifferentialComparison.RunAsync(
+                    scenario,
+                    new WindowsScenarioRunner(),
+                    legacyRunner);
+                var reportPath = LegacyDifferentialComparison.WriteReport(report);
+
+                if (!report.IsMatch)
+                    failures.Add(BuildFailureMessage(report, reportPath));
+            }
+            catch (Exception error)
+            {
+                failures.Add(
+                    $"Hosted differential runner failed for scenario '{scenario.Id}': " +
+                    $"{error.GetType().Name}: {error.Message}");
+            }
+        }
+
+        Assert.True(
+            failures.Count == 0,
+            failures.Count == 0 ? string.Empty : string.Join(Environment.NewLine + Environment.NewLine, failures));
     }
 
     [Fact]

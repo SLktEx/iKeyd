@@ -1,0 +1,28 @@
+{
+  "id": "s-sequence-mixed-chords",
+  "description": "A short realtime sequence exercises four different S-mode chord groups without resetting the process.",
+  "initialState": { "mode": "S", "ime": "on", "modifiers": [] },
+  "input": [
+    { "atMs": 0, "kind": "keyDown", "key": "K" },
+    { "atMs": 0, "kind": "keyDown", "key": "Q" },
+    { "atMs": 1, "kind": "keyUp", "key": "K" },
+    { "atMs": 1, "kind": "keyUp", "key": "Q" },
+
+    { "atMs": 60, "kind": "keyDown", "key": "D" },
+    { "atMs": 60, "kind": "keyDown", "key": "J" },
+    { "atMs": 61, "kind": "keyUp", "key": "D" },
+    { "atMs": 61, "kind": "keyUp", "key": "J" },
+
+    { "atMs": 120, "kind": "keyDown", "key": "L" },
+    { "atMs": 120, "kind": "keyDown", "key": "V" },
+    { "atMs": 121, "kind": "keyUp", "key": "L" },
+    { "atMs": 121, "kind": "keyUp", "key": "V" },
+
+    { "atMs": 180, "kind": "keyDown", "key": "S" },
+    { "atMs": 180, "kind": "keyDown", "key": "N" },
+    { "atMs": 181, "kind": "keyUp", "key": "S" },
+    { "atMs": 181, "kind": "keyUp", "key": "N" }
+  ],
+  "expected": { "text": "faarowa", "events": [] },
+  "tags": ["legacy", "sequence", "realtime-safe", "windows", "hosted-legacy"]
+}

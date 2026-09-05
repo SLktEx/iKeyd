@@ -7,6 +7,7 @@ on:
     paths:
       - tests/legacy-binary/hotkeySKG.exe.gpg
       - .github/workflows/legacy-differential.yml
+      - tests/iKeyd.Compatibility.Tests/Scenarios/**
       - tests/iKeyd.Windows.Tests/HostedTModeLegacyRunner.cs
       - tests/iKeyd.Windows.Tests/HostedLegacyDifferentialTests.cs
 
