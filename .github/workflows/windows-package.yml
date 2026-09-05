@@ -36,6 +36,23 @@ jobs:
           -p:DebugType=None
           -p:DebugSymbols=false
           --output artifacts/iKeyd-win-x64
+      - name: Publish win-x64 embedded config
+        run: >-
+          dotnet publish src/iKeyd.App/iKeyd.App.csproj
+          --configuration Release
+          --runtime win-x64
+          --self-contained true
+          -p:PublishSingleFile=true
+          -p:DebugType=None
+          -p:DebugSymbols=false
+          -p:EmbedDefaultConfig=true
+          -p:AssemblyName=iKeyd-embedded
+          --output artifacts/iKeyd-win-x64-embedded
+      - name: Verify embedded package is standalone
+        shell: pwsh
+        run: |
+          if (-not (Test-Path artifacts/iKeyd-win-x64-embedded/iKeyd-embedded.exe)) { throw 'embedded executable missing' }
+          if (Test-Path artifacts/iKeyd-win-x64-embedded/iKeyd.json) { throw 'embedded package unexpectedly contains iKeyd.json' }
       - name: Create release archive
         shell: pwsh
         run: Compress-Archive -Path artifacts/iKeyd-win-x64/* -DestinationPath artifacts/iKeyd-win-x64.zip -Force
@@ -44,6 +61,7 @@ jobs:
           name: iKeyd-win-x64
           path: |
             artifacts/iKeyd-win-x64/**
+            artifacts/iKeyd-win-x64-embedded/**
             artifacts/iKeyd-win-x64.zip
           if-no-files-found: error
 
@@ -66,6 +84,7 @@ jobs:
           artifacts/iKeyd-win-x64.zip
           artifacts/iKeyd-win-x64/iKeyd.exe
           artifacts/iKeyd-win-x64/iKeyd.json
+          artifacts/iKeyd-win-x64-embedded/iKeyd-embedded.exe
           --verify-tag
           --generate-notes
           --title "iKeyd ${GITHUB_REF_NAME}"
