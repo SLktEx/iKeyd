@@ -15,6 +15,10 @@ public sealed record LegacyDifferentialReport
     public required IReadOnlyList<string> IKeydVsExpected { get; init; }
     public required IReadOnlyList<string> LegacyVsExpected { get; init; }
     public required IReadOnlyList<string> IKeydVsLegacy { get; init; }
+    public IReadOnlyList<string> Tags { get; init; } = [];
+    public IReadOnlyList<string> InventoryIds { get; init; } = [];
+    public IReadOnlyList<string> RequiredEnvironment { get; init; } = [];
+    public IReadOnlyList<string> OracleTargets { get; init; } = [];
 
     public bool IsMatch =>
         IKeydVsExpected.Count == 0 &&
@@ -60,7 +64,11 @@ public static class LegacyDifferentialComparison
             LegacyExe = legacy,
             IKeydVsExpected = CompatibilityScenarioDiff.Compare(scenario, iKeyd),
             LegacyVsExpected = CompatibilityScenarioDiff.Compare(scenario, legacy),
-            IKeydVsLegacy = CompareResults(iKeyd, legacy)
+            IKeydVsLegacy = CompareResults(iKeyd, legacy),
+            Tags = scenario.Tags.ToArray(),
+            InventoryIds = scenario.InventoryIds.ToArray(),
+            RequiredEnvironment = scenario.RequiredEnvironment.ToArray(),
+            OracleTargets = scenario.OracleTargets.ToArray()
         };
     }
 

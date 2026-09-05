@@ -31,6 +31,40 @@ public sealed class CompatibilityScenarioTests
     }
 
     [Fact]
+    public void Inventory_sidecar_links_unambiguous_legacy_source_entries()
+    {
+        var scenarios = CompatibilityScenarioCatalog.LoadDirectory(ScenarioDirectory);
+        var linked = scenarios.Single(item => item.Id == "s-single-w");
+
+        Assert.Equal(["legacy-single-stroke-e1cb2619ec"], linked.InventoryIds);
+        Assert.Contains("hosted-windows", linked.RequiredEnvironment);
+        Assert.Equal(
+            new[] { "compiled-exe", "ahk-source", "ikeyd" },
+            linked.OracleTargets);
+    }
+
+    [Fact]
+    public void Scenario_without_unambiguous_source_match_stays_unresolved()
+    {
+        var scenarios = CompatibilityScenarioCatalog.LoadDirectory(ScenarioDirectory);
+        var unresolved = scenarios.Single(item => item.Id == "s-chord-k-q-immediate");
+
+        Assert.Empty(unresolved.InventoryIds);
+    }
+
+    [Fact]
+    public void Linked_inventory_ids_use_stable_legacy_ids()
+    {
+        var scenarios = CompatibilityScenarioCatalog.LoadDirectory(ScenarioDirectory);
+        var linked = scenarios.Where(item => item.InventoryIds.Count != 0).ToArray();
+
+        Assert.NotEmpty(linked);
+        Assert.All(linked, scenario =>
+            Assert.All(scenario.InventoryIds, id =>
+                Assert.True(id.StartsWith("legacy-", StringComparison.Ordinal), id)));
+    }
+
+    [Fact]
     public void Diff_is_empty_when_runner_matches_expected_observations()
     {
         var scenario = CompatibilityScenarioCatalog.LoadDirectory(ScenarioDirectory)
