@@ -33,9 +33,6 @@ public sealed class RuntimeInputInjectionRunner : ICompatibilityScenarioRunner
             LegacyExecutableScenarioRunner.ExecutableEnvironmentVariable);
         var processName = HostedTModeLegacyRunner.ResolveLegacyProcessName(configuredExecutable);
 
-        // HostedAutoHotkeySourceRunner sets IKEYD_LEGACY_EXE only after entering
-        // its temporary environment gate, but its copied interpreter is always
-        // named hotkeySKG.exe.
         if (_inner is HostedAutoHotkeySourceRunner)
             processName = "hotkeySKG";
 
@@ -43,9 +40,6 @@ public sealed class RuntimeInputInjectionRunner : ICompatibilityScenarioRunner
         {
             Input =
             [
-                // A lone key-up is ignored by the legacy state machine. The
-                // HostedTMode adapter adds another 500 ms, so this keeps the
-                // process/capture alive long enough for the real injection below.
                 new ScenarioInputEvent { AtMs = 800, Kind = "keyUp", Key = "Q" }
             ]
         };
@@ -96,10 +90,9 @@ public sealed class RuntimeInputInjectionRunner : ICompatibilityScenarioRunner
             {
                 if (processes.Any(process => !process.HasExited))
                 {
-                    // HostedTModeLegacyRunner sends its M+digit control sequence
-                    // after 650 ms. LegacyExecutableScenarioRunner starts output
-                    // capture after its 750 ms startup wait. 900 ms is therefore
-                    // safely after both without making each scenario slow.
+                    // HostedTModeLegacyRunner switches the legacy process to its
+                    // hosted T mode after startup. Start long-tail input after the
+                    // mode switch and output-capture hook are both ready.
                     await Task.Delay(TimeSpan.FromMilliseconds(900), cancellationToken);
 
                     var stopwatch = Stopwatch.StartNew();
@@ -128,10 +121,11 @@ public sealed class RuntimeInputInjectionRunner : ICompatibilityScenarioRunner
     private static void Send(ScenarioInputEvent input)
     {
         var virtualKey = ScenarioKeyboard.ResolveVirtualKey(input.Key!);
+        var scanCode = ScenarioKeyboard.ResolveScanCode(input.Key!);
         var flags = string.Equals(input.Kind, "keyUp", StringComparison.OrdinalIgnoreCase)
             ? KeyEventKeyUp
             : 0u;
-        NativeMethods.keybd_event((byte)virtualKey, 0, flags, ForeignMarker);
+        NativeMethods.keybd_event((byte)virtualKey, scanCode, flags, ForeignMarker);
     }
 
     private static class NativeMethods
