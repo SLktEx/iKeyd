@@ -1,0 +1,23 @@
+{
+  "id": "runtime-mh-u-shift-home",
+  "description": "Muhenkan then Henkan (MH) + U emits Shift+Home.",
+  "initialState": { "mode": "S", "ime": "off", "modifiers": [] },
+  "input": [
+    { "atMs": 0, "kind": "keyDown", "key": "NONCONVERT" },
+    { "atMs": 30, "kind": "keyDown", "key": "CONVERT" },
+    { "atMs": 60, "kind": "keyDown", "key": "U" },
+    { "atMs": 80, "kind": "keyUp", "key": "U" },
+    { "atMs": 100, "kind": "keyUp", "key": "CONVERT" },
+    { "atMs": 120, "kind": "keyUp", "key": "NONCONVERT" }
+  ],
+  "expected": {
+    "text": "",
+    "events": [
+      { "kind": "keyDown", "key": "SHIFT" },
+      { "kind": "keyDown", "key": "HOME" },
+      { "kind": "keyUp", "key": "HOME" },
+      { "kind": "keyUp", "key": "SHIFT" }
+    ]
+  },
+  "tags": ["hosted-legacy", "hosted-legacy-runtime", "layer-MH", "long-tail"]
+}
