@@ -9,13 +9,34 @@ namespace iKeyd.App;
 /// Core owns profile loading and named keymaps; this type only applies the
 /// hotkeySKG-compatible S/K/T/R startup-mode policy used by the Windows UI.
 /// </summary>
-public sealed record IKeydConfiguration(
-    AutomationProfile Profile,
-    InputMode StartupMode)
+public sealed record IKeydConfiguration
 {
+    public IKeydConfiguration(AutomationProfile profile, InputMode startupMode)
+        : this(
+            profile,
+            startupMode,
+            profile.GetKeymap("S").BuildKeymap(),
+            profile.GetKeymap("K").BuildKeymap())
+    {
+    }
+
+    internal IKeydConfiguration(
+        AutomationProfile profile,
+        InputMode startupMode,
+        Keymap<string> sKeymap,
+        Keymap<string> kKeymap)
+    {
+        Profile = profile ?? throw new ArgumentNullException(nameof(profile));
+        StartupMode = startupMode;
+        SKeymap = sKeymap ?? throw new ArgumentNullException(nameof(sKeymap));
+        KKeymap = kKeymap ?? throw new ArgumentNullException(nameof(kKeymap));
+    }
+
+    public AutomationProfile Profile { get; init; }
+    public InputMode StartupMode { get; init; }
     public int ChordWindowMs => Profile.ChordWindowMs;
-    public Keymap<string> SKeymap => Profile.GetKeymap("S").BuildKeymap();
-    public Keymap<string> KKeymap => Profile.GetKeymap("K").BuildKeymap();
+    public Keymap<string> SKeymap { get; }
+    public Keymap<string> KKeymap { get; }
 
     public static IKeydConfiguration Load(string path)
         => FromProfile(AutomationProfileJson.Load(path));
