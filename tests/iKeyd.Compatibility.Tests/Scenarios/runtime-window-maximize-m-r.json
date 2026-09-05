@@ -1,0 +1,13 @@
+{
+  "id": "runtime-window-maximize-m-r",
+  "description": "M+R maximizes a normal active window through the real iKeyd runtime dispatch.",
+  "initialState": { "mode": "S", "ime": "off", "layers": ["M"] },
+  "input": [
+    { "atMs": 10, "kind": "keyDown", "key": "R" },
+    { "atMs": 11, "kind": "keyUp", "key": "R" }
+  ],
+  "expected": {
+    "actions": [ { "kind": "window", "value": "maximize" } ]
+  },
+  "tags": ["legacy", "runtime-long-tail", "window", "deterministic"]
+}

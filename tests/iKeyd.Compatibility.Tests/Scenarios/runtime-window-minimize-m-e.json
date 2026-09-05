@@ -1,0 +1,13 @@
+{
+  "id": "runtime-window-minimize-m-e",
+  "description": "M+E minimizes the active window through the real iKeyd runtime dispatch.",
+  "initialState": { "mode": "S", "ime": "off", "layers": ["M"] },
+  "input": [
+    { "atMs": 10, "kind": "keyDown", "key": "E" },
+    { "atMs": 11, "kind": "keyUp", "key": "E" }
+  ],
+  "expected": {
+    "actions": [ { "kind": "window", "value": "minimize" } ]
+  },
+  "tags": ["legacy", "runtime-long-tail", "window", "deterministic"]
+}

@@ -1,0 +1,13 @@
+{
+  "id": "runtime-mouse-left-click-ms-u",
+  "description": "M then Space plus U emits a left mouse click.",
+  "initialState": { "mode": "S", "ime": "off", "layers": ["M", "S"] },
+  "input": [
+    { "atMs": 10, "kind": "keyDown", "key": "U" },
+    { "atMs": 11, "kind": "keyUp", "key": "U" }
+  ],
+  "expected": {
+    "actions": [ { "kind": "mouse", "value": "click:left" } ]
+  },
+  "tags": ["legacy", "runtime-long-tail", "mouse", "deterministic"]
+}
