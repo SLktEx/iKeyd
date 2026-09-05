@@ -1,0 +1,23 @@
+{
+  "id": "runtime-a-j-alt-j",
+  "description": "Alt+Kana toggles A layer and the next J emits Alt+J.",
+  "initialState": { "mode": "S", "ime": "off", "modifiers": [] },
+  "input": [
+    { "atMs": 0, "kind": "keyDown", "key": "ALT" },
+    { "atMs": 20, "kind": "keyDown", "key": "KANA" },
+    { "atMs": 30, "kind": "keyUp", "key": "KANA" },
+    { "atMs": 40, "kind": "keyUp", "key": "ALT" },
+    { "atMs": 70, "kind": "keyDown", "key": "J" },
+    { "atMs": 90, "kind": "keyUp", "key": "J" }
+  ],
+  "expected": {
+    "text": "",
+    "events": [
+      { "kind": "keyDown", "key": "ALT" },
+      { "kind": "keyDown", "key": "J" },
+      { "kind": "keyUp", "key": "J" },
+      { "kind": "keyUp", "key": "ALT" }
+    ]
+  },
+  "tags": ["hosted-legacy", "hosted-legacy-runtime", "layer-A", "long-tail"]
+}
