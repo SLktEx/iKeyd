@@ -47,12 +47,15 @@ jobs:
           Xvfb :99 -screen 0 1024x768x24 >"$RUNNER_TEMP/xvfb.log" 2>&1 &
           echo $! > "$RUNNER_TEMP/xvfb.pid"
           for attempt in $(seq 1 50); do
-            if DISPLAY=:99 xdpyinfo >/dev/null 2>&1; then
+            if [ -S /tmp/.X11-unix/X99 ]; then
               break
             fi
             sleep 0.1
           done
-          DISPLAY=:99 xdpyinfo >/dev/null
+          if [ ! -S /tmp/.X11-unix/X99 ]; then
+            cat "$RUNNER_TEMP/xvfb.log" || true
+            exit 1
+          fi
 
           XDG_RUNTIME_DIR="$runtime" DISPLAY=:99 \
             weston --backend=x11-backend.so --socket=wayland-9 --idle-time=0 --log="$RUNNER_TEMP/weston.log" &
