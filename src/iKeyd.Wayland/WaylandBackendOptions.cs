@@ -87,12 +87,12 @@ public static class WaylandBackendProbe
                 BackendCapability.MediaKeys
             ]);
         }
-        if (wlPaste)
+        if (isWayland && wlPaste)
         {
             capabilities.Add(BackendCapability.ClipboardRead);
             capabilities.Add(BackendCapability.ClipboardWatch);
         }
-        if (wlCopy)
+        if (isWayland && wlCopy)
             capabilities.Add(BackendCapability.ClipboardWrite);
 
         return new WaylandBackendProbeResult(
