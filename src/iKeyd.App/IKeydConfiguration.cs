@@ -1,4 +1,5 @@
 using iKeyd.Core.Configuration;
+using iKeyd.Core.Keymaps;
 using iKeyd.Profiles.HotkeySkg.Modes;
 
 namespace iKeyd.App;
@@ -13,6 +14,8 @@ public sealed record IKeydConfiguration(
     InputMode StartupMode)
 {
     public int ChordWindowMs => Profile.ChordWindowMs;
+    public Keymap<string> SKeymap => Profile.GetKeymap("S").BuildKeymap();
+    public Keymap<string> KKeymap => Profile.GetKeymap("K").BuildKeymap();
 
     public static IKeydConfiguration Load(string path)
     {
@@ -21,17 +24,17 @@ public sealed record IKeydConfiguration(
             throw new InvalidDataException($"Unsupported startupMode '{profile.StartupMode}' for the Windows app.");
 
         // Windows v1 still exposes the hotkeySKG S/K modes. Validate those
-        // profile requirements here instead of teaching the generic runtime about them.
+        // profile requirements here instead of teaching generic Core APIs about them.
         _ = profile.GetKeymap("S");
         _ = profile.GetKeymap("K");
         return new IKeydConfiguration(profile, startupMode);
     }
 
-    public static string GetKeymapName(KeymapMode mode)
+    public Keymap<string> GetKeymap(KeymapMode mode)
         => mode switch
         {
-            KeymapMode.S => "S",
-            KeymapMode.K => "K",
+            KeymapMode.S => SKeymap,
+            KeymapMode.K => KKeymap,
             _ => throw new ArgumentOutOfRangeException(nameof(mode))
         };
 }
