@@ -2,13 +2,15 @@
 
 ## Status
 
-Native AOT is **experimental for iKeyd**. The release build remains the normal .NET 8 Windows self-contained single-file publish until this evaluation produces a viable candidate and the candidate passes runtime compatibility and performance checks.
+Native AOT is **deferred for the current iKeyd Windows application**. The release build remains the normal .NET 8 Windows self-contained single-file publish.
 
-The Windows app currently targets `net8.0-windows` and uses WinForms. Native AOT supports Windows as a platform, but WinForms has trimming/AOT compatibility constraints, so iKeyd must not assume that `PublishAot=true` is a supported release configuration.
+The Windows app targets `net8.0-windows` and uses WinForms. Native AOT supports Windows as a platform, but the current WinForms application model is blocked by trimming compatibility before iKeyd can produce a candidate AOT executable.
+
+The repository now pins the .NET 8 SDK family through `global.json` so this result is reproducible against the framework generation iKeyd actually targets.
 
 ## Reproduce
 
-From a Windows development environment with the .NET 8 SDK:
+From a Windows development environment with a compatible .NET 8 SDK:
 
 ```powershell
 ./tools/evaluate-native-aot.ps1
@@ -56,6 +58,42 @@ An AOT binary is adopted only if it remains behaviorally compatible and provides
 
 If no viable AOT binary is produced, startup/first-key/steady-state/memory comparisons are marked `not-applicable-no-viable-aot-binary`; they must not be inferred or fabricated.
 
+## Recorded result
+
+GitHub Actions Native AOT evaluation run `33995015824` produced the following result on Windows:
+
+- SDK: `.NET SDK 8.0.424`
+- target: `net8.0-windows`, `win-x64`, WinForms
+- normal self-contained single-file publish: **success**
+- normal `iKeyd.exe`: `153,617,154` bytes (`146.501 MiB`)
+- Native AOT publish: **failed**, exit code `1`
+- Native AOT executable: **not produced**
+- decision: **`defer-native-aot`**
+
+The Native AOT probe stops with:
+
+```text
+error NETSDK1175: Windows Forms is not supported or recommended with trimming enabled.
+```
+
+`PublishAot=true` requires trimming, so the current WinForms application is rejected by the .NET 8 SDK before a viable AOT iKeyd binary exists. This is an application-model/framework compatibility blocker rather than an iKeyd hot-path implementation failure.
+
+Because no AOT candidate executable was produced, the following comparisons are intentionally recorded as **not applicable** rather than estimated:
+
+- startup time;
+- first-key latency;
+- steady-state latency;
+- memory use;
+- AOT binary size.
+
+The full `report.json` and both publish logs are retained by the evaluation workflow artifact.
+
+## Decision
+
+**Keep the normal .NET 8 self-contained release. Do not enable Native AOT for the current WinForms executable.**
+
+Do not use private WinForms trim/AOT suppression properties in production simply to force an AOT binary to build. That would bypass the compatibility guard without establishing correctness.
+
 ## Revisit conditions
 
 Re-run the evaluation when any of these materially change:
@@ -64,7 +102,3 @@ Re-run the evaluation when any of these materially change:
 - WinForms gains official trimming/Native AOT support appropriate for this application;
 - the latency-sensitive runtime is split from the WinForms UI into a separate executable that can be AOT-published independently;
 - iKeyd replaces the Windows UI/runtime boundary with an AOT-compatible application model.
-
-## Recorded result
-
-The authoritative result for the current branch is the `report.json` produced by the Native AOT evaluation workflow. This section should be updated with the concrete CI result before issue #51 is closed.
