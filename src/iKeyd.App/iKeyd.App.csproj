@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AssemblyName>iKeyd</AssemblyName>
+    <RootNamespace>iKeyd.App</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../iKeyd.Core/iKeyd.Core.csproj" />
+    <ProjectReference Include="../iKeyd.Windows/iKeyd.Windows.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <Content Include="../../config/hotkeySKG.behavior.json" Link="iKeyd.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </Content>
+  </ItemGroup>
+</Project>
