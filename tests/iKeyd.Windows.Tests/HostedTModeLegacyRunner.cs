@@ -7,14 +7,16 @@ namespace iKeyd.Windows.Tests;
 /// <summary>
 /// Adapts the real legacy executable for GitHub-hosted Windows runners where
 /// installing and activating a Japanese IME in the same ephemeral session is
-/// unreliable. The legacy script's T mode bypasses IME_IfRomaKana() while
-/// continuing to use the current S chord table (gimode remains "S").
+/// unreliable. The legacy script's T mode bypasses IME_IfRomaKana(). Before
+/// entering T mode, the adapter can select either the S or K keymap; process3()
+/// changes only gmode, so the selected gimode remains active in T mode.
 /// </summary>
 public sealed class HostedTModeLegacyRunner : ICompatibilityScenarioRunner
 {
     private const nuint ForeignMarker = (nuint)0x24681357U;
     private const byte VkNonConvert = 0x1D;
     private const byte Vk3 = 0x33;
+    private const byte Vk4 = 0x34;
     private const byte NonConvertScanCode = 0x7B;
     private const uint KeyEventKeyUp = 0x0002;
     private const long ScenarioDelayMs = 500;
@@ -30,13 +32,17 @@ public sealed class HostedTModeLegacyRunner : ICompatibilityScenarioRunner
     {
         ArgumentNullException.ThrowIfNull(scenario);
 
+        var requestedKeymap = NormalizeHostedKeymap(scenario.InitialState.Mode);
         var hostedScenario = PrepareScenario(scenario);
         var executablePath = Environment.GetEnvironmentVariable(
             LegacyExecutableScenarioRunner.ExecutableEnvironmentVariable);
         var processName = ResolveLegacyProcessName(executablePath);
 
         using var switchCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        var switchTask = SwitchLegacyToTModeWhenReadyAsync(processName, switchCancellation.Token);
+        var switchTask = SwitchLegacyToTModeWhenReadyAsync(
+            processName,
+            requestedKeymap,
+            switchCancellation.Token);
 
         try
         {
@@ -46,7 +52,8 @@ public sealed class HostedTModeLegacyRunner : ICompatibilityScenarioRunner
             var metadata = new Dictionary<string, string>(result.Metadata)
             {
                 ["legacyMode"] = "T",
-                ["legacyKeymap"] = "S",
+                ["legacyKeymap"] = requestedKeymap,
+                ["scenarioMode"] = scenario.InitialState.Mode,
                 ["ime"] = "bypassed-via-T-mode",
                 ["hostedAdapter"] = nameof(HostedTModeLegacyRunner),
                 ["legacyProcessName"] = processName
@@ -72,13 +79,22 @@ public sealed class HostedTModeLegacyRunner : ICompatibilityScenarioRunner
     }
 
     internal static CompatibilityScenario PrepareScenario(CompatibilityScenario scenario)
-        => scenario with
+    {
+        _ = NormalizeHostedKeymap(scenario.InitialState.Mode);
+
+        // LegacyExecutableScenarioRunner intentionally models the normal startup
+        // state and therefore accepts S mode only. Hosted mode selection is done
+        // explicitly with the legacy M+digit control chords below, so present an
+        // S/off bootstrap state to the inner process harness while preserving the
+        // original scenario for the iKeyd side of the differential comparison.
+        return scenario with
         {
-            InitialState = scenario.InitialState with { Ime = "off" },
+            InitialState = scenario.InitialState with { Mode = "S", Ime = "off" },
             Input = scenario.Input
                 .Select(input => input with { AtMs = input.AtMs + ScenarioDelayMs })
                 .ToList()
         };
+    }
 
     internal static string ResolveLegacyProcessName(string? executablePath)
     {
@@ -89,8 +105,28 @@ public sealed class HostedTModeLegacyRunner : ICompatibilityScenarioRunner
         return string.IsNullOrWhiteSpace(name) ? "hotkeySKG" : name;
     }
 
+    internal static IReadOnlyList<byte> ResolveModeSelectionDigits(string mode)
+        => NormalizeHostedKeymap(mode) switch
+        {
+            "S" => [Vk3],
+            "K" => [Vk4, Vk3],
+            _ => throw new UnreachableException()
+        };
+
+    private static string NormalizeHostedKeymap(string mode)
+    {
+        if (string.Equals(mode, "S", StringComparison.OrdinalIgnoreCase))
+            return "S";
+        if (string.Equals(mode, "K", StringComparison.OrdinalIgnoreCase))
+            return "K";
+
+        throw new NotSupportedException(
+            $"The hosted T-mode legacy adapter currently supports S and K keymaps, not '{mode}'.");
+    }
+
     private static async Task SwitchLegacyToTModeWhenReadyAsync(
         string processName,
+        string requestedKeymap,
         CancellationToken cancellationToken)
     {
         var deadline = Stopwatch.StartNew();
@@ -105,7 +141,15 @@ public sealed class HostedTModeLegacyRunner : ICompatibilityScenarioRunner
                 {
                     // Give the AHK runtime enough time to install its hooks.
                     await Task.Delay(TimeSpan.FromMilliseconds(650), cancellationToken);
-                    SendTModeChord();
+
+                    var digits = ResolveModeSelectionDigits(requestedKeymap);
+                    for (var index = 0; index < digits.Count; index++)
+                    {
+                        SendModeSelectionChord(digits[index]);
+                        if (index + 1 < digits.Count)
+                            await Task.Delay(TimeSpan.FromMilliseconds(80), cancellationToken);
+                    }
+
                     return;
                 }
             }
@@ -122,18 +166,19 @@ public sealed class HostedTModeLegacyRunner : ICompatibilityScenarioRunner
             $"The legacy process '{processName}' did not become available for T-mode activation.");
     }
 
-    private static void SendTModeChord()
+    private static void SendModeSelectionChord(byte digitVirtualKey)
     {
-        // Legacy mapping:
-        //   vk1Dsc07B down -> fstate += "M"
-        //   3 down          -> func_3() -> processes() -> process3() -> TMODE
+        // Legacy mappings:
+        //   M+4 -> process4() -> KMODE + gimode="K"
+        //   M+3 -> process3() -> TMODE, leaving gimode unchanged
+        // Therefore S needs only M+3, while K uses M+4 followed by M+3.
         // Reuse the normal harness marker so the legacy output capture ignores
         // these injected control events if its hook is already active.
         SendKey(VkNonConvert, NonConvertScanCode, keyUp: false);
         Thread.Sleep(20);
-        SendKey(Vk3, 0, keyUp: false);
+        SendKey(digitVirtualKey, 0, keyUp: false);
         Thread.Sleep(20);
-        SendKey(Vk3, 0, keyUp: true);
+        SendKey(digitVirtualKey, 0, keyUp: true);
         Thread.Sleep(20);
         SendKey(VkNonConvert, NonConvertScanCode, keyUp: true);
     }
