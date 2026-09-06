@@ -1,0 +1,16 @@
+{
+  "id": "send-event-mh-comma-tab",
+  "description": "M then H plus Comma emits Tab down/up through withFuncKey.",
+  "initialState": { "mode": "S", "ime": "off", "layers": ["M", "H"] },
+  "input": [
+    { "atMs": 10, "kind": "keyDown", "key": "Comma" },
+    { "atMs": 20, "kind": "keyUp", "key": "Comma" }
+  ],
+  "expected": {
+    "events": [
+      { "kind": "keyDown", "key": "Tab" },
+      { "kind": "keyUp", "key": "Tab" }
+    ]
+  },
+  "tags": ["legacy", "send", "send-event-diff", "hosted-windows"]
+}

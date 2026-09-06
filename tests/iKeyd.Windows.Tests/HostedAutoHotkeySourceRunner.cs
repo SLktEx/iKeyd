@@ -7,7 +7,7 @@ namespace iKeyd.Windows.Tests;
 /// Runs the original hotkeySKG.ahk source as a distinct compatibility oracle.
 /// The AutoHotkey interpreter is copied to hotkeySKG.exe beside hotkeySKG.ahk,
 /// allowing AutoHotkey v1 to auto-load the same-basename script while reusing
-/// the hosted T-mode keyboard harness used for the compiled legacy executable.
+/// a supplied legacy-process scenario runner.
 /// </summary>
 public sealed class HostedAutoHotkeySourceRunner : ICompatibilityScenarioRunner
 {
@@ -17,6 +17,15 @@ public sealed class HostedAutoHotkeySourceRunner : ICompatibilityScenarioRunner
     public const string RuntimeVersion = "AutoHotkey v1.1.16.05";
 
     private static readonly SemaphoreSlim EnvironmentGate = new(1, 1);
+    private readonly Func<ICompatibilityScenarioRunner> _runnerFactory;
+
+    public HostedAutoHotkeySourceRunner()
+        : this(() => new HostedTModeLegacyRunner())
+    {
+    }
+
+    internal HostedAutoHotkeySourceRunner(Func<ICompatibilityScenarioRunner> runnerFactory)
+        => _runnerFactory = runnerFactory ?? throw new ArgumentNullException(nameof(runnerFactory));
 
     public string Name => "hotkeySKG.ahk + AutoHotkey v1.1.16.05";
 
@@ -53,9 +62,7 @@ public sealed class HostedAutoHotkeySourceRunner : ICompatibilityScenarioRunner
         }
 
         var interpreterSha256 = ComputeSha256(interpreter);
-        var temporaryDirectory = Path.Combine(
-            Path.GetTempPath(),
-            $"ikeyd-ahk-source-{Guid.NewGuid():N}");
+        var temporaryDirectory = Path.Combine(Path.GetTempPath(), $"ikeyd-ahk-source-{Guid.NewGuid():N}");
         Directory.CreateDirectory(temporaryDirectory);
 
         var hostedInterpreter = Path.Combine(temporaryDirectory, "hotkeySKG.exe");
@@ -64,28 +71,24 @@ public sealed class HostedAutoHotkeySourceRunner : ICompatibilityScenarioRunner
         File.Copy(source, hostedSource, overwrite: true);
 
         await EnvironmentGate.WaitAsync(cancellationToken);
-        var previousExecutable = Environment.GetEnvironmentVariable(
-            LegacyExecutableScenarioRunner.ExecutableEnvironmentVariable);
-        var previousExecutableSha = Environment.GetEnvironmentVariable(
-            LegacyExecutableScenarioRunner.ExpectedSha256EnvironmentVariable);
+        var previousExecutable = Environment.GetEnvironmentVariable(LegacyExecutableScenarioRunner.ExecutableEnvironmentVariable);
+        var previousExecutableSha = Environment.GetEnvironmentVariable(LegacyExecutableScenarioRunner.ExpectedSha256EnvironmentVariable);
 
         try
         {
-            Environment.SetEnvironmentVariable(
-                LegacyExecutableScenarioRunner.ExecutableEnvironmentVariable,
-                hostedInterpreter);
-            Environment.SetEnvironmentVariable(
-                LegacyExecutableScenarioRunner.ExpectedSha256EnvironmentVariable,
-                interpreterSha256);
+            Environment.SetEnvironmentVariable(LegacyExecutableScenarioRunner.ExecutableEnvironmentVariable, hostedInterpreter);
+            Environment.SetEnvironmentVariable(LegacyExecutableScenarioRunner.ExpectedSha256EnvironmentVariable, interpreterSha256);
 
-            var result = await new HostedTModeLegacyRunner().RunAsync(scenario, cancellationToken);
+            var result = await _runnerFactory().RunAsync(scenario, cancellationToken);
             var metadata = new Dictionary<string, string>(result.Metadata);
             metadata.Remove("sha256");
             metadata["oracle"] = "ahk-v1-source";
             metadata["runtime"] = RuntimeVersion;
             metadata["sourceSha256"] = sourceSha256;
             metadata["interpreterSha256"] = interpreterSha256;
-            metadata["scope"] = "legacy-ahk-source-hook-output";
+            metadata["scope"] = result.Metadata.TryGetValue("scope", out var scope)
+                ? $"legacy-ahk-source:{scope}"
+                : "legacy-ahk-source";
 
             return result with
             {
@@ -95,12 +98,8 @@ public sealed class HostedAutoHotkeySourceRunner : ICompatibilityScenarioRunner
         }
         finally
         {
-            Environment.SetEnvironmentVariable(
-                LegacyExecutableScenarioRunner.ExecutableEnvironmentVariable,
-                previousExecutable);
-            Environment.SetEnvironmentVariable(
-                LegacyExecutableScenarioRunner.ExpectedSha256EnvironmentVariable,
-                previousExecutableSha);
+            Environment.SetEnvironmentVariable(LegacyExecutableScenarioRunner.ExecutableEnvironmentVariable, previousExecutable);
+            Environment.SetEnvironmentVariable(LegacyExecutableScenarioRunner.ExpectedSha256EnvironmentVariable, previousExecutableSha);
             EnvironmentGate.Release();
 
             try
