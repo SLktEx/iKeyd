@@ -41,4 +41,4 @@ jobs:
           git add -A
           git commit -m "feat: restore hotkeySKG process-specific hotkeys (#57)"
           git push origin HEAD:issue-46-hotkeyskg-full-compat
-# rerun: observe Console suffix through SendText
+# rerun: isolate native vk-sc capture from parallel own injections
