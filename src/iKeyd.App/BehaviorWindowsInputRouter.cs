@@ -45,7 +45,7 @@ internal sealed class BehaviorWindowsInputRouter : IKeyboardEventHandler, IDispo
         {
             _keymaps.Add(pair.Key, pair.Value.BuildKeymap());
             if (pair.Value.BehaviorMappings.Count != 0)
-                _behaviorRuntimes.Add(pair.Key, new BehaviorRuntime(pair.Value.BuildBehaviorBindings()));
+                _behaviorRuntimes.Add(pair.Key, new BehaviorRuntime(pair.Value.BuildBehaviorBindings(profile.BehaviorDefinitions)));
         }
 
         ValidateLayerTapTargets();
