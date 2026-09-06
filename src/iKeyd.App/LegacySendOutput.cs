@@ -30,16 +30,12 @@ internal sealed class LegacySendOutput : IMacroOutput
         if (legacySendText.Length == 0)
             return;
 
-        // The compiled keymaps overwhelmingly emit literal text. Avoid constructing
-        // parser state for that normal path and forward the existing string directly.
         if (!ContainsLegacySyntax(legacySendText))
         {
             _keyboard.SendText(legacySendText);
             return;
         }
 
-        // Function/named-key mappings such as {F1} are also common enough to keep
-        // allocation-free. Resolve the token directly from a span.
         if (legacySendText.Length >= 3 &&
             legacySendText[0] == '{' &&
             legacySendText[^1] == '}' &&
@@ -50,8 +46,6 @@ internal sealed class LegacySendOutput : IMacroOutput
             return;
         }
 
-        // General legacy macro syntax remains supported. This path is not used by
-        // ordinary compiled literal mappings and can favor compatibility/readability.
         var plain = new StringBuilder();
 
         void FlushPlain()
@@ -90,6 +84,19 @@ internal sealed class LegacySendOutput : IMacroOutput
 
             if (legacySendText[index] == '{')
             {
+                // AHK represents a literal closing brace as `{}}`. The first `}` is
+                // the token payload, not the terminator, so the generic first-brace
+                // search cannot parse this form correctly.
+                if (index + 2 < legacySendText.Length &&
+                    legacySendText[index + 1] == '}' &&
+                    legacySendText[index + 2] == '}')
+                {
+                    if (!TrySendSpecialToken("}".AsSpan(), modifiers))
+                        throw UnsupportedSyntax(legacySendText[modifierStart..(index + 3)], "unknown escaped brace token");
+                    index += 3;
+                    continue;
+                }
+
                 var close = legacySendText.IndexOf('}', index + 1);
                 if (close < 0)
                     throw UnsupportedSyntax(legacySendText[modifierStart..], "unterminated brace token");
