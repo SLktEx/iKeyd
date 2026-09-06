@@ -1,6 +1,6 @@
 {
   "id": "send-event-mh-j-shift-left",
-  "description": "M then H plus J emits Shift+Left with legacy modifier ordering.",
+  "description": "M then H plus J emits legacy left Shift+Left with exact modifier ordering.",
   "initialState": { "mode": "S", "ime": "off", "layers": ["M", "H"] },
   "input": [
     { "atMs": 10, "kind": "keyDown", "key": "J" },
@@ -8,10 +8,10 @@
   ],
   "expected": {
     "events": [
-      { "kind": "keyDown", "key": "Shift" },
+      { "kind": "keyDown", "key": "VK_A0" },
       { "kind": "keyDown", "key": "Left" },
       { "kind": "keyUp", "key": "Left" },
-      { "kind": "keyUp", "key": "Shift" }
+      { "kind": "keyUp", "key": "VK_A0" }
     ]
   },
   "tags": ["legacy", "send", "send-event-diff", "hosted-windows"]

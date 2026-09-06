@@ -8,6 +8,10 @@ namespace iKeyd.App;
 
 internal sealed class LegacySendOutput : IMacroOutput
 {
+    private const ushort LegacyLeftShift = 0xA0;
+    private const ushort LegacyLeftControl = 0xA2;
+    private const ushort LegacyLeftAlt = 0xA4;
+
     private readonly IKeyboardOutput _keyboard;
     private readonly IDesktopBackend? _desktop;
 
@@ -73,6 +77,33 @@ internal sealed class LegacySendOutput : IMacroOutput
                 throw UnsupportedSyntax(legacySendText[modifierStart..], "modifier prefix is missing a target key");
             }
 
+            // AHK v1 uses backtick to quote the next character. hotkeySKG uses
+            // this for punctuation carried through dynamic defaultKey/outputChar
+            // values, including forms such as `; and ^`;.
+            if (legacySendText[index] == '`')
+            {
+                if (index + 1 >= legacySendText.Length)
+                {
+                    FlushPlain();
+                    throw UnsupportedSyntax(legacySendText[modifierStart..], "trailing AHK escape has no character");
+                }
+
+                var escaped = legacySendText[index + 1];
+                if (modifiers.Count == 0)
+                {
+                    plain.Append(escaped);
+                }
+                else
+                {
+                    FlushPlain();
+                    if (!TrySendModifiedCharacter(escaped, modifiers))
+                        throw UnsupportedSyntax(legacySendText[modifierStart..(index + 2)], "escaped modifier target cannot be mapped to a JIS keyboard key");
+                }
+
+                index += 2;
+                continue;
+            }
+
             if (modifiers.Count == 0 && legacySendText[index] != '{')
             {
                 plain.Append(legacySendText[index]);
@@ -129,37 +160,40 @@ internal sealed class LegacySendOutput : IMacroOutput
     public void SendChord(ushort modifier, ushort virtualKey)
     {
         var key = WindowsKeyMap.Keyboard(virtualKey);
-        _keyboard.SendKey(WindowsKeyMap.Keyboard(modifier), KeyEventKind.Down);
+        SendModifier(modifier, KeyEventKind.Down);
         try
         {
             _keyboard.SendKeyPress(key);
         }
         finally
         {
-            _keyboard.SendKey(WindowsKeyMap.Keyboard(modifier), KeyEventKind.Up);
+            SendModifier(modifier, KeyEventKind.Up);
         }
     }
 
     public void SendChord(ushort modifier1, ushort modifier2, ushort virtualKey)
     {
         var key = WindowsKeyMap.Keyboard(virtualKey);
-        _keyboard.SendKey(WindowsKeyMap.Keyboard(modifier1), KeyEventKind.Down);
-        _keyboard.SendKey(WindowsKeyMap.Keyboard(modifier2), KeyEventKind.Down);
+        SendModifier(modifier1, KeyEventKind.Down);
+        SendModifier(modifier2, KeyEventKind.Down);
         try
         {
             _keyboard.SendKeyPress(key);
         }
         finally
         {
-            _keyboard.SendKey(WindowsKeyMap.Keyboard(modifier2), KeyEventKind.Up);
-            _keyboard.SendKey(WindowsKeyMap.Keyboard(modifier1), KeyEventKind.Up);
+            // AutoHotkey v1.1.16.05 releases multiple Send modifiers in the same
+            // order they were pressed. The compiled hotkeySKG.exe oracle exposes
+            // this as LControl-up followed by LShift-up for ^+{Left}.
+            SendModifier(modifier1, KeyEventKind.Up);
+            SendModifier(modifier2, KeyEventKind.Up);
         }
     }
 
     private void SendKeyWithModifiers(KeyboardKey key, IReadOnlyList<ushort> modifiers)
     {
         foreach (var modifier in modifiers)
-            _keyboard.SendKey(WindowsKeyMap.Keyboard(modifier), KeyEventKind.Down);
+            SendModifier(modifier, KeyEventKind.Down);
 
         try
         {
@@ -167,15 +201,15 @@ internal sealed class LegacySendOutput : IMacroOutput
         }
         finally
         {
-            for (var index = modifiers.Count - 1; index >= 0; index--)
-                _keyboard.SendKey(WindowsKeyMap.Keyboard(modifiers[index]), KeyEventKind.Up);
+            foreach (var modifier in modifiers)
+                SendModifier(modifier, KeyEventKind.Up);
         }
     }
 
     private void SendKeyStateWithModifiers(KeyboardKey key, KeyEventKind kind, IReadOnlyList<ushort> modifiers)
     {
         foreach (var modifier in modifiers)
-            _keyboard.SendKey(WindowsKeyMap.Keyboard(modifier), KeyEventKind.Down);
+            SendModifier(modifier, KeyEventKind.Down);
 
         try
         {
@@ -183,10 +217,22 @@ internal sealed class LegacySendOutput : IMacroOutput
         }
         finally
         {
-            for (var index = modifiers.Count - 1; index >= 0; index--)
-                _keyboard.SendKey(WindowsKeyMap.Keyboard(modifiers[index]), KeyEventKind.Up);
+            foreach (var modifier in modifiers)
+                SendModifier(modifier, KeyEventKind.Up);
         }
     }
+
+    private void SendModifier(ushort modifier, KeyEventKind kind)
+        => _keyboard.SendKey(WindowsKeyMap.Keyboard(NormalizeLegacyModifier(modifier)), kind);
+
+    private static ushort NormalizeLegacyModifier(ushort modifier)
+        => modifier switch
+        {
+            WindowsKeyMap.Shift => LegacyLeftShift,
+            WindowsKeyMap.Control => LegacyLeftControl,
+            WindowsKeyMap.Alt => LegacyLeftAlt,
+            _ => modifier
+        };
 
     private bool TrySendSpecialToken(ReadOnlySpan<char> token, IReadOnlyList<ushort> modifiers)
     {
@@ -384,7 +430,7 @@ internal sealed class LegacySendOutput : IMacroOutput
     {
         foreach (var character in value)
         {
-            if (character is '^' or '!' or '+' or '#' or '{')
+            if (character is '^' or '!' or '+' or '#' or '{' or '`')
                 return true;
         }
         return false;
