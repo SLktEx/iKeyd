@@ -44,6 +44,7 @@ class RealWindowsVerificationTests(unittest.TestCase):
             "automated": {
                 "legacyDifferential": {"status": "pass"},
                 "backendCompatibility": {"status": "pass"},
+                "clipboardCompatibility": {"status": "pass", "message": "verified"},
             },
             "checks": checks,
             "summary": {
@@ -91,11 +92,26 @@ class RealWindowsVerificationTests(unittest.TestCase):
     def test_complete_report_requires_real_win32_backend_e2e(self):
         report = self.complete_report()
         report["automated"]["backendCompatibility"]["status"] = "fail"
+        report["automated"]["backendCompatibility"]["message"] = "failed"
         report["summary"]["complete"] = False
 
         errors = module.validate_report(self.plan, report, require_complete=True)
 
         self.assertTrue(any("backend E2E" in error for error in errors))
+
+    def test_complete_report_requires_clipboard_e2e_attempt_but_allows_safe_skip(self):
+        not_run = self.complete_report()
+        not_run["automated"]["clipboardCompatibility"] = {"status": "not-run", "message": ""}
+        not_run["summary"]["complete"] = False
+        errors = module.validate_report(self.plan, not_run, require_complete=True)
+        self.assertTrue(any("clipboard E2E was not attempted" in error for error in errors))
+
+        skipped = self.complete_report()
+        skipped["automated"]["clipboardCompatibility"] = {
+            "status": "skipped",
+            "message": "Clipboard contained a non-text/custom format and was not mutated.",
+        }
+        self.assertEqual([], module.validate_report(self.plan, skipped, require_complete=True))
 
     def test_report_rejects_inventory_drift_and_wrong_legacy_binary(self):
         report = self.complete_report()
