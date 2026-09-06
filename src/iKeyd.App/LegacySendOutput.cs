@@ -1,4 +1,5 @@
 using System.Text;
+using iKeyd.Core.Desktop;
 using iKeyd.Core.Input;
 using iKeyd.Core.Macros;
 
@@ -7,9 +8,13 @@ namespace iKeyd.App;
 internal sealed class LegacySendOutput : IMacroOutput
 {
     private readonly IKeyboardOutput _keyboard;
+    private readonly IDesktopBackend? _desktop;
 
-    public LegacySendOutput(IKeyboardOutput keyboard)
-        => _keyboard = keyboard ?? throw new ArgumentNullException(nameof(keyboard));
+    public LegacySendOutput(IKeyboardOutput keyboard, IDesktopBackend? desktop = null)
+    {
+        _keyboard = keyboard ?? throw new ArgumentNullException(nameof(keyboard));
+        _desktop = desktop;
+    }
 
     public ValueTask SendAsync(string legacySendText, CancellationToken cancellationToken)
     {
@@ -69,8 +74,7 @@ internal sealed class LegacySendOutput : IMacroOutput
             if (index >= legacySendText.Length)
             {
                 FlushPlain();
-                _keyboard.SendText(legacySendText[modifierStart..]);
-                break;
+                throw UnsupportedSyntax(legacySendText[modifierStart..], "modifier prefix is missing a target key");
             }
 
             if (modifiers.Count == 0 && legacySendText[index] != '{')
@@ -86,16 +90,13 @@ internal sealed class LegacySendOutput : IMacroOutput
             {
                 var close = legacySendText.IndexOf('}', index + 1);
                 if (close < 0)
-                {
-                    _keyboard.SendText(legacySendText[modifierStart..]);
-                    break;
-                }
+                    throw UnsupportedSyntax(legacySendText[modifierStart..], "unterminated brace token");
 
                 var token = legacySendText.AsSpan(index + 1, close - index - 1);
                 if (WindowsKeyMap.TryResolveNamedKey(token, out var namedKey))
                     SendKeyWithModifiers(namedKey, modifiers);
-                else
-                    _keyboard.SendText(legacySendText[modifierStart..(close + 1)]);
+                else if (!TrySendSpecialToken(token, modifiers))
+                    throw UnsupportedSyntax(legacySendText[modifierStart..(close + 1)], "unknown brace token");
 
                 index = close + 1;
                 continue;
@@ -105,7 +106,7 @@ internal sealed class LegacySendOutput : IMacroOutput
             if (WindowsKeyMap.TryResolveCharacter(character, out var characterKey))
                 SendKeyWithModifiers(characterKey, modifiers);
             else
-                _keyboard.SendText(legacySendText[modifierStart..(index + 1)]);
+                throw UnsupportedSyntax(legacySendText[modifierStart..(index + 1)], "modifier target cannot be mapped to a keyboard key");
             index++;
         }
 
@@ -163,6 +164,37 @@ internal sealed class LegacySendOutput : IMacroOutput
                 _keyboard.SendKey(WindowsKeyMap.Keyboard(modifiers[index]), KeyEventKind.Up);
         }
     }
+
+    private bool TrySendSpecialToken(ReadOnlySpan<char> token, IReadOnlyList<ushort> modifiers)
+    {
+        if (!token.StartsWith("Click,", StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        if (_desktop is null)
+            throw UnsupportedSyntax($"{{{token.ToString()}}}", "Click token requires a desktop backend");
+
+        var wheel = token[6..].Trim();
+        var controlModifier = modifiers.Count == 1 && modifiers[0] == WindowsKeyMap.Control;
+        if (modifiers.Count != 0 && !controlModifier)
+            throw UnsupportedSyntax($"{{{token.ToString()}}}", "hotkeySKG only uses Click wheel tokens with an optional Control prefix");
+
+        if (wheel.Equals("WU", StringComparison.OrdinalIgnoreCase))
+        {
+            _desktop.ScrollVertical(120, controlModifier);
+            return true;
+        }
+
+        if (wheel.Equals("WD", StringComparison.OrdinalIgnoreCase))
+        {
+            _desktop.ScrollVertical(-120, controlModifier);
+            return true;
+        }
+
+        throw UnsupportedSyntax($"{{{token.ToString()}}}", "unsupported Click form");
+    }
+
+    private static InvalidDataException UnsupportedSyntax(string syntax, string reason)
+        => new($"Unsupported hotkeySKG legacy Send syntax '{syntax}': {reason}.");
 
     private static bool ContainsLegacySyntax(string value)
     {
