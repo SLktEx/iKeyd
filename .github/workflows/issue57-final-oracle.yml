@@ -110,7 +110,9 @@ jobs:
             --markdown (Join-Path $outputDir 'send-syntax-inventory.md')
           $data = Get-Content -LiteralPath $matrix -Raw | ConvertFrom-Json
           Write-Host "FINAL_MATRIX featureCount=$($data.summary.featureCount) unknownCount=$($data.summary.unknownCount) missingCount=$($data.summary.missingCount) scenarioCount=$($data.summary.scenarioCount) linkedScenarioCount=$($data.summary.linkedScenarioCount)"
-          $stale = Select-String -Path $matrix -Pattern 'deferred:#57|pending:#57' -SimpleMatch
+          if ([int]$data.summary.unknownCount -ne 0) { throw "Final matrix has $($data.summary.unknownCount) unknown entries." }
+          if ([int]$data.summary.missingCount -ne 0) { throw "Final matrix has $($data.summary.missingCount) missing entries." }
+          $stale = Select-String -Path $matrix -Pattern 'deferred:#57|pending:#57'
           if ($stale) { throw 'Final matrix still contains stale #57 handoff markers.' }
 
       - name: Download pinned AutoHotkey v1.1.16.05 interpreter
@@ -147,8 +149,18 @@ jobs:
           IKEYD_LEGACY_AHK: ${{ steps.source.outputs.path }}
           IKEYD_DIFFERENTIAL_REPORT_DIR: ${{ github.workspace }}\TestResults\legacy-differential\ahk-source
         run: |
-          dotnet test tests/iKeyd.Windows.Tests/iKeyd.Windows.Tests.csproj `
-            --no-restore --configuration Release --filter 'Category=HostedAhkSourceDifferentialE2E'
+          $args = @(
+            'test', 'tests/iKeyd.Windows.Tests/iKeyd.Windows.Tests.csproj',
+            '--no-restore', '--configuration', 'Release',
+            '--filter', 'Category=HostedAhkSourceDifferentialE2E'
+          )
+          & dotnet @args
+          if ($LASTEXITCODE -ne 0) {
+            Write-Warning 'AHK hosted differential failed once; retrying once to distinguish ephemeral runner/IME startup from a persistent mismatch.'
+            Start-Sleep -Seconds 2
+            & dotnet @args
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
 
       - name: Upload differential reports
         if: always()
@@ -168,4 +180,4 @@ jobs:
           if-no-files-found: warn
           retention-days: 30
 
-# rerun after S+Kana expected modifier identity was corrected to VK_A2
+# final gate: zero unknown/missing inventory entries and both pinned legacy oracles
