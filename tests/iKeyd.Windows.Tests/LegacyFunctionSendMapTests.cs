@@ -121,14 +121,16 @@ public sealed class LegacyFunctionSendMapTests
 
         var before = GC.GetAllocatedBytesForCurrentThread();
         string? last = null;
+        var allResolved = true;
         for (var i = 0; i < 10_000; i++)
         {
-            Assert.True(LegacyFunctionSendMap.TryResolve(KeyCode.Slash, state, out var output));
+            allResolved &= LegacyFunctionSendMap.TryResolve(KeyCode.Slash, state, out var output);
             last = output;
         }
         var allocated = GC.GetAllocatedBytesForCurrentThread() - before;
 
         GC.KeepAlive(last);
+        Assert.True(allResolved);
         Assert.Equal(0, allocated);
     }
 
