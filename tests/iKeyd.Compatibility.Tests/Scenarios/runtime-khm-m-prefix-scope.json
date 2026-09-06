@@ -1,6 +1,6 @@
 {
   "id": "runtime-khm-m-prefix-scope",
-  "description": "K+H+M with letter M probes whether the legacy Ctrl prefix remains held across {HOME}+{END}.",
+  "description": "K+H+M with letter M verifies that the legacy Ctrl prefix applies only to the first key in {HOME}+{END}.",
   "initialState": { "mode": "S", "ime": "off", "modifiers": [] },
   "input": [
     { "atMs": 0, "kind": "keyDown", "key": "KANA" },
@@ -18,11 +18,11 @@
       { "kind": "keyDown", "key": "CTRL" },
       { "kind": "keyDown", "key": "HOME" },
       { "kind": "keyUp", "key": "HOME" },
+      { "kind": "keyUp", "key": "CTRL" },
       { "kind": "keyDown", "key": "SHIFT" },
       { "kind": "keyDown", "key": "END" },
       { "kind": "keyUp", "key": "END" },
-      { "kind": "keyUp", "key": "SHIFT" },
-      { "kind": "keyUp", "key": "CTRL" }
+      { "kind": "keyUp", "key": "SHIFT" }
     ]
   },
   "tags": ["hosted-legacy", "hosted-legacy-runtime", "function-prefix", "long-tail"]
