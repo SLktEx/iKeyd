@@ -1,5 +1,6 @@
 using iKeyd.Core.Chords;
 using iKeyd.Core.Configuration;
+using iKeyd.Core.Desktop;
 using iKeyd.Core.Input;
 
 namespace iKeyd.App;
@@ -13,9 +14,10 @@ internal sealed class ConfiguredBehaviorKeyboardHandler : IKeyboardEventHandler
     public ConfiguredBehaviorKeyboardHandler(
         KeyBehaviorProfile profile,
         LegacySendOutput send,
+        IDesktopBackend desktop,
         IKeyboardEventHandler fallback)
     {
-        _configured = new ConfiguredBehaviorDispatcher(profile, send);
+        _configured = new ConfiguredBehaviorDispatcher(profile, send, desktop);
         _fallback = fallback ?? throw new ArgumentNullException(nameof(fallback));
     }
 
