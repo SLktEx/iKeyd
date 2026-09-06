@@ -25,6 +25,7 @@ internal static class IKeydDslDocumentParser
             parsed.Clipboard,
             state.Profile);
         ValidateCompileTimeBehaviorInvocations(profile, sourcePath);
+        ValidateLayerTargets(profile, sourcePath);
         return new IKeydDslDocument(profile, mouse.Profile, targets.Extensions);
     }
 
@@ -60,6 +61,29 @@ internal static class IKeydDslDocumentParser
                     throw new InvalidDataException(
                         $"{sourcePath}: invalid behavior '{mapping.Invocation.Name}' on {keymap.Name}.{mapping.Key}: {error.Message}",
                         error);
+                }
+            }
+        }
+    }
+
+    private static void ValidateLayerTargets(AutomationProfile profile, string sourcePath)
+    {
+        foreach (var keymap in profile.Keymaps.Values)
+        {
+            foreach (var mapping in keymap.BehaviorMappings)
+            {
+                var helper = mapping.Invocation.Name.ToUpperInvariant();
+                if (helper is not ("LT" or "MO" or "TG" or "TO") ||
+                    mapping.Invocation.Arguments.Count < 1)
+                {
+                    continue;
+                }
+
+                var layer = mapping.Invocation.Arguments[0];
+                if (!profile.Keymaps.ContainsKey(layer))
+                {
+                    throw new InvalidDataException(
+                        $"{sourcePath}: {helper} on {keymap.Name}.{mapping.Key} references unknown layer '{layer}'.");
                 }
             }
         }
