@@ -1,6 +1,6 @@
 {
   "id": "runtime-mouse-move-left-30-ms-d-j",
-  "description": "Holding D in Space-then-M mouse mode changes J movement to 30 pixels left.",
+  "description": "Holding D selects the medium continuous mouse curve; a short J tap still nudges exactly one pixel left.",
   "initialState": { "mode": "S", "ime": "off", "layers": ["S", "M"] },
   "input": [
     { "atMs": 10, "kind": "keyDown", "key": "D" },
@@ -9,7 +9,7 @@
     { "atMs": 30, "kind": "keyUp", "key": "D" }
   ],
   "expected": {
-    "actions": [ { "kind": "mouse", "value": "move-by:-30,0" } ]
+    "actions": [ { "kind": "mouse", "value": "move-by:-1,0" } ]
   },
-  "tags": ["legacy", "runtime-long-tail", "mouse", "input-state", "deterministic"]
+  "tags": ["runtime-long-tail", "mouse", "input-state", "deterministic", "intentional-difference", "issue-133"]
 }

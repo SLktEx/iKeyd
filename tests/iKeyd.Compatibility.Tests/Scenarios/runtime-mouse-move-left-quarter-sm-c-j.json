@@ -1,6 +1,6 @@
 {
   "id": "runtime-mouse-move-left-quarter-sm-c-j",
-  "description": "Holding C in Space-then-M mouse mode changes J movement to one work-area quarter left.",
+  "description": "Holding C selects the fast continuous mouse curve; a short J tap still nudges exactly one pixel left instead of jumping a quarter screen.",
   "initialState": { "mode": "S", "ime": "off", "layers": ["S", "M"] },
   "input": [
     { "atMs": 10, "kind": "keyDown", "key": "C" },
@@ -8,6 +8,6 @@
     { "atMs": 21, "kind": "keyUp", "key": "J" },
     { "atMs": 30, "kind": "keyUp", "key": "C" }
   ],
-  "expected": { "actions": [ { "kind": "mouse", "value": "move-by:-480,0" } ] },
-  "tags": ["legacy", "runtime-long-tail", "mouse", "input-state", "deterministic"]
+  "expected": { "actions": [ { "kind": "mouse", "value": "move-by:-1,0" } ] },
+  "tags": ["runtime-long-tail", "mouse", "input-state", "deterministic", "intentional-difference", "issue-133"]
 }

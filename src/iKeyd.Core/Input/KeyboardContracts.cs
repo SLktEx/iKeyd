@@ -32,6 +32,15 @@ public interface IKeyboardEventHandler
     KeyboardDisposition OnKeyboardEvent(KeyboardEvent keyboardEvent);
 }
 
+/// <summary>
+/// Implemented by stateful input handlers that can discard transient physical-input
+/// state after suspension, hook failure, or another lifecycle discontinuity.
+/// </summary>
+public interface IInputStateResettable
+{
+    void ResetInputState();
+}
+
 public interface IKeyboardInputSource
 {
     bool IsRunning { get; }

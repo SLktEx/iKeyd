@@ -164,14 +164,18 @@ public sealed class WindowsKeyboardHook : IKeyboardInputSource, IDisposable
             if (hook != 0)
                 NativeMethods.UnhookWindowsHookEx(hook);
 
+            IKeyboardEventHandler? handler;
             lock (_lifecycleGate)
             {
+                handler = _handler;
                 _hookHandle = 0;
                 _hookThreadId = 0;
                 _hookThread = null;
                 _handler = null;
                 _started = null;
             }
+
+            TryResetHandler(handler);
             _state.Clear();
         }
     }
@@ -213,7 +217,26 @@ public sealed class WindowsKeyboardHook : IKeyboardInputSource, IDisposable
         }
         catch
         {
+            // A stateful handler can fail after mutating only half of a transition.
+            // Do not leave a stuck layer/modifier behind just because the hook must
+            // fail open for this event.
+            TryResetHandler(handler);
             return NativeMethods.CallNextHookEx(_hookHandle, code, wParam, lParam);
+        }
+    }
+
+    private static void TryResetHandler(IKeyboardEventHandler? handler)
+    {
+        if (handler is not IInputStateResettable resettable)
+            return;
+
+        try
+        {
+            resettable.ResetInputState();
+        }
+        catch
+        {
+            // Recovery itself must never take down the low-level hook.
         }
     }
 

@@ -25,6 +25,15 @@ public sealed class WindowsKeyboardOutputTests
     }
 
     [Fact]
+    public void Combined_vk_sc_legacy_key_uses_the_pair_preserving_compatibility_path()
+    {
+        Assert.True(WindowsKeyboardOutput.UsesCombinedVirtualScanPath(new KeyboardKey(0xF3, 0x29)));
+        Assert.True(WindowsKeyboardOutput.UsesCombinedVirtualScanPath(new KeyboardKey(0x1C, 0x79)));
+        Assert.False(WindowsKeyboardOutput.UsesCombinedVirtualScanPath(new KeyboardKey(0x41, 0)));
+        Assert.False(WindowsKeyboardOutput.UsesCombinedVirtualScanPath(new KeyboardKey(0, 0x1E)));
+    }
+
+    [Fact]
     public void Extended_key_up_sets_extended_and_keyup_flags()
     {
         var input = WindowsKeyboardOutput.BuildKeyInput(new KeyboardKey(0x25, 0x4B, true), KeyEventKind.Up);

@@ -10,8 +10,10 @@ using iKeyd.Windows.Input;
 
 namespace iKeyd.App;
 
-internal sealed class IKeydRuntimeHandler : IKeyboardEventHandler, IMacroActionDispatcher, IDisposable
+internal sealed class IKeydRuntimeHandler : IKeyboardEventHandler, IInputStateResettable, IMacroActionDispatcher, IDisposable
 {
+    private static readonly ushort[] NoModifiers = [];
+
     private readonly object _gate = new();
     private readonly IKeydConfiguration _configuration;
     private readonly IInputMethod _inputMethod;
@@ -24,7 +26,9 @@ internal sealed class IKeydRuntimeHandler : IKeyboardEventHandler, IMacroActionD
     private readonly ChordEngine<string> _sEngine;
     private readonly ChordEngine<string> _kEngine;
     private readonly HashSet<ushort> _suppressedKeys = new(64);
+    private readonly Dictionary<ushort, LayerEvent> _heldLayerPresses = new(4);
     private readonly Timer _chordTimer;
+    private readonly KeyboardMouseMotion _mouseMotion;
 
     private ILegacyMacroSlotActions? _macroSlots;
     private InputModeState _mode;
@@ -53,6 +57,7 @@ internal sealed class IKeydRuntimeHandler : IKeyboardEventHandler, IMacroActionD
         _kEngine = new ChordEngine<string>(configuration.KKeymap, configuration.ChordWindowMs);
         _mode = InputModeState.Initial.SwitchTo(configuration.StartupMode);
         _chordTimer = new Timer(OnChordTimeout, null, Timeout.Infinite, Timeout.Infinite);
+        _mouseMotion = new KeyboardMouseMotion(desktop, keyboardState);
     }
 
     public InputModeState Mode
@@ -107,6 +112,12 @@ internal sealed class IKeydRuntimeHandler : IKeyboardEventHandler, IMacroActionD
             if (TryHandleLayerKey(keyboardEvent))
                 return KeyboardDisposition.Suppress;
 
+            if (keyboardEvent.Kind == KeyEventKind.Up && _mouseMotion.TryRelease(keyboardEvent.Key.VirtualKey))
+            {
+                _suppressedKeys.Remove(keyboardEvent.Key.VirtualKey);
+                return KeyboardDisposition.Suppress;
+            }
+
             if (keyboardEvent.Kind == KeyEventKind.Up)
                 return _suppressedKeys.Remove(keyboardEvent.Key.VirtualKey)
                     ? KeyboardDisposition.Suppress
@@ -143,9 +154,9 @@ internal sealed class IKeydRuntimeHandler : IKeyboardEventHandler, IMacroActionD
 
             var engine = GetEngine(route.Keymap.Value);
             if (engine.TryAdvanceTo(keyboardEvent.TimestampMs, out var timedOutOutput))
-                _send.Send(timedOutOutput);
+                SendKeymapOutput(timedOutOutput);
             if (engine.TryOnKeyDown(keyId.Value, keyboardEvent.TimestampMs, out var output))
-                _send.Send(output);
+                SendKeymapOutput(output);
 
             if (engine.State == ChordEngineState.PendingSingle)
                 ScheduleTimeout(route.Keymap.Value);
@@ -193,6 +204,16 @@ internal sealed class IKeydRuntimeHandler : IKeyboardEventHandler, IMacroActionD
         return ValueTask.CompletedTask;
     }
 
+    public void ResetInputState()
+    {
+        lock (_gate)
+        {
+            if (_disposed)
+                return;
+            ResetInputStateCore();
+        }
+    }
+
     public void Dispose()
     {
         ILegacyMacroSlotActions? slots;
@@ -200,44 +221,103 @@ internal sealed class IKeydRuntimeHandler : IKeyboardEventHandler, IMacroActionD
         {
             if (_disposed)
                 return;
+            ResetInputStateCore();
             _disposed = true;
             slots = _macroSlots;
-            CancelTimeout();
-            _sEngine.Cancel();
-            _kEngine.Cancel();
-            _suppressedKeys.Clear();
         }
         slots?.Cancel();
+        _mouseMotion.Dispose();
         _chordTimer.Dispose();
+    }
+
+    private void ResetInputStateCore()
+    {
+        CancelTimeout();
+        _sEngine.Cancel();
+        _kEngine.Cancel();
+        _layers = LayerRuntimeState.Empty;
+        _heldLayerPresses.Clear();
+        _suppressedKeys.Clear();
+        _mouseMotion.Reset();
     }
 
     private bool TryHandleLayerKey(KeyboardEvent keyboardEvent)
     {
-        var altPressed = _keyboardState.IsVirtualKeyPressed(WindowsKeyMap.Alt);
-        LayerEvent? layerEvent = keyboardEvent.Key.VirtualKey switch
-        {
-            WindowsKeyMap.NonConvert => keyboardEvent.Kind == KeyEventKind.Down ? LayerEvent.MDown : LayerEvent.MUp,
-            WindowsKeyMap.Convert when altPressed => keyboardEvent.Kind == KeyEventKind.Down ? LayerEvent.AltHDown : LayerEvent.AltHUp,
-            WindowsKeyMap.Convert => keyboardEvent.Kind == KeyEventKind.Down ? LayerEvent.HDown : LayerEvent.HUp,
-            WindowsKeyMap.Space when altPressed => keyboardEvent.Kind == KeyEventKind.Down ? LayerEvent.AltSpaceDown : LayerEvent.AltSpaceUp,
-            WindowsKeyMap.Space => keyboardEvent.Kind == KeyEventKind.Down ? LayerEvent.SpaceDown : LayerEvent.SpaceUp,
-            WindowsKeyMap.Kana when keyboardEvent.Kind == KeyEventKind.Down && altPressed => LayerEvent.AltKanaDown,
-            WindowsKeyMap.Kana when keyboardEvent.Kind == KeyEventKind.Down => LayerEvent.KanaDown,
-            _ => null
-        };
-
-        if (keyboardEvent.Key.VirtualKey == WindowsKeyMap.Kana && keyboardEvent.Kind == KeyEventKind.Up)
-            return true;
-        if (layerEvent is null)
+        var virtualKey = keyboardEvent.Key.VirtualKey;
+        if (!IsLayerTrigger(virtualKey))
             return false;
 
+        if (keyboardEvent.Kind == KeyEventKind.Down)
+        {
+            // Low-level keyboard hooks receive repeated Down events while a key is
+            // held. A layer press is an edge, not a repeatable action. Reapplying
+            // MDown/SpaceDown used to reset Consumed and KanaDown could even toggle
+            // K repeatedly, eventually corrupting the state machine.
+            if (_heldLayerPresses.ContainsKey(virtualKey))
+                return true;
+
+            var pressEvent = ResolveLayerPress(virtualKey);
+            _heldLayerPresses.Add(virtualKey, pressEvent);
+            ApplyLayerEvent(pressEvent);
+            return true;
+        }
+
+        // Release must match the variant selected at key-down. Recomputing from
+        // the current Alt state means Alt+Convert followed by Alt-up, Convert-up
+        // incorrectly becomes HUp instead of AltHUp and can leave A/H stuck.
+        if (!_heldLayerPresses.Remove(virtualKey, out var originalPress))
+            return true;
+
+        var releaseEvent = ResolveLayerRelease(originalPress);
+        if (releaseEvent is { } value)
+            ApplyLayerEvent(value);
+        return true;
+    }
+
+    private void ApplyLayerEvent(LayerEvent layerEvent)
+    {
         FlushAllPending();
-        var transition = LayerStateMachine.Apply(_layers, layerEvent.Value);
+        var transition = LayerStateMachine.Apply(_layers, layerEvent);
         _layers = transition.State;
         foreach (var action in transition.Actions)
             SendLayerAction(action);
-        return true;
     }
+
+    private LayerEvent ResolveLayerPress(ushort virtualKey)
+    {
+        var altPressed = IsAltPressed();
+        return virtualKey switch
+        {
+            WindowsKeyMap.NonConvert => LayerEvent.MDown,
+            WindowsKeyMap.Convert when altPressed => LayerEvent.AltHDown,
+            WindowsKeyMap.Convert => LayerEvent.HDown,
+            WindowsKeyMap.Space when altPressed => LayerEvent.AltSpaceDown,
+            WindowsKeyMap.Space => LayerEvent.SpaceDown,
+            WindowsKeyMap.Kana when altPressed => LayerEvent.AltKanaDown,
+            WindowsKeyMap.Kana => LayerEvent.KanaDown,
+            _ => throw new ArgumentOutOfRangeException(nameof(virtualKey))
+        };
+    }
+
+    private static LayerEvent? ResolveLayerRelease(LayerEvent pressEvent)
+        => pressEvent switch
+        {
+            LayerEvent.MDown => LayerEvent.MUp,
+            LayerEvent.HDown => LayerEvent.HUp,
+            LayerEvent.AltHDown => LayerEvent.AltHUp,
+            LayerEvent.SpaceDown => LayerEvent.SpaceUp,
+            LayerEvent.AltSpaceDown => LayerEvent.AltSpaceUp,
+            LayerEvent.KanaDown or LayerEvent.AltKanaDown => null,
+            _ => null
+        };
+
+    private bool IsAltPressed()
+        => _keyboardState.IsVirtualKeyPressed(WindowsKeyMap.Alt) ||
+           _keyboardState.IsVirtualKeyPressed(0xA4) ||
+           _keyboardState.IsVirtualKeyPressed(0xA5);
+
+    private static bool IsLayerTrigger(ushort virtualKey)
+        => virtualKey is WindowsKeyMap.NonConvert or WindowsKeyMap.Convert or WindowsKeyMap.Space or WindowsKeyMap.Kana;
 
     private bool DispatchLayeredKey(KeyId key, ushort virtualKey)
     {
@@ -291,7 +371,7 @@ internal sealed class IKeydRuntimeHandler : IKeyboardEventHandler, IMacroActionD
             return true;
         }
         if (state.IsExact(LayerKey.S, LayerKey.M))
-            return DispatchMouseMedia(key);
+            return DispatchMouseMedia(key, virtualKey);
 
         return DispatchFunctionKey(key, state);
     }
@@ -494,26 +574,16 @@ internal sealed class IKeydRuntimeHandler : IKeyboardEventHandler, IMacroActionD
         }
     }
 
-    private bool DispatchMouseMedia(KeyId key)
+    private bool DispatchMouseMedia(KeyId key, ushort virtualKey)
     {
-        var amount = GetMouseMoveAmount();
+        if (_mouseMotion.TryStart(key, virtualKey))
+            return true;
+
         switch (key.Code)
         {
             case KeyCode.D:
             case KeyCode.E:
             case KeyCode.C:
-                return true;
-            case KeyCode.J:
-                _desktop.MovePointerBy(-amount, 0);
-                return true;
-            case KeyCode.K:
-                _desktop.MovePointerBy(0, amount);
-                return true;
-            case KeyCode.L:
-                _desktop.MovePointerBy(amount, 0);
-                return true;
-            case KeyCode.I:
-                _desktop.MovePointerBy(0, -amount);
                 return true;
             case KeyCode.U:
                 _desktop.Click(DesktopMouseButton.Left);
@@ -585,17 +655,6 @@ internal sealed class IKeydRuntimeHandler : IKeyboardEventHandler, IMacroActionD
             : new DesktopPoint(bounds.X + 1, bounds.Y + 1));
     }
 
-    private int GetMouseMoveAmount()
-    {
-        if (_keyboardState.IsVirtualKeyPressed((ushort)'D'))
-            return 30;
-        if (_keyboardState.IsVirtualKeyPressed((ushort)'E'))
-            return 10;
-        if (_keyboardState.IsVirtualKeyPressed((ushort)'C'))
-            return Math.Max(1, _desktop.GetPrimaryWorkArea().Width / 4);
-        return 100;
-    }
-
     private void SendLayerAction(LayerAction action)
     {
         switch (action)
@@ -628,15 +687,41 @@ internal sealed class IKeydRuntimeHandler : IKeyboardEventHandler, IMacroActionD
         }
     }
 
+    private void SendKeymapOutput(string output)
+    {
+        if (output.Length == 0)
+            return;
+
+        // S/K map values are romaji intended for the active Japanese IME. The old
+        // path used SendText(), which becomes KEYEVENTF_UNICODE and therefore
+        // bypasses IME composition entirely ("fa" stays literal "fa"). When the
+        // complete output is representable as ordinary JIS keys, inject key presses
+        // instead. Legacy tokens / uncommon symbols retain the existing parser.
+        foreach (var character in output)
+        {
+            if (!WindowsKeyMap.TryResolveCharacter(character, out _))
+            {
+                _send.Send(output);
+                return;
+            }
+        }
+
+        foreach (var character in output)
+        {
+            WindowsKeyMap.TryResolveCharacter(character, out var key);
+            _send.SendChord(NoModifiers, key.VirtualKey);
+        }
+    }
+
     private ChordEngine<string> GetEngine(KeymapMode mode)
         => mode == KeymapMode.S ? _sEngine : _kEngine;
 
     private void FlushAllPending()
     {
         if (_sEngine.TryFlush(out var sOutput))
-            _send.Send(sOutput);
+            SendKeymapOutput(sOutput);
         if (_kEngine.TryFlush(out var kOutput))
-            _send.Send(kOutput);
+            SendKeymapOutput(kOutput);
         CancelTimeout();
     }
 
@@ -672,7 +757,7 @@ internal sealed class IKeydRuntimeHandler : IKeyboardEventHandler, IMacroActionD
             _timerMode = null;
             _timerDueAt = 0;
             if (GetEngine(mode).TryFlush(out var output))
-                _send.Send(output);
+                SendKeymapOutput(output);
         }
     }
 

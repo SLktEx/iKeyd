@@ -11,7 +11,7 @@ namespace iKeyd.App;
 /// the legacy runtime unless a configured behavior or an active named behavior
 /// layer consumes the event.
 /// </summary>
-internal sealed class BehaviorWindowsInputRouter : IKeyboardEventHandler, IDisposable
+internal sealed class BehaviorWindowsInputRouter : IKeyboardEventHandler, IInputStateResettable, IDisposable
 {
     private readonly object _gate = new();
     private readonly AutomationProfile _profile;
@@ -71,21 +71,37 @@ internal sealed class BehaviorWindowsInputRouter : IKeyboardEventHandler, IDispo
         }
     }
 
+    public void ResetInputState()
+    {
+        lock (_gate)
+        {
+            if (!_disposed)
+                ResetLocalState();
+        }
+
+        if (_fallback is IInputStateResettable resettable)
+            resettable.ResetInputState();
+    }
+
     public void Dispose()
     {
         lock (_gate)
         {
             if (_disposed)
                 return;
+            ResetLocalState();
             _disposed = true;
-
-            foreach (var runtime in _behaviorRuntimes.Values)
-                ApplyActions(runtime.CancelAll());
-
-            _activeBehaviorKeys.Clear();
-            _layerMappedKeys.Clear();
-            _activeLayers.Clear();
         }
+    }
+
+    private void ResetLocalState()
+    {
+        foreach (var runtime in _behaviorRuntimes.Values)
+            ApplyActions(runtime.CancelAll());
+
+        _activeBehaviorKeys.Clear();
+        _layerMappedKeys.Clear();
+        _activeLayers.Clear();
     }
 
     private KeyboardDisposition HandleKeyDown(KeyboardEvent keyboardEvent, KeyId keyId)

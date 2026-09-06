@@ -8,7 +8,7 @@ namespace iKeyd.App;
 /// router. While suspended, physical input passes through unchanged and only the
 /// suspend hotkey itself remains active so the user can resume processing.
 /// </summary>
-internal sealed class LegacySuspendToggleHandler : IKeyboardEventHandler
+internal sealed class LegacySuspendToggleHandler : IKeyboardEventHandler, IInputStateResettable
 {
     private const ushort LeftControl = 0xA2;
     private const ushort RightControl = 0xA3;
@@ -39,6 +39,7 @@ internal sealed class LegacySuspendToggleHandler : IKeyboardEventHandler
         if (keyboardEvent.Origin != KeyEventOrigin.Physical)
             return _inner.OnKeyboardEvent(keyboardEvent);
 
+        var resetInner = false;
         lock (_gate)
         {
             if (keyboardEvent.Key.VirtualKey == WindowsKeyMap.Escape)
@@ -53,15 +54,34 @@ internal sealed class LegacySuspendToggleHandler : IKeyboardEventHandler
                 {
                     _suspended = !_suspended;
                     _suppressEscapeUp = true;
-                    return KeyboardDisposition.Suppress;
+                    resetInner = true;
                 }
             }
 
-            if (_suspended)
+            if (!resetInner && _suspended)
                 return KeyboardDisposition.PassThrough;
         }
 
+        if (resetInner)
+        {
+            ResetInner();
+            return KeyboardDisposition.Suppress;
+        }
+
         return _inner.OnKeyboardEvent(keyboardEvent);
+    }
+
+    public void ResetInputState()
+    {
+        lock (_gate)
+            _suppressEscapeUp = false;
+        ResetInner();
+    }
+
+    private void ResetInner()
+    {
+        if (_inner is IInputStateResettable resettable)
+            resettable.ResetInputState();
     }
 
     private bool IsControlPressed()
