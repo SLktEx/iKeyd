@@ -1,9 +1,9 @@
 namespace iKeyd.Core.Chords;
 
 /// <summary>
-/// Compact identities for keys that can occur on the normal iKeyd input path.
-/// Values are intentionally dense so later generated lookup tables can index by
-/// the numeric code directly.
+/// Dense, target-neutral identities for physical keys that can occur on the
+/// normal iKeyd input path. Values stay contiguous so generated keymap tables
+/// can index by the numeric code directly.
 /// </summary>
 public enum KeyCode : ushort
 {
@@ -56,12 +56,87 @@ public enum KeyCode : ushort
     F10,
     F11,
     F12,
+
+    // JIS punctuation positions. These names identify physical positions, not
+    // whichever character the active keyboard layout happens to produce.
     SColon,
     Colon,
     Comma,
     Dot,
     Slash,
     At,
+    Minus,
+    Caret,
+    Yen,
+    LBracket,
+    RBracket,
+    Ro,
+
+    // Ordinary/JIS control surface.
+    Space,
+    Tab,
+    Enter,
+    Backspace,
+    Escape,
+    CapsLock,
+    Kana,
+    Convert,
+    NonConvert,
+    HankakuZenkaku,
+
+    // Navigation/editing.
+    Insert,
+    Delete,
+    Home,
+    End,
+    PageUp,
+    PageDown,
+    Left,
+    Up,
+    Right,
+    Down,
+
+    // Sided modifiers/system keys.
+    LeftShift,
+    RightShift,
+    LeftCtrl,
+    RightCtrl,
+    LeftAlt,
+    RightAlt,
+    LeftWin,
+    RightWin,
+    Apps,
+    PrintScreen,
+    ScrollLock,
+    Pause,
+
+    // Numpad. Main number-row identities intentionally remain Digit0..Digit9.
+    NumLock,
+    Numpad0,
+    Numpad1,
+    Numpad2,
+    Numpad3,
+    Numpad4,
+    Numpad5,
+    Numpad6,
+    Numpad7,
+    Numpad8,
+    Numpad9,
+    NumpadDecimal,
+    NumpadDivide,
+    NumpadMultiply,
+    NumpadSubtract,
+    NumpadAdd,
+    NumpadEnter,
+
+    // Keyboard multimedia keys supported by the Windows backend. They are not
+    // part of the 109-key physical geometry but share the same semantic key id.
+    VolumeUp,
+    VolumeDown,
+    VolumeMute,
+    MediaPlayPause,
+    MediaNext,
+    MediaPrevious,
 
     // Migration/import tooling may still carry arbitrary AHK identifiers. They
     // stay supported without making ordinary keyboard events string-backed.
@@ -70,6 +145,8 @@ public enum KeyCode : ushort
 
 public readonly struct KeyId : IEquatable<KeyId>, IComparable<KeyId>
 {
+    public const KeyCode LastCompactCode = KeyCode.MediaPrevious;
+
     private readonly string? _customValue;
 
     public KeyId(KeyCode code)
@@ -100,10 +177,10 @@ public readonly struct KeyId : IEquatable<KeyId>, IComparable<KeyId>
     }
 
     public KeyCode Code { get; }
-    public bool IsCompact => Code != KeyCode.Custom;
+    public bool IsCompact => IsCompactCode(Code);
 
     /// <summary>
-    /// Human-readable compatibility name. Compact keys return string literals;
+    /// Human-readable canonical authoring name. Compact keys return stable names;
     /// the hot input path should use <see cref="Code"/> instead.
     /// </summary>
     public string Value => Code == KeyCode.Custom
@@ -167,7 +244,7 @@ public readonly struct KeyId : IEquatable<KeyId>, IComparable<KeyId>
     public static implicit operator KeyId(KeyCode code) => new(code);
 
     private static bool IsCompactCode(KeyCode code)
-        => code is >= KeyCode.A and <= KeyCode.At;
+        => code is >= KeyCode.A and <= LastCompactCode;
 
     private static bool TryParseCompactNormalized(string normalized, out KeyCode code)
     {
@@ -197,76 +274,164 @@ public readonly struct KeyId : IEquatable<KeyId>, IComparable<KeyId>
 
         code = normalized switch
         {
-            "SCOLON" => KeyCode.SColon,
+            "SCOLON" or "SEMICOLON" => KeyCode.SColon,
             "COLON" => KeyCode.Colon,
             "COMMA" => KeyCode.Comma,
-            "DOT" => KeyCode.Dot,
+            "DOT" or "PERIOD" => KeyCode.Dot,
             "SLASH" => KeyCode.Slash,
             "AT" => KeyCode.At,
+            "MINUS" => KeyCode.Minus,
+            "CARET" or "HAT" => KeyCode.Caret,
+            "YEN" or "BACKSLASH" => KeyCode.Yen,
+            "LBRACKET" or "LEFTBRACKET" => KeyCode.LBracket,
+            "RBRACKET" or "RIGHTBRACKET" => KeyCode.RBracket,
+            "RO" or "OEM102" => KeyCode.Ro,
+
+            "SPACE" => KeyCode.Space,
+            "TAB" => KeyCode.Tab,
+            "ENTER" or "RETURN" => KeyCode.Enter,
+            "BS" or "BACKSPACE" => KeyCode.Backspace,
+            "ESC" or "ESCAPE" => KeyCode.Escape,
+            "CAPS" or "CAPSLOCK" => KeyCode.CapsLock,
+            "KANA" or "HIRAGANA" or "KATAKANAHIRAGANA" or "KATAKANAHIRAGANAROMAJI" => KeyCode.Kana,
+            "CONVERT" or "HENKAN" => KeyCode.Convert,
+            "NONCONVERT" or "MUHENKAN" => KeyCode.NonConvert,
+            "HANKAKUZENKAKU" or "ZENKAKUHANKAKU" => KeyCode.HankakuZenkaku,
+
+            "INS" or "INSERT" => KeyCode.Insert,
+            "DEL" or "DELETE" => KeyCode.Delete,
+            "HOME" => KeyCode.Home,
+            "END" => KeyCode.End,
+            "PGUP" or "PAGEUP" => KeyCode.PageUp,
+            "PGDN" or "PAGEDOWN" => KeyCode.PageDown,
+            "LEFT" or "ARROWLEFT" => KeyCode.Left,
+            "UP" or "ARROWUP" => KeyCode.Up,
+            "RIGHT" or "ARROWRIGHT" => KeyCode.Right,
+            "DOWN" or "ARROWDOWN" => KeyCode.Down,
+
+            "SHIFT" or "LSHIFT" or "LEFTSHIFT" => KeyCode.LeftShift,
+            "RSHIFT" or "RIGHTSHIFT" => KeyCode.RightShift,
+            "CTRL" or "CONTROL" or "LCTRL" or "LCONTROL" or "LEFTCTRL" or "LEFTCONTROL" => KeyCode.LeftCtrl,
+            "RCTRL" or "RCONTROL" or "RIGHTCTRL" or "RIGHTCONTROL" => KeyCode.RightCtrl,
+            "ALT" or "LALT" or "LEFTALT" => KeyCode.LeftAlt,
+            "RALT" or "RIGHTALT" or "ALTGR" => KeyCode.RightAlt,
+            "WIN" or "GUI" or "LWIN" or "LEFTWIN" => KeyCode.LeftWin,
+            "RWIN" or "RIGHTWIN" => KeyCode.RightWin,
+            "APPS" or "APPSKEY" or "MENU" => KeyCode.Apps,
+            "PRINTSCREEN" or "PRTSC" or "PRTSCN" => KeyCode.PrintScreen,
+            "SCROLLLOCK" or "SCROLL" => KeyCode.ScrollLock,
+            "PAUSE" or "BREAK" => KeyCode.Pause,
+
+            "NUMLOCK" => KeyCode.NumLock,
+            "NUMPAD0" => KeyCode.Numpad0,
+            "NUMPAD1" => KeyCode.Numpad1,
+            "NUMPAD2" => KeyCode.Numpad2,
+            "NUMPAD3" => KeyCode.Numpad3,
+            "NUMPAD4" => KeyCode.Numpad4,
+            "NUMPAD5" => KeyCode.Numpad5,
+            "NUMPAD6" => KeyCode.Numpad6,
+            "NUMPAD7" => KeyCode.Numpad7,
+            "NUMPAD8" => KeyCode.Numpad8,
+            "NUMPAD9" => KeyCode.Numpad9,
+            "NUMPADDECIMAL" or "NUMPADDOT" => KeyCode.NumpadDecimal,
+            "NUMPADDIVIDE" or "NUMPADSLASH" => KeyCode.NumpadDivide,
+            "NUMPADMULTIPLY" or "NUMPADASTERISK" => KeyCode.NumpadMultiply,
+            "NUMPADSUBTRACT" or "NUMPADMINUS" => KeyCode.NumpadSubtract,
+            "NUMPADADD" or "NUMPADPLUS" => KeyCode.NumpadAdd,
+            "NUMPADENTER" => KeyCode.NumpadEnter,
+
+            "VOLUMEUP" or "VOLUME_UP" => KeyCode.VolumeUp,
+            "VOLUMEDOWN" or "VOLUME_DOWN" => KeyCode.VolumeDown,
+            "VOLUMEMUTE" or "VOLUME_MUTE" => KeyCode.VolumeMute,
+            "MEDIAPLAYPAUSE" or "MEDIA_PLAY_PAUSE" => KeyCode.MediaPlayPause,
+            "MEDIANEXT" or "MEDIA_NEXT" => KeyCode.MediaNext,
+            "MEDIAPREV" or "MEDIAPREVIOUS" or "MEDIA_PREV" or "MEDIA_PREVIOUS" => KeyCode.MediaPrevious,
             _ => KeyCode.None
         };
         return code != KeyCode.None;
     }
 
     private static string GetCompactName(KeyCode code)
-        => code switch
+    {
+        if (code is >= KeyCode.A and <= KeyCode.Z)
+            return ((char)('A' + (int)code - (int)KeyCode.A)).ToString();
+        if (code is >= KeyCode.Digit0 and <= KeyCode.Digit9)
+            return ((char)('0' + (int)code - (int)KeyCode.Digit0)).ToString();
+        if (code is >= KeyCode.F1 and <= KeyCode.F12)
+            return $"F{1 + (int)code - (int)KeyCode.F1}";
+
+        return code switch
         {
-            KeyCode.A => "A",
-            KeyCode.B => "B",
-            KeyCode.C => "C",
-            KeyCode.D => "D",
-            KeyCode.E => "E",
-            KeyCode.F => "F",
-            KeyCode.G => "G",
-            KeyCode.H => "H",
-            KeyCode.I => "I",
-            KeyCode.J => "J",
-            KeyCode.K => "K",
-            KeyCode.L => "L",
-            KeyCode.M => "M",
-            KeyCode.N => "N",
-            KeyCode.O => "O",
-            KeyCode.P => "P",
-            KeyCode.Q => "Q",
-            KeyCode.R => "R",
-            KeyCode.S => "S",
-            KeyCode.T => "T",
-            KeyCode.U => "U",
-            KeyCode.V => "V",
-            KeyCode.W => "W",
-            KeyCode.X => "X",
-            KeyCode.Y => "Y",
-            KeyCode.Z => "Z",
-            KeyCode.Digit0 => "0",
-            KeyCode.Digit1 => "1",
-            KeyCode.Digit2 => "2",
-            KeyCode.Digit3 => "3",
-            KeyCode.Digit4 => "4",
-            KeyCode.Digit5 => "5",
-            KeyCode.Digit6 => "6",
-            KeyCode.Digit7 => "7",
-            KeyCode.Digit8 => "8",
-            KeyCode.Digit9 => "9",
-            KeyCode.F1 => "F1",
-            KeyCode.F2 => "F2",
-            KeyCode.F3 => "F3",
-            KeyCode.F4 => "F4",
-            KeyCode.F5 => "F5",
-            KeyCode.F6 => "F6",
-            KeyCode.F7 => "F7",
-            KeyCode.F8 => "F8",
-            KeyCode.F9 => "F9",
-            KeyCode.F10 => "F10",
-            KeyCode.F11 => "F11",
-            KeyCode.F12 => "F12",
             KeyCode.SColon => "SCOLON",
             KeyCode.Colon => "COLON",
             KeyCode.Comma => "COMMA",
             KeyCode.Dot => "DOT",
             KeyCode.Slash => "SLASH",
             KeyCode.At => "AT",
+            KeyCode.Minus => "MINUS",
+            KeyCode.Caret => "CARET",
+            KeyCode.Yen => "YEN",
+            KeyCode.LBracket => "LBRACKET",
+            KeyCode.RBracket => "RBRACKET",
+            KeyCode.Ro => "RO",
+            KeyCode.Space => "SPACE",
+            KeyCode.Tab => "TAB",
+            KeyCode.Enter => "ENTER",
+            KeyCode.Backspace => "BACKSPACE",
+            KeyCode.Escape => "ESCAPE",
+            KeyCode.CapsLock => "CAPSLOCK",
+            KeyCode.Kana => "KANA",
+            KeyCode.Convert => "CONVERT",
+            KeyCode.NonConvert => "NONCONVERT",
+            KeyCode.HankakuZenkaku => "HANKAKUZENKAKU",
+            KeyCode.Insert => "INSERT",
+            KeyCode.Delete => "DELETE",
+            KeyCode.Home => "HOME",
+            KeyCode.End => "END",
+            KeyCode.PageUp => "PAGEUP",
+            KeyCode.PageDown => "PAGEDOWN",
+            KeyCode.Left => "LEFT",
+            KeyCode.Up => "UP",
+            KeyCode.Right => "RIGHT",
+            KeyCode.Down => "DOWN",
+            KeyCode.LeftShift => "LSHIFT",
+            KeyCode.RightShift => "RSHIFT",
+            KeyCode.LeftCtrl => "LCTRL",
+            KeyCode.RightCtrl => "RCTRL",
+            KeyCode.LeftAlt => "LALT",
+            KeyCode.RightAlt => "RALT",
+            KeyCode.LeftWin => "LWIN",
+            KeyCode.RightWin => "RWIN",
+            KeyCode.Apps => "APPS",
+            KeyCode.PrintScreen => "PRINTSCREEN",
+            KeyCode.ScrollLock => "SCROLLLOCK",
+            KeyCode.Pause => "PAUSE",
+            KeyCode.NumLock => "NUMLOCK",
+            KeyCode.Numpad0 => "NUMPAD0",
+            KeyCode.Numpad1 => "NUMPAD1",
+            KeyCode.Numpad2 => "NUMPAD2",
+            KeyCode.Numpad3 => "NUMPAD3",
+            KeyCode.Numpad4 => "NUMPAD4",
+            KeyCode.Numpad5 => "NUMPAD5",
+            KeyCode.Numpad6 => "NUMPAD6",
+            KeyCode.Numpad7 => "NUMPAD7",
+            KeyCode.Numpad8 => "NUMPAD8",
+            KeyCode.Numpad9 => "NUMPAD9",
+            KeyCode.NumpadDecimal => "NUMPADDECIMAL",
+            KeyCode.NumpadDivide => "NUMPADDIVIDE",
+            KeyCode.NumpadMultiply => "NUMPADMULTIPLY",
+            KeyCode.NumpadSubtract => "NUMPADSUBTRACT",
+            KeyCode.NumpadAdd => "NUMPADADD",
+            KeyCode.NumpadEnter => "NUMPADENTER",
+            KeyCode.VolumeUp => "VOLUME_UP",
+            KeyCode.VolumeDown => "VOLUME_DOWN",
+            KeyCode.VolumeMute => "VOLUME_MUTE",
+            KeyCode.MediaPlayPause => "MEDIA_PLAY_PAUSE",
+            KeyCode.MediaNext => "MEDIA_NEXT",
+            KeyCode.MediaPrevious => "MEDIA_PREV",
             _ => throw new ArgumentOutOfRangeException(nameof(code), code, "Not a compact key code.")
         };
+    }
 }
 
 public readonly record struct ChordKey
