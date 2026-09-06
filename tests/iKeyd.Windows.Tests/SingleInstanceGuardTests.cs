@@ -12,6 +12,19 @@ public sealed class SingleInstanceGuardTests
     }
 
     [Fact]
+    public void NameEasterEggArgumentIsDetectedCaseInsensitively()
+    {
+        Assert.True(Program.IsNameEasterEggRequested(["--why-the-name"]));
+        Assert.True(Program.IsNameEasterEggRequested(["--WHY-THE-NAME"]));
+    }
+
+    [Fact]
+    public void UnrelatedArgumentsDoNotTriggerNameEasterEgg()
+    {
+        Assert.False(Program.IsNameEasterEggRequested(["--mode", "K"]));
+    }
+
+    [Fact]
     public void SecondConcurrentAcquisitionIsRejected()
     {
         var name = TestMutexName();
