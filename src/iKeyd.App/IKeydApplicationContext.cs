@@ -13,10 +13,9 @@ internal sealed class IKeydApplicationContext : ApplicationContext
     private readonly WindowsKeyboardBackend _keyboard;
     private readonly IKeydRuntimeHandler _runtime;
     private readonly BehaviorWindowsInputRouter _keyboardHandler;
-    private readonly LegacyContextualHotkeyHandler _contextualHotkeys;
     private readonly LegacySuspendToggleHandler _suspendHandler;
     private readonly WindowsClipboardService _clipboardService;
-    private readonly WindowsClipboardHistoryPersistence _clipboardPersistence;
+    private readonly WindowsClipboardHistoryPersistence? _clipboardPersistence;
     private readonly WindowsClipboardController _clipboard;
     private readonly NotifyIcon _notifyIcon;
     private readonly ContextMenuStrip _menu;
@@ -39,16 +38,24 @@ internal sealed class IKeydApplicationContext : ApplicationContext
         var desktop = new WindowsDesktopBackend();
         var send = new LegacySendOutput(_keyboard, desktop);
 
+        var clipboardSettings = configuration.Profile.Clipboard;
         _clipboardService = new WindowsClipboardService();
-        _clipboardPersistence = new WindowsClipboardHistoryPersistence();
+        _clipboardPersistence = clipboardSettings.History && clipboardSettings.Persist
+            ? new WindowsClipboardHistoryPersistence(clipboardSettings)
+            : null;
         var clipboardPicker = new WindowsClipboardPicker();
+        var payloadHistory = clipboardSettings.History
+            ? new ClipboardPayloadHistory(clipboardSettings.MaxItems, _clipboardPersistence)
+            : null;
         _clipboard = new WindowsClipboardController(
             _clipboardService,
-            new ClipboardHistory(),
+            new ClipboardHistory(clipboardSettings.MaxItems),
             clipboardPicker,
             _keyboard,
-            new ClipboardPayloadHistory(persistence: _clipboardPersistence),
-            clipboardPicker);
+            payloadHistory,
+            clipboardPicker,
+            clipboardSettings.History,
+            clipboardSettings.Images);
 
         var inputMethod = new WindowsInputMethod();
         _runtime = new IKeydRuntimeHandler(
@@ -64,14 +71,7 @@ internal sealed class IKeydApplicationContext : ApplicationContext
             send,
             _keyboard,
             _runtime);
-        _contextualHotkeys = new LegacyContextualHotkeyHandler(
-            _keyboard.State,
-            desktop,
-            _keyboard,
-            send,
-            WindowsWindowCommand.PostCommand,
-            _keyboardHandler);
-        _suspendHandler = new LegacySuspendToggleHandler(_keyboard.State, _contextualHotkeys);
+        _suspendHandler = new LegacySuspendToggleHandler(_keyboard.State, _keyboardHandler);
 
         _macroExecutor = new MacroExecutor(send, _runtime);
         _legacyMacroSlots = new LegacyMacroSlotController(
@@ -94,7 +94,10 @@ internal sealed class IKeydApplicationContext : ApplicationContext
         }
         _menu.Items.Add(modeMenu);
 
-        _menu.Items.Add(new ToolStripMenuItem("Clipboard History...", null, (_, _) => ShowClipboardHistory()));
+        _menu.Items.Add(new ToolStripMenuItem("Clipboard History...", null, (_, _) => ShowClipboardHistory())
+        {
+            Enabled = clipboardSettings.History
+        });
         _menu.Items.Add(new ToolStripMenuItem("Macro...", null, async (_, _) => await EditAndRunMacroAsync()));
         _cancelMacroItem = new ToolStripMenuItem("Cancel Macro", null, (_, _) => CancelMacros())
         {
@@ -134,7 +137,7 @@ internal sealed class IKeydApplicationContext : ApplicationContext
         {
             _legacyMacroSlots.Dispose();
             _clipboard.Dispose();
-            _clipboardPersistence.Dispose();
+            _clipboardPersistence?.Dispose();
             _clipboardService.Dispose();
             _keyboardHandler.Dispose();
             _runtime.Dispose();

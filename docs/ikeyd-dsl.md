@@ -150,6 +150,36 @@ The current syntax still restricts behavior arguments to identifier-like tokens.
 
 A physical key cannot simultaneously have a string mapping and a behavior mapping in the same keymap.
 
+## Clipboard history settings
+
+The optional top-level `clipboard` block configures iKeyd's own Win+V-like history. It never changes or encrypts the normal system clipboard itself.
+
+```text
+clipboard {
+    history = true
+    max_items = 100
+    persist = true
+    images = true
+    encryption = user
+    cipher = auto
+
+    // Optional. If omitted, Windows uses %LOCALAPPDATA%\iKeyd.
+    // directory = "%LOCALAPPDATA%\\iKeyd"
+}
+```
+
+Settings:
+
+- `history = true|false` — enables or disables iKeyd history collection and the history picker. Default: `true`.
+- `max_items = <positive integer>` — maximum number of text/image history items kept. Default: `20`.
+- `persist = true|false` — when `false`, history is memory-only and iKeyd does not create its encrypted history/key files. Default: `true`.
+- `images = true|false` — controls whether image clipboard payloads are included in iKeyd history. Normal Windows image copy/paste is unaffected. Default: `true`.
+- `encryption = user` — protects the history master key for the current OS user. Windows currently implements this with DPAPI. `user` is the only supported value for now.
+- `cipher = auto|chacha20_poly1305` — `auto` selects the runtime's preferred authenticated cipher. The .NET runtime currently resolves `auto` to ChaCha20-Poly1305; a future Rust runtime can prefer AEGIS-256 without requiring a DSL change. Default: `auto`.
+- `directory = "..."` — optional persistence directory. Windows environment variables such as `%LOCALAPPDATA%` are expanded at runtime.
+
+The persisted history contains authenticated ciphertext rather than plaintext clipboard payloads. `persist = false` bypasses persistence entirely. Omitting the entire `clipboard` block preserves the current compatible defaults and keeps generated legacy JSON unchanged.
+
 ## Rules
 
 - Rows and columns are 1-based.
@@ -159,7 +189,8 @@ A physical key cannot simultaneously have a string mapping and a behavior mappin
 - `layout` blocks are compile-time-only and do not appear in generated JSON.
 - Position references are resolved before behavior mappings are emitted.
 - Behavior option blocks belong to one behavior invocation and may not contain duplicate option names.
-- Out-of-range coordinates and unknown layouts are compile errors with source line numbers.
+- A profile may contain at most one top-level `clipboard` block, and duplicate clipboard settings are compile errors.
+- Out-of-range coordinates, unknown layouts, unsupported clipboard values, and invalid settings are compile errors with source line numbers.
 
 ## Why position references exist
 

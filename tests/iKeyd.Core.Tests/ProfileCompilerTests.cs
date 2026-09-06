@@ -101,4 +101,35 @@ public sealed class ProfileCompilerTests
         Assert.Contains("op: \"layer_off\"", source, StringComparison.Ordinal);
         Assert.Contains("op: \"send\"", source, StringComparison.Ordinal);
     }
+
+    [Fact]
+    public void Generated_profile_preserves_clipboard_policy()
+    {
+        const string json = """
+        {
+          "source": { "chordWindowMs": 40 },
+          "startupMode": "S",
+          "clipboard": {
+            "history": true,
+            "maxItems": 77,
+            "persist": false,
+            "images": false,
+            "encryption": "user",
+            "cipher": "chacha20-poly1305",
+            "directory": "%LOCALAPPDATA%\\iKeyd-custom"
+          },
+          "singleStroke": { "S": {}, "K": {} },
+          "chords": { "S": [], "K": [] }
+        }
+        """;
+
+        var source = ProfileCompiler.Compile(json);
+
+        Assert.Contains("clipboard: new ClipboardHistoryProfile(", source, StringComparison.Ordinal);
+        Assert.Contains("maxItems: 77", source, StringComparison.Ordinal);
+        Assert.Contains("persist: false", source, StringComparison.Ordinal);
+        Assert.Contains("images: false", source, StringComparison.Ordinal);
+        Assert.Contains("cipher: \"chacha20-poly1305\"", source, StringComparison.Ordinal);
+        Assert.Contains("%LOCALAPPDATA%\\\\iKeyd-custom", source, StringComparison.Ordinal);
+    }
 }
