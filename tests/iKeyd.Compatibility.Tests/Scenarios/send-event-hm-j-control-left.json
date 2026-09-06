@@ -1,6 +1,6 @@
 {
   "id": "send-event-hm-j-control-left",
-  "description": "H then M plus J emits Control+Left with legacy modifier ordering.",
+  "description": "H then M plus J emits legacy left Control+Left with exact modifier ordering.",
   "initialState": { "mode": "S", "ime": "off", "layers": ["H", "M"] },
   "input": [
     { "atMs": 10, "kind": "keyDown", "key": "J" },
@@ -8,10 +8,10 @@
   ],
   "expected": {
     "events": [
-      { "kind": "keyDown", "key": "Control" },
+      { "kind": "keyDown", "key": "VK_A2" },
       { "kind": "keyDown", "key": "Left" },
       { "kind": "keyUp", "key": "Left" },
-      { "kind": "keyUp", "key": "Control" }
+      { "kind": "keyUp", "key": "VK_A2" }
     ]
   },
   "tags": ["legacy", "send", "send-event-diff", "hosted-windows"]
