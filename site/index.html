@@ -1,0 +1,305 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0a0a0a">
+  <meta name="description" content="iKeyd lets you define keyboard behavior in readable, versionable code.">
+  <title>iKeyd — Your keyboard, defined in code.</title>
+  <link rel="icon" type="image/png" href="assets/ikeyd-icon.png">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+
+  <header class="site-header" data-header>
+    <div class="container header-inner">
+      <a class="brand" href="#top" aria-label="iKeyd home">
+        <img class="brand-logo" src="assets/ikeyd-logo.png" alt="iKeyd">
+      </a>
+
+      <button class="menu-button" type="button" aria-expanded="false" aria-controls="site-nav" data-menu-button>
+        Menu
+      </button>
+
+      <nav class="site-nav" id="site-nav" aria-label="Primary" data-nav>
+        <a href="https://github.com/SLktEx/iKeyd/blob/main/docs/ikeyd-dsl.md">Docs</a>
+        <a href="https://github.com/SLktEx/iKeyd">GitHub</a>
+        <a href="https://github.com/SLktEx/iKeyd/actions/workflows/windows-package.yml">Install</a>
+      </nav>
+    </div>
+  </header>
+
+  <main id="main">
+    <section class="hero" id="top" aria-labelledby="hero-title">
+      <div class="container hero-grid">
+        <div class="hero-copy reveal">
+          <p class="eyebrow">YOUR KEYBOARD, DEFINED IN CODE.</p>
+          <h1 id="hero-title">Your keyboard,<br>defined in code.</h1>
+          <p class="hero-lede">Write keyboard behavior as configuration you can read, version, and run.</p>
+          <div class="actions" aria-label="Getting started links">
+            <a class="button button-primary" href="https://github.com/SLktEx/iKeyd#quick-start--windows">Get started</a>
+            <a class="button button-secondary" href="https://github.com/SLktEx/iKeyd">GitHub</a>
+          </div>
+        </div>
+
+        <figure class="code-figure hero-code reveal" aria-labelledby="hero-code-caption">
+          <figcaption id="hero-code-caption" class="file-label">docs/ikeyd-dsl.md · valid DSL</figcaption>
+          <pre class="code-block"><code><span class="syn-keyword">layout</span> <span class="syn-name">BASE</span> {
+    <span class="syn-keyword">row</span> Q W E R T Y U I O P
+    <span class="syn-keyword">row</span> A S D F G H J K L SColon
+    <span class="syn-keyword">row</span> Z X C V B N M Comma Dot Slash
+}
+
+<span class="syn-keyword">keymap</span> <span class="syn-name">BASE</span> {
+    A = <span class="syn-call">LT</span>(NUM, Z) {
+        tapping_term = <span class="syn-value">170ms</span>
+    }
+    X = <span class="syn-call">MT</span>(Ctrl, X)
+    <span class="syn-keyword">combo</span> BASE[2,8] + BASE[1,1] = <span class="syn-string">"fa"</span>
+}</code></pre>
+        </figure>
+      </div>
+    </section>
+
+    <section class="principle section-rule" aria-labelledby="principle-title">
+      <div class="container principle-inner reveal">
+        <div class="section-reading">
+          <h2 id="principle-title">Keyboard behavior should be explicit.</h2>
+          <p>When your keyboard becomes part of your workflow, it should be as readable and reproducible as the rest of your setup.</p>
+        </div>
+        <div class="principle-terms" aria-label="Product principles">
+          <span>Readable</span>
+          <span>Versionable</span>
+          <span>Shareable</span>
+          <span>Repeatable</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="product-section define-section section-rule" id="define" aria-labelledby="define-title">
+      <div class="container editorial-grid">
+        <div class="section-intro reveal">
+          <p class="section-label">01 / DEFINE</p>
+          <h2 id="define-title">Define behavior,<br>not shortcuts.</h2>
+          <p>Describe remaps, layers, combos, and key behavior in a format you can actually read.</p>
+        </div>
+
+        <figure class="code-figure code-figure-large reveal" aria-labelledby="define-code-caption">
+          <figcaption id="define-code-caption" class="file-label">docs/ikeyd-dsl.md · behavior invocation</figcaption>
+          <pre class="code-block"><code><span class="syn-keyword">keymap</span> <span class="syn-name">BASE</span> {
+    A = <span class="syn-call">LT</span>(NUM, Z) {
+        tapping_term = <span class="syn-value">170ms</span>
+        hold_on_other_key_press = <span class="syn-value">false</span>
+    }
+
+    X = <span class="syn-call">MT</span>(Ctrl, X)
+    C = <span class="syn-call">MT</span>(Shift, C) {
+        tapping_term = <span class="syn-value">150ms</span>
+    }
+}</code></pre>
+          <div class="code-notes" aria-label="Code behavior notes">
+            <span><strong>LT</strong> tap a key, hold a layer</span>
+            <span><strong>MT</strong> tap a key, hold a modifier</span>
+          </div>
+        </figure>
+      </div>
+    </section>
+
+    <section class="product-section compile-section section-rule" id="compile" aria-labelledby="compile-title">
+      <div class="container">
+        <div class="compile-heading reveal">
+          <p class="section-label">02 / COMPILE</p>
+          <h2 id="compile-title">Readable in.<br>Predictable out.</h2>
+          <p>Compile the authoring DSL to the static JSON profile consumed by the runtime.</p>
+        </div>
+
+        <div class="compile-pair reveal" aria-label="Source and compiled representation">
+          <figure class="code-figure compact-code">
+            <figcaption class="file-label">docs/ikeyd-dsl.md · source</figcaption>
+            <pre class="code-block"><code><span class="syn-keyword">layout</span> <span class="syn-name">BASE</span> {
+    <span class="syn-keyword">row</span> Q W E
+}
+
+<span class="syn-keyword">keymap</span> <span class="syn-name">BASE</span> {
+    POS[1,1] = <span class="syn-call">LT</span>(NUM, Z)
+    POS[1,2] = <span class="syn-string">"w"</span>
+}</code></pre>
+          </figure>
+
+          <div class="compile-connector" aria-hidden="true">→</div>
+
+          <figure class="code-figure compact-code">
+            <figcaption class="file-label">output.json · compiled profile</figcaption>
+            <pre class="code-block"><code>{
+  <span class="syn-string">"singleStroke"</span>: {
+    <span class="syn-string">"BASE"</span>: { <span class="syn-string">"W"</span>: <span class="syn-string">"w"</span> }
+  },
+  <span class="syn-string">"behaviors"</span>: {
+    <span class="syn-string">"BASE"</span>: {
+      <span class="syn-string">"Q"</span>: {
+        <span class="syn-string">"name"</span>: <span class="syn-string">"LT"</span>,
+        <span class="syn-string">"arguments"</span>: [<span class="syn-string">"NUM"</span>, <span class="syn-string">"Z"</span>]
+      }
+    }
+  }
+}</code></pre>
+          </figure>
+        </div>
+
+        <div class="command-line reveal" aria-label="Compiler command">
+          <code>python tools/compile-ikeyd.py config/hotkeySKG.ikeyd output.json</code>
+        </div>
+      </div>
+    </section>
+
+    <section class="product-section run-section section-rule" id="run" aria-labelledby="run-title">
+      <div class="container run-layout">
+        <div class="section-intro reveal">
+          <p class="section-label">03 / RUN</p>
+          <h2 id="run-title">Code becomes behavior.</h2>
+          <p>Load the configuration and let iKeyd apply the behavior you defined.</p>
+          <div class="demo-controls" aria-label="Keyboard behavior examples">
+            <button type="button" class="demo-button is-selected" data-demo="tap-a">Tap A</button>
+            <button type="button" class="demo-button" data-demo="hold-a">Hold A</button>
+            <button type="button" class="demo-button" data-demo="combo-kq">K + Q</button>
+          </div>
+        </div>
+
+        <div class="keyboard-demo reveal" aria-labelledby="keyboard-demo-title">
+          <div class="keyboard-demo-header">
+            <span id="keyboard-demo-title">Keyboard state</span>
+            <span class="state-indicator"><span class="state-dot" aria-hidden="true"></span><span data-state-label>BASE</span></span>
+          </div>
+
+          <div class="keyboard" aria-hidden="true">
+            <div class="key-row row-1">
+              <span class="key" data-key="Q">Q</span><span class="key">W</span><span class="key">E</span><span class="key">R</span><span class="key">T</span><span class="key">Y</span><span class="key">U</span><span class="key">I</span><span class="key">O</span><span class="key">P</span>
+            </div>
+            <div class="key-row row-2">
+              <span class="key" data-key="A">A</span><span class="key">S</span><span class="key">D</span><span class="key">F</span><span class="key">G</span><span class="key">H</span><span class="key">J</span><span class="key" data-key="K">K</span><span class="key">L</span>
+            </div>
+            <div class="key-row row-3">
+              <span class="key">Z</span><span class="key" data-key="X">X</span><span class="key">C</span><span class="key">V</span><span class="key">B</span><span class="key">N</span><span class="key">M</span><span class="key">,</span><span class="key">.</span><span class="key">/</span>
+            </div>
+          </div>
+
+          <div class="behavior-readout" aria-live="polite">
+            <div>
+              <span class="readout-label">Input</span>
+              <strong data-demo-input>A · tap</strong>
+            </div>
+            <div>
+              <span class="readout-label">Defined behavior</span>
+              <strong data-demo-output>Z</strong>
+            </div>
+            <code data-demo-code>A = LT(NUM, Z)</code>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="why-section section-rule" aria-labelledby="why-title">
+      <div class="container">
+        <div class="section-reading reveal">
+          <p class="section-label">WHY IKEYD</p>
+          <h2 id="why-title">Why put your keyboard in code?</h2>
+        </div>
+
+        <div class="feature-rows">
+          <article class="feature-row reveal">
+            <span class="feature-index">01</span>
+            <h3>Versionable</h3>
+            <p>Keyboard behavior belongs in source control.</p>
+            <code>git diff config/hotkeySKG.ikeyd</code>
+          </article>
+          <article class="feature-row reveal">
+            <span class="feature-index">02</span>
+            <h3>Reviewable</h3>
+            <p>See exactly what changed before you run it.</p>
+            <code>A = LT(NUM, Z) → A = LT(NAV, Z)</code>
+          </article>
+          <article class="feature-row reveal">
+            <span class="feature-index">03</span>
+            <h3>Shareable</h3>
+            <p>Share the configuration, not screenshots of settings.</p>
+            <code>config/hotkeySKG.ikeyd</code>
+          </article>
+          <article class="feature-row reveal">
+            <span class="feature-index">04</span>
+            <h3>Understandable</h3>
+            <p>Read what each key does without reverse-engineering a settings UI.</p>
+            <code>combo BASE[2,8] + BASE[1,1] = "fa"</code>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="configuration-section section-rule" aria-labelledby="configuration-title">
+      <div class="container configuration-layout">
+        <div class="section-intro reveal">
+          <p class="section-label">A REAL CONFIGURATION</p>
+          <h2 id="configuration-title">Small enough to understand.<br>Explicit enough to trust.</h2>
+          <p>A keyboard setup should be readable without opening a control panel or remembering where a setting lives.</p>
+          <a class="text-link" href="https://github.com/SLktEx/iKeyd/blob/main/config/hotkeySKG.ikeyd">View example on GitHub <span aria-hidden="true">→</span></a>
+        </div>
+
+        <figure class="code-figure code-figure-real reveal" aria-labelledby="real-config-caption">
+          <figcaption id="real-config-caption" class="file-label">config/hotkeySKG.ikeyd · excerpt</figcaption>
+          <pre class="code-block"><code><span class="syn-keyword">layout</span> <span class="syn-name">BASE</span> {
+    <span class="syn-keyword">row</span> Q W E R T Y U I O P AT
+    <span class="syn-keyword">row</span> A S D F G H J K L SColon Colon
+    <span class="syn-keyword">row</span> Z X C V B N M Comma Dot Slash
+}
+
+<span class="syn-keyword">keymap</span> <span class="syn-name">S</span> {
+    Q = <span class="syn-string">"-"</span>
+    W = <span class="syn-string">"ni"</span>
+    E = <span class="syn-string">"ha"</span>
+    R = <span class="syn-string">"`,"</span>
+    T = <span class="syn-string">"ti"</span>
+    Y = <span class="syn-string">"gu"</span>
+    U = <span class="syn-string">"ba"</span>
+    I = <span class="syn-string">"ko"</span>
+    O = <span class="syn-string">"ga"</span>
+    P = <span class="syn-string">"hi"</span>
+
+    <span class="syn-keyword">combo</span> BASE[2,8] + BASE[1,1] = <span class="syn-string">"fa"</span>
+    <span class="syn-keyword">combo</span> BASE[2,8] + BASE[1,2] = <span class="syn-string">"go"</span>
+    <span class="syn-keyword">combo</span> BASE[2,8] + BASE[1,3] = <span class="syn-string">"hu"</span>
+    <span class="syn-keyword">combo</span> BASE[2,8] + BASE[1,4] = <span class="syn-string">"fi"</span>
+    <span class="syn-keyword">combo</span> BASE[2,8] + BASE[1,5] = <span class="syn-string">"fe"</span>
+}</code></pre>
+        </figure>
+      </div>
+    </section>
+
+    <section class="final-cta section-rule" aria-labelledby="cta-title">
+      <div class="container final-cta-inner reveal">
+        <h2 id="cta-title">Put your keyboard in code.</h2>
+        <p>Start with a small configuration. Make it yours from there.</p>
+        <div class="actions">
+          <a class="button button-primary" href="https://github.com/SLktEx/iKeyd#quick-start--windows">Get started</a>
+          <a class="button button-secondary" href="https://github.com/SLktEx/iKeyd">View on GitHub</a>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer section-rule">
+    <div class="container footer-inner">
+      <div class="footer-brand">
+        <span class="brand brand-static"><img class="brand-logo brand-logo-footer" src="assets/ikeyd-logo.png" alt="iKeyd"></span>
+        <span>Keyboard behavior, defined in code.</span>
+      </div>
+      <nav aria-label="Footer">
+        <a href="https://github.com/SLktEx/iKeyd/blob/main/docs/ikeyd-dsl.md">Docs</a>
+        <a href="https://github.com/SLktEx/iKeyd">GitHub</a>
+        <a href="https://github.com/SLktEx/iKeyd/blob/main/LICENSE">License</a>
+      </nav>
+    </div>
+  </footer>
+
+  <script src="app.js" defer></script>
+</body>
+</html>
