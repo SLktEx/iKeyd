@@ -48,6 +48,9 @@ onKeyDown(keyName){
   MouseMove, 1, 2,,R
   Send,{VOLUME_UP}
 }
+processMacro(chr){
+  InputBox,ipt,Macro%chr%
+}
 OnClipboardChange:
 clipboard := clip00
 '''.strip()
@@ -75,6 +78,7 @@ class InventoryTests(unittest.TestCase):
         self.assertIn("clipboard-operation", kinds)
         self.assertIn("macro-operation", kinds)
         self.assertIn("mouse-operation", kinds)
+        self.assertIn("ui-operation", kinds)
         self.assertIn("label", kinds)
 
     def test_control_flow_is_not_misclassified_as_function(self):
@@ -147,13 +151,24 @@ class InventoryTests(unittest.TestCase):
 
         macro = next(f for f in features if f.kind == "macro-operation")
         clipboard = next(f for f in features if f.kind == "clipboard-operation")
+        macro_function = next(f for f in features if f.kind == "function" and f.details.get("name") == "processMacro")
+        macro_ui = next(f for f in features if f.kind == "ui-operation")
+        window = next(f for f in features if f.kind == "window-operation")
         clipboard_label = next(f for f in features if f.kind == "label" and f.text.lower().startswith("onclipboardchange"))
 
         self.assertEqual("regression", macro.coverage["scenario"])
         self.assertEqual("regression", clipboard.coverage["scenario"])
+        self.assertEqual("regression", macro_function.coverage["scenario"])
+        self.assertEqual("real-windows:#59", macro_ui.coverage["scenario"])
+        self.assertEqual("deferred:#57", window.coverage["scenario"])
+        self.assertEqual("real-windows:#59", clipboard_label.coverage["scenario"])
+
         self.assertEqual("real-windows-verification-required", macro.classification)
         self.assertEqual("real-windows-verification-required", clipboard.classification)
-        self.assertNotEqual("regression", clipboard_label.coverage["scenario"])
+        self.assertEqual("real-windows-verification-required", macro_function.classification)
+        self.assertEqual("real-windows-verification-required", macro_ui.classification)
+        self.assertEqual("real-windows-verification-required", window.classification)
+        self.assertEqual("real-windows-verification-required", clipboard_label.classification)
 
     def test_required_real_windows_is_distinct_from_unverified(self):
         coverage = {

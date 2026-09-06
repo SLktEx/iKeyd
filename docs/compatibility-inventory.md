@@ -25,21 +25,30 @@ Every inventory entry has a stable content-derived `id`, source line, owner (`fu
 
 - `implementation`: iKeyd implementation status
 - `unit`: deterministic/unit regression evidence
-- `scenario`: shared compatibility scenario evidence or an explicitly named deterministic regression layer
+- `scenario`: shared compatibility scenario evidence or an explicit verification route
 - `exeDiff`: compiled `hotkeySKG.exe` differential evidence
 - `ahkDiff`: original AHK source differential evidence
 - `realWindows`: real Windows / Japanese IME verification requirement or result
 - `intentionalDifference`: whether a remaining difference is explicitly accepted
 
-`scenario: "regression"` means the inventory entry is covered by an explicit deterministic regression layer identified in `evidence`, but is not being claimed as a shared legacy-oracle scenario. This is intentionally distinct from `scenario: "yes"`: it removes a false `scenario-missing` signal without pretending that compiled-EXE/AHK differential evidence exists. `exeDiff`, `ahkDiff`, and `realWindows` remain independent and continue to show the remaining oracle work.
+The `scenario` field uses explicit states rather than treating every non-shared test as missing:
+
+- `yes`: an exact shared compatibility scenario is linked through `inventoryIds`.
+- `regression`: an explicit deterministic regression layer covers the behavior, but this does not claim legacy-oracle differential evidence.
+- `deferred:#57`: the entry is deliberately handed to long-tail compatibility-fix work because implementation/oracle behavior must be resolved before a useful scenario can be claimed.
+- `real-windows:#59`: the entry requires interactive/real-Windows verification and is deliberately handed to the final real-machine pass.
+
+These states never promote `exeDiff` or `ahkDiff`. Those dimensions remain independent, so routing an entry to #57/#59 cannot be mistaken for compatibility success.
 
 The derived `classification` is one of the categories used by #46/#54, including `unknown`, `implementation-missing`, `scenario-missing`, `implemented-but-untested`, `real-windows-verification-required`, `partially-verified`, and `implemented-and-verified`.
 
 ## Coverage policy
 
-`tests/compatibility/coverage-rules.json` is deliberately conservative. A broad feature area being implemented does not imply every legacy branch is verified. Rules may mark a category `partial`, but exact entries should only be upgraded when there is concrete evidence from tests, differential observations, or real-Windows verification.
+`tests/compatibility/coverage-rules.json` is deliberately conservative. A broad feature area being implemented does not imply every legacy branch is verified. Rules may mark a category `partial`, but exact entries should only be upgraded when there is concrete evidence from tests, differential observations, or an explicit verification handoff.
 
-A category-level `regression` status must be narrower than the user-facing feature shell. For example, `macro-operation` and `clipboard-operation` entries can point at deterministic parser/executor/history/controller regressions, while interactive `InputBox` UI and the `OnClipboardChange` label remain separate inventory work instead of being swept into the same status.
+A category-level `regression` status must be narrower than the user-facing feature shell. For example, `macro-operation` and `clipboard-operation` entries can point at deterministic parser/executor/history/controller regressions, while interactive `InputBox` UI is routed to #59 instead of being swept into the same status.
+
+Likewise, the remaining unlinked window/mouse branches are explicitly routed to #57. Linked runtime scenarios are applied after the broad coverage rules, so an exact scenario link upgrades `deferred:#57` to `yes` without losing the conservative default for unlinked long-tail entries.
 
 Later issues should link scenarios back to matrix entries using an `inventoryIds` array in scenario JSON. The scanner already indexes that field when present, so #55 can incrementally make scenario coverage explicit without redesigning the matrix format.
 
