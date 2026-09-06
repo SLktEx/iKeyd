@@ -2,24 +2,19 @@ namespace iKeyd.Core.Configuration;
 
 public sealed record MouseMotionProfile
 {
-    public static MouseMotionProfile Default { get; } = new();
-
-    public string Engine { get; init; } = "virtual_stick";
-    public int UpdateIntervalMs { get; init; } = 8;
-    public int PressMs { get; init; } = 45;
-    public int ReleaseMs { get; init; } = 2;
-    public string Curve { get; init; } = "smoothstep";
-    public double NormalSpeed { get; init; } = 2200.0;
-    public double PrecisionSpeed { get; init; } = 800.0;
-    public double FineSpeed { get; init; } = 240.0;
-    public double FastSpeed { get; init; } = 4400.0;
-    public string Socd { get; init; } = "neutral";
-    public int TapNudgePixels { get; init; } = 1;
-    public int MaxCatchupMs { get; init; } = 32;
-
-    public MouseMotionProfile()
-    {
-    }
+    public static MouseMotionProfile Default { get; } = new(
+        "virtual_stick",
+        8,
+        45,
+        2,
+        "smoothstep",
+        2200.0,
+        800.0,
+        240.0,
+        4400.0,
+        "neutral",
+        1,
+        32);
 
     public MouseMotionProfile(
         string engine,
@@ -70,4 +65,17 @@ public sealed record MouseMotionProfile
         TapNudgePixels = tapNudgePixels;
         MaxCatchupMs = maxCatchupMs;
     }
+
+    public string Engine { get; }
+    public int UpdateIntervalMs { get; }
+    public int PressMs { get; }
+    public int ReleaseMs { get; }
+    public string Curve { get; }
+    public double NormalSpeed { get; }
+    public double PrecisionSpeed { get; }
+    public double FineSpeed { get; }
+    public double FastSpeed { get; }
+    public string Socd { get; }
+    public int TapNudgePixels { get; }
+    public int MaxCatchupMs { get; }
 }
