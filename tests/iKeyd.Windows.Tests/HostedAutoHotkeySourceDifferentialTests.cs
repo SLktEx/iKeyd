@@ -103,16 +103,22 @@ public sealed class HostedAutoHotkeySourceDifferentialTests
     [Fact]
     public void Explicit_oracle_targets_can_scope_timing_stress_to_compiled_EXE()
     {
-        var compiledOnly = new CompatibilityScenario
-        {
-            Id = "compiled-only",
-            OracleTargets = ["compiled-exe"]
-        };
-        var legacyDefault = new CompatibilityScenario { Id = "legacy-default" };
+        var compiledOnly = Scenario("compiled-only", ["compiled-exe"]);
+        var legacyDefault = Scenario("legacy-default", []);
 
         Assert.False(TargetsOracle(compiledOnly, SourceOracle));
         Assert.True(TargetsOracle(legacyDefault, SourceOracle));
     }
+
+    private static CompatibilityScenario Scenario(string id, List<string> oracleTargets)
+        => new()
+        {
+            Id = id,
+            InitialState = new ScenarioInitialState(),
+            Input = [],
+            Expected = new ScenarioExpected(),
+            OracleTargets = oracleTargets
+        };
 
     private static CompatibilityScenario[] LoadTaggedForOracle(string tag, string oracle)
         => CompatibilityScenarioCatalog.LoadDirectory(ScenarioDirectory)
