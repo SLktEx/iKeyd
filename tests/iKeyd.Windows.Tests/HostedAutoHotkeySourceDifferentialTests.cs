@@ -56,8 +56,23 @@ public sealed class HostedAutoHotkeySourceDifferentialTests
                     sourceRunner);
                 var reportPath = LegacyDifferentialComparison.WriteReport(report);
 
-                if (!report.IsMatch)
-                    failures.Add(BuildFailureMessage(report, reportPath));
+                var sourceExpected = scenario.AhkSourceExpected ?? scenario.Expected;
+                var sourceDifferences = CompatibilityScenarioDiff.CompareExpected(
+                    scenario.Id,
+                    sourceExpected,
+                    report.LegacyExe);
+                var intentionalSourceDivergence = scenario.AhkSourceExpected is not null;
+
+                var isMatch = report.IKeydVsExpected.Count == 0 &&
+                              sourceDifferences.Count == 0 &&
+                              (intentionalSourceDivergence || report.IKeydVsLegacy.Count == 0);
+
+                if (!isMatch)
+                    failures.Add(BuildFailureMessage(
+                        report,
+                        reportPath,
+                        sourceDifferences,
+                        intentionalSourceDivergence));
             }
             catch (Exception error)
             {
@@ -87,7 +102,11 @@ public sealed class HostedAutoHotkeySourceDifferentialTests
     private static bool HasTag(CompatibilityScenario scenario, string tag)
         => scenario.Tags.Any(item => string.Equals(item, tag, StringComparison.OrdinalIgnoreCase));
 
-    private static string BuildFailureMessage(LegacyDifferentialReport report, string reportPath)
+    private static string BuildFailureMessage(
+        LegacyDifferentialReport report,
+        string reportPath,
+        IReadOnlyList<string> sourceDifferences,
+        bool intentionalSourceDivergence)
     {
         static string Describe(IReadOnlyList<string> differences)
             => differences.Count == 0 ? "<none>" : string.Join("; ", differences);
@@ -95,9 +114,10 @@ public sealed class HostedAutoHotkeySourceDifferentialTests
         return string.Join(
             Environment.NewLine,
             $"AHK source differential mismatch for scenario '{report.ScenarioId}'.",
-            $"iKeyd vs expected: {Describe(report.IKeydVsExpected)}",
-            $"AHK source vs expected: {Describe(report.LegacyVsExpected)}",
-            $"iKeyd vs AHK source: {Describe(report.IKeydVsLegacy)}",
+            $"iKeyd vs compiled-EXE target: {Describe(report.IKeydVsExpected)}",
+            $"AHK source vs {(intentionalSourceDivergence ? "source-specific expected" : "expected")}: {Describe(sourceDifferences)}",
+            $"iKeyd vs AHK source: {Describe(report.IKeydVsLegacy)}" +
+                (intentionalSourceDivergence ? " (intentional compiled/source divergence)" : string.Empty),
             $"report: {reportPath}");
     }
 }
