@@ -34,6 +34,10 @@ public static class BehaviorDefinitionFactory
             return CreateMomentaryLayer(invocation);
         if (string.Equals(invocation.Name, "MOD", StringComparison.OrdinalIgnoreCase))
             return CreateModifierHold(invocation);
+        if (string.Equals(invocation.Name, "UNICODE", StringComparison.OrdinalIgnoreCase))
+            return CreateUnicode(invocation);
+        if (string.Equals(invocation.Name, "TEXT", StringComparison.OrdinalIgnoreCase))
+            return CreateText(invocation);
         if (userDefinitions.TryGetValue(invocation.Name, out var userDefinition))
             return new ScriptedBehaviorDefinition(userDefinition, invocation);
 
@@ -92,11 +96,32 @@ public static class BehaviorDefinitionFactory
         return StandardBehaviors.MOD(NormalizeModifier(invocation.Arguments[0]));
     }
 
+    private static BehaviorDefinition CreateUnicode(BehaviorInvocationProfile invocation)
+        => StandardBehaviors.Unicode(ReadLiteralValue(invocation, "UNICODE"));
+
+    private static BehaviorDefinition CreateText(BehaviorInvocationProfile invocation)
+        => StandardBehaviors.Text(ReadLiteralValue(invocation, "TEXT"));
+
+    private static string ReadLiteralValue(BehaviorInvocationProfile invocation, string helper)
+    {
+        if (invocation.Arguments.Count == 1 && invocation.Options.Count == 0)
+            return invocation.Arguments[0];
+
+        RequireCount(invocation, 0, $"{helper}() {{ value = \"...\" }}");
+        ValidateKnownOptions(invocation, ["value"]);
+        return RequireOption(invocation, "value");
+    }
+
     private static void RequireNoOptions(BehaviorInvocationProfile invocation)
     {
         if (invocation.Options.Count != 0)
             throw new InvalidDataException($"{invocation.Name} does not support per-instance options.");
     }
+
+    private static string RequireOption(BehaviorInvocationProfile invocation, string name)
+        => invocation.Options.TryGetValue(name, out var value)
+            ? value
+            : throw new InvalidDataException($"{invocation.Name} requires option '{name}'.");
 
     private static void RequireCount(BehaviorInvocationProfile invocation, int expected, string signature)
     {
