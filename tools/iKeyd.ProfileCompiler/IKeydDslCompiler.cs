@@ -13,7 +13,7 @@ internal sealed class IKeydDslException : Exception
 internal static class IKeydDslCompiler
 {
     private const string Ident = "[A-Za-z0-9_]+";
-    private const string KeyRef = Ident + @"(?:\[\s*\d+\s*,\s*\d+\s*\])?";
+    private const string KeyRef = Ident + @"(?:\[\s*\d+\s*,\s*\d+\s*\]|\." + Ident + @")?";
 
     private sealed record ChordEntry(string First, string Second, string Output);
 
@@ -386,25 +386,45 @@ internal static class IKeydDslCompiler
         if (Regex.IsMatch(value, $"^{Ident}$", RegexOptions.CultureInvariant))
             return value;
 
+        var named = Match(value, $@"^({Ident})\.({Ident})$");
+        if (named.Success)
+        {
+            var layoutName = named.Groups[1].Value;
+            var requestedKey = named.Groups[2].Value;
+            var resolvedLayoutName = layoutName;
+            if (layoutName == "POS" && !layouts.ContainsKey("POS") && layouts.ContainsKey("BASE"))
+                resolvedLayoutName = "BASE";
+            if (!layouts.TryGetValue(resolvedLayoutName, out var namedLayout))
+                throw Error(path, lineNumber, $"unknown layout '{layoutName}' in key reference '{value}'");
+
+            foreach (var key in namedLayout.SelectMany(row => row))
+            {
+                if (string.Equals(key, requestedKey, StringComparison.OrdinalIgnoreCase))
+                    return key;
+            }
+
+            throw Error(path, lineNumber, $"layout '{layoutName}' has no key named '{requestedKey}'");
+        }
+
         var coordinate = Match(value, $@"^({Ident})\[\s*(\d+)\s*,\s*(\d+)\s*\]$");
         if (!coordinate.Success)
             throw Error(path, lineNumber, $"invalid key reference '{value}'");
 
-        var layoutName = coordinate.Groups[1].Value;
+        var coordinateLayoutName = coordinate.Groups[1].Value;
         var row = int.Parse(coordinate.Groups[2].Value, System.Globalization.CultureInfo.InvariantCulture);
         var column = int.Parse(coordinate.Groups[3].Value, System.Globalization.CultureInfo.InvariantCulture);
         if (row < 1 || column < 1)
             throw Error(path, lineNumber, $"key positions are 1-based: '{value}'");
 
-        var resolvedLayoutName = layoutName;
-        if (layoutName == "POS" && !layouts.ContainsKey("POS") && layouts.ContainsKey("BASE"))
-            resolvedLayoutName = "BASE";
-        if (!layouts.TryGetValue(resolvedLayoutName, out var layout))
-            throw Error(path, lineNumber, $"unknown layout '{layoutName}' in key reference '{value}'");
+        var resolvedCoordinateLayoutName = coordinateLayoutName;
+        if (coordinateLayoutName == "POS" && !layouts.ContainsKey("POS") && layouts.ContainsKey("BASE"))
+            resolvedCoordinateLayoutName = "BASE";
+        if (!layouts.TryGetValue(resolvedCoordinateLayoutName, out var layout))
+            throw Error(path, lineNumber, $"unknown layout '{coordinateLayoutName}' in key reference '{value}'");
         if (row > layout.Count)
-            throw Error(path, lineNumber, $"row {row} is out of range for layout '{layoutName}'");
+            throw Error(path, lineNumber, $"row {row} is out of range for layout '{coordinateLayoutName}'");
         if (column > layout[row - 1].Count)
-            throw Error(path, lineNumber, $"column {column} is out of range for layout '{layoutName}' row {row}");
+            throw Error(path, lineNumber, $"column {column} is out of range for layout '{coordinateLayoutName}' row {row}");
         return layout[row - 1][column - 1];
     }
 
