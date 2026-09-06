@@ -13,7 +13,7 @@ public abstract record BehaviorOutputBranch
     internal abstract void Emit(ISystemQuerySnapshot snapshot, List<BehaviorAction> actions);
     internal abstract void CollectSystemQueries(ISet<string> queries);
 
-    public static BehaviorOutputBranch Primitive(BehaviorAction action)
+    public static BehaviorOutputBranch Action(BehaviorAction action)
         => new PrimitiveBehaviorOutputBranch(action);
 
     public static BehaviorOutputBranch When(
@@ -23,15 +23,15 @@ public abstract record BehaviorOutputBranch
         => new ConditionalBehaviorOutputBranch(condition, thenBranch, elseBranch);
 }
 
-public sealed record PrimitiveBehaviorOutputBranch(BehaviorAction Action) : BehaviorOutputBranch
+public sealed record PrimitiveBehaviorOutputBranch(BehaviorAction Effect) : BehaviorOutputBranch
 {
     internal override void Emit(ISystemQuerySnapshot snapshot, List<BehaviorAction> actions)
-        => actions.Add(Action);
+        => actions.Add(Effect);
 
     internal override void CollectSystemQueries(ISet<string> queries)
     {
-        if (Action.Kind == BehaviorActionKind.Query && Action.Name is not null)
-            queries.Add(Action.Name);
+        if (Effect.Kind == BehaviorActionKind.Query && Effect.Name is not null)
+            queries.Add(Effect.Name);
     }
 }
 
