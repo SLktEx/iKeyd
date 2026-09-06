@@ -70,27 +70,27 @@ Secondary:
 The README uses a small family of matching illustrations instead of one isolated hero image.
 
 <p align="center">
-  <img src="assets/brand/readme-hero.svg" alt="iKeyd README hero" width="100%">
+  <img src="assets/brand/readme-hero.png" alt="iKeyd README hero" width="100%">
 </p>
 
 <p align="center">
-  <img src="assets/brand/readme-features.svg" alt="iKeyd feature overview" width="100%">
+  <img src="assets/brand/readme-features.png" alt="iKeyd feature overview" width="100%">
 </p>
 
 <p align="center">
-  <img src="assets/brand/readme-dsl.svg" alt="iKeyd DSL compilation flow" width="100%">
+  <img src="assets/brand/readme-dsl.png" alt="iKeyd DSL compilation flow" width="100%">
 </p>
 
 ## Assets
 
 Brand assets live in `docs/assets/brand/`.
 
-- `ikeyd-icon.png` — official iKeyd icon / primary brand mark.
-- `readme-hero.svg` — main README hero using the dark/cyan developer-tool visual system.
-- `readme-features.svg` — feature overview for keyboard, layers/combos, mouse, clipboard, and commands.
-- `readme-dsl.svg` — authoring DSL → compiled profile → runtime flow.
+- `ikeyd-icon.png` — canonical official application / brand mark.
+- `readme-hero.png` — README hero artwork.
+- `readme-features.png` — README feature overview.
+- `readme-dsl.png` — README DSL/compiler flow.
 - `ogp.svg` — social/OGP composition in the same visual system.
-- `readme-hero.jpg` — legacy supporting hero retained for reference.
 - `src/iKeyd.App/Assets/ikeyd.ico` — Windows executable and tray icon source.
-
 Future website, release, and OGP images should reuse this same visual system and make the official mark the primary identifier rather than inventing a separate logo for each surface.
+
+
