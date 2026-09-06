@@ -1,5 +1,7 @@
 # iKeyd
 
+**I Key'd — I keyed it my way.**
+
 iKeyd is a cross-platform rewrite of the existing `hotkeySKG` AutoHotkey v1 setup.
 
 The first target is Windows without an AutoHotkey runtime. After the Windows implementation is stable, the shared core will be extended to Linux in this order:
