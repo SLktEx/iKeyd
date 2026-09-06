@@ -38,6 +38,16 @@ jobs:
       - name: Apply focused final integration
         run: python -B tools/issue57_final_integration.py
 
+      - name: Normalize Escape in legacy Send-event oracle
+        shell: powershell
+        run: |
+          $path = 'tests/iKeyd.Windows.Tests/LegacySendEventScenarioRunner.cs'
+          $text = Get-Content -LiteralPath $path -Raw
+          $old = '                0x12 => "Alt",' + "`r`n" + '                0x20 => "Space",'
+          $new = '                0x12 => "Alt",' + "`r`n" + '                0x1B => "Escape",' + "`r`n" + '                0x20 => "Space",'
+          if (-not $text.Contains($old)) { throw 'Legacy Send-event KeyName anchor was not found.' }
+          Set-Content -LiteralPath $path -Value ($text.Replace($old, $new)) -NoNewline
+
       - name: Restore
         run: dotnet restore iKeyd.sln
 
