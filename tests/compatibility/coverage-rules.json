@@ -243,6 +243,36 @@
       "match": {"id": "legacy-send-c963e4ab3e"},
       "set": {"implementation":"excluded:false-positive","unit":"not-applicable","scenario":"excluded:false-positive","exeDiff":"not-applicable","ahkDiff":"not-applicable","realWindows":"not-applicable","intentionalDifference":"yes"},
       "evidence": ["tools/analyze-send-syntax.py","issue:#56"]
+    },
+    {
+      "name": "v0.4 virtual-stick intentionally replaces legacy D 30px mouse step",
+      "match": {"id": "legacy-mouse-operation-1d121fa683"},
+      "set": {"intentionalDifference":"yes"},
+      "evidence": ["docs/legacy-behavior.md","issue:#134","issue:#59"]
+    },
+    {
+      "name": "v0.4 virtual-stick intentionally replaces legacy E 10px mouse step",
+      "match": {"id": "legacy-mouse-operation-fa6b6cd979"},
+      "set": {"intentionalDifference":"yes"},
+      "evidence": ["docs/legacy-behavior.md","issue:#134","issue:#59"]
+    },
+    {
+      "name": "v0.4 virtual-stick intentionally replaces legacy C quarter-screen mouse step",
+      "match": {"id": "legacy-mouse-operation-9c146057df"},
+      "set": {"intentionalDifference":"yes"},
+      "evidence": ["docs/legacy-behavior.md","issue:#134","issue:#59"]
+    },
+    {
+      "name": "v0.4 virtual-stick intentionally replaces legacy default 100px mouse step",
+      "match": {"id": "legacy-mouse-operation-16aa7256ad"},
+      "set": {"intentionalDifference":"yes"},
+      "evidence": ["docs/legacy-behavior.md","issue:#134","issue:#59"]
+    },
+    {
+      "name": "SM+H intentionally keeps a functional right-button press instead of the legacy typo",
+      "match": {"id": "legacy-mouse-operation-485297b3c3"},
+      "set": {"intentionalDifference":"yes"},
+      "evidence": ["docs/legacy-behavior.md","issue:#134","issue:#59"]
     }
   ]
 }
