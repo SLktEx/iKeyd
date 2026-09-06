@@ -13,199 +13,98 @@
     {
       "name": "captured S/K keymap declarations",
       "match": {"kind": ["single-stroke", "chord"]},
-      "set": {
-        "implementation": "implemented",
-        "unit": "covered",
-        "scenario": "partial",
-        "exeDiff": "partial",
-        "ahkDiff": "partial",
-        "realWindows": "unverified",
-        "intentionalDifference": "no"
-      },
-      "evidence": [
-        "config/hotkeySKG.behavior.json",
-        "tests/iKeyd.LegacySpec.Tests/LegacyBehaviorSpecTests.cs",
-        "tests/iKeyd.Compatibility.Tests/Scenarios"
-      ]
+      "set": {"implementation":"implemented","unit":"covered","scenario":"partial","exeDiff":"partial","ahkDiff":"partial","realWindows":"unverified","intentionalDifference":"no"},
+      "evidence": ["config/hotkeySKG.behavior.json","tests/iKeyd.LegacySpec.Tests/LegacyBehaviorSpecTests.cs","tests/iKeyd.Compatibility.Tests/Scenarios"]
     },
     {
       "name": "core keyboard dispatch",
       "match": {"ownerRegex": "(?:function|hotkey):(onKeyDown|onKeyUp|outputChar)"},
-      "set": {
-        "implementation": "implemented",
-        "unit": "covered",
-        "scenario": "partial",
-        "exeDiff": "partial",
-        "ahkDiff": "partial",
-        "realWindows": "unverified",
-        "intentionalDifference": "no"
-      },
-      "evidence": [
-        "tests/iKeyd.Core.Tests",
-        "tests/iKeyd.Compatibility.Tests",
-        "tests/iKeyd.Windows.Tests"
-      ]
+      "set": {"implementation":"implemented","unit":"covered","scenario":"partial","exeDiff":"partial","ahkDiff":"partial","realWindows":"unverified","intentionalDifference":"no"},
+      "evidence": ["tests/iKeyd.Core.Tests","tests/iKeyd.Compatibility.Tests","tests/iKeyd.Windows.Tests"]
     },
     {
       "name": "mode and layer behavior has regression coverage but long-tail remains",
       "match": {"tag": ["mode", "layer"]},
-      "set": {
-        "implementation": "partial",
-        "unit": "covered",
-        "scenario": "partial",
-        "exeDiff": "partial",
-        "ahkDiff": "partial",
-        "realWindows": "unverified",
-        "intentionalDifference": "no"
-      },
-      "evidence": [
-        "tests/iKeyd.LegacySpec.Tests/LegacyRuntimeSpecTests.cs",
-        "tests/COMPATIBILITY.md"
-      ]
+      "set": {"implementation":"partial","unit":"covered","scenario":"partial","exeDiff":"partial","ahkDiff":"partial","realWindows":"unverified","intentionalDifference":"no"},
+      "evidence": ["tests/iKeyd.LegacySpec.Tests/LegacyRuntimeSpecTests.cs","tests/COMPATIBILITY.md"]
     },
     {
       "name": "legacy Send interpreter",
       "match": {"tag": "send"},
-      "set": {
-        "implementation": "partial",
-        "unit": "partial",
-        "scenario": "partial",
-        "exeDiff": "partial",
-        "ahkDiff": "partial",
-        "realWindows": "unverified",
-        "intentionalDifference": "no"
-      },
-      "evidence": [
-        "src/iKeyd.Windows",
-        "tests/iKeyd.Windows.Tests",
-        "README.md"
-      ]
+      "set": {"implementation":"partial","unit":"partial","scenario":"partial","exeDiff":"partial","ahkDiff":"partial","realWindows":"unverified","intentionalDifference":"no"},
+      "evidence": ["src/iKeyd.Windows","tests/iKeyd.Windows.Tests","README.md"]
     },
     {
       "name": "desktop window operations",
       "match": {"tag": "window"},
-      "set": {
-        "implementation": "partial",
-        "unit": "partial",
-        "scenario": "missing",
-        "exeDiff": "missing",
-        "ahkDiff": "missing",
-        "realWindows": "required",
-        "intentionalDifference": "no"
-      },
-      "evidence": [
-        "tests/iKeyd.Windows.Tests",
-        "tests/COMPATIBILITY.md"
-      ]
+      "set": {"implementation":"partial","unit":"partial","scenario":"missing","exeDiff":"missing","ahkDiff":"missing","realWindows":"required","intentionalDifference":"no"},
+      "evidence": ["tests/iKeyd.Windows.Tests","tests/COMPATIBILITY.md"]
     },
     {
       "name": "mouse and media operations",
       "match": {"tag": ["mouse", "media"]},
-      "set": {
-        "implementation": "partial",
-        "unit": "partial",
-        "scenario": "missing",
-        "exeDiff": "missing",
-        "ahkDiff": "missing",
-        "realWindows": "required",
-        "intentionalDifference": "no"
-      },
-      "evidence": [
-        "tests/iKeyd.Windows.Tests",
-        "tests/COMPATIBILITY.md"
-      ]
+      "set": {"implementation":"partial","unit":"partial","scenario":"missing","exeDiff":"missing","ahkDiff":"missing","realWindows":"required","intentionalDifference":"no"},
+      "evidence": ["tests/iKeyd.Windows.Tests","tests/COMPATIBILITY.md"]
     },
     {
       "name": "clipboard history and picker",
       "match": {"tag": "clipboard"},
-      "set": {
-        "implementation": "partial",
-        "unit": "covered",
-        "scenario": "missing",
-        "exeDiff": "missing",
-        "ahkDiff": "missing",
-        "realWindows": "required",
-        "intentionalDifference": "no"
-      },
-      "evidence": [
-        "tests/iKeyd.Core.Tests",
-        "tests/iKeyd.Windows.Tests",
-        "tests/COMPATIBILITY.md"
-      ]
+      "set": {"implementation":"partial","unit":"covered","scenario":"missing","exeDiff":"missing","ahkDiff":"missing","realWindows":"required","intentionalDifference":"no"},
+      "evidence": ["tests/iKeyd.Core.Tests","tests/iKeyd.Windows.Tests","tests/COMPATIBILITY.md"]
     },
     {
       "name": "macro engine behavior",
       "match": {"tag": "macro"},
-      "set": {
-        "implementation": "partial",
-        "unit": "covered",
-        "scenario": "missing",
-        "exeDiff": "missing",
-        "ahkDiff": "missing",
-        "realWindows": "required",
-        "intentionalDifference": "no"
-      },
-      "evidence": [
-        "tests/iKeyd.Core.Tests",
-        "tests/iKeyd.Windows.Tests",
-        "tests/COMPATIBILITY.md"
-      ]
+      "set": {"implementation":"partial","unit":"covered","scenario":"missing","exeDiff":"missing","ahkDiff":"missing","realWindows":"required","intentionalDifference":"no"},
+      "evidence": ["tests/iKeyd.Core.Tests","tests/iKeyd.Windows.Tests","tests/COMPATIBILITY.md"]
     },
     {
       "name": "clipboard operations have explicit deterministic regression coverage",
       "match": {"kind": "clipboard-operation"},
-      "set": {
-        "scenario": "regression"
-      },
-      "evidence": [
-        "tests/iKeyd.Core.Tests/ClipboardHistoryTests.cs",
-        "tests/iKeyd.Windows.Tests/ClipboardControllerTests.cs",
-        "tests/COMPATIBILITY.md"
-      ]
+      "set": {"scenario": "regression"},
+      "evidence": ["tests/iKeyd.Core.Tests/ClipboardHistoryTests.cs","tests/iKeyd.Windows.Tests/ClipboardControllerTests.cs","tests/COMPATIBILITY.md"]
     },
     {
       "name": "macro operations have explicit deterministic regression coverage",
       "match": {"kind": "macro-operation"},
-      "set": {
-        "scenario": "regression"
-      },
-      "evidence": [
-        "tests/iKeyd.Core.Tests/MacroExecutorTests.cs",
-        "tests/iKeyd.Core.Tests/MacroParserTests.cs",
-        "tests/COMPATIBILITY.md"
-      ]
+      "set": {"scenario": "regression"},
+      "evidence": ["tests/iKeyd.Core.Tests/MacroExecutorTests.cs","tests/iKeyd.Core.Tests/MacroParserTests.cs","tests/COMPATIBILITY.md"]
     },
     {
       "name": "IME behavior requires a real Japanese IME for final verification",
       "match": {"tag": "ime"},
-      "set": {
-        "implementation": "partial",
-        "unit": "partial",
-        "scenario": "partial",
-        "exeDiff": "partial",
-        "ahkDiff": "partial",
-        "realWindows": "required",
-        "intentionalDifference": "no"
-      },
-      "evidence": [
-        "tests/iKeyd.LegacySpec.Tests/LegacyRuntimeSpecTests.cs",
-        "tests/iKeyd.Windows.Tests",
-        "tests/COMPATIBILITY.md"
-      ]
+      "set": {"implementation":"partial","unit":"partial","scenario":"partial","exeDiff":"partial","ahkDiff":"partial","realWindows":"required","intentionalDifference":"no"},
+      "evidence": ["tests/iKeyd.LegacySpec.Tests/LegacyRuntimeSpecTests.cs","tests/iKeyd.Windows.Tests","tests/COMPATIBILITY.md"]
     },
     {
       "name": "process/application-specific legacy branches are not assumed covered",
       "match": {"tag": "process-specific"},
-      "set": {
-        "implementation": "unknown",
-        "unit": "unknown",
-        "scenario": "missing",
-        "exeDiff": "missing",
-        "ahkDiff": "missing",
-        "realWindows": "required",
-        "intentionalDifference": "unknown"
-      },
+      "set": {"implementation":"unknown","unit":"unknown","scenario":"missing","exeDiff":"missing","ahkDiff":"missing","realWindows":"required","intentionalDifference":"unknown"},
       "evidence": ["tests/COMPATIBILITY.md"]
+    },
+    {
+      "name": "unlinked window/mouse long-tail is explicitly handed to compatibility-fix work",
+      "match": {"tag": ["window", "mouse"]},
+      "set": {"scenario": "deferred:#57"},
+      "evidence": ["issue:#57","tests/iKeyd.Compatibility.Tests/Scenarios"]
+    },
+    {
+      "name": "legacy macro function shells are represented by deterministic macro regressions",
+      "match": {"kind": "function", "tag": "macro"},
+      "set": {"scenario": "regression"},
+      "evidence": ["tests/iKeyd.Core.Tests/MacroExecutorTests.cs","tests/iKeyd.Core.Tests/MacroParserTests.cs"]
+    },
+    {
+      "name": "interactive macro UI requires real Windows verification",
+      "match": {"kind": "ui-operation", "tag": "macro"},
+      "set": {"scenario": "real-windows:#59"},
+      "evidence": ["issue:#59","src/iKeyd.Windows/Macros/WindowsMacroEditor.cs"]
+    },
+    {
+      "name": "legacy clipboard callback requires real Windows verification",
+      "match": {"id": "legacy-label-610ca263a5"},
+      "set": {"scenario": "real-windows:#59"},
+      "evidence": ["issue:#59","tests/iKeyd.Windows.Tests/ClipboardControllerTests.cs"]
     }
   ]
 }
