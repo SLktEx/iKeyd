@@ -70,7 +70,11 @@ public sealed class WindowsKeyboardOutput : IKeyboardOutput
         ushort virtualKey = key.VirtualKey;
         ushort scanCode = key.ScanCode;
 
-        if (scanCode != 0)
+        // Generic scan-code injection asks Windows to derive the VK from the scan
+        // code. Explicit AHK vk+sc tokens instead populate both fields while
+        // leaving KEYEVENTF_SCANCODE clear; WH_KEYBOARD_LL then observes the same
+        // VK/scan identity as the legacy executable.
+        if (scanCode != 0 && !key.PreserveVirtualKeyWithScanCode)
         {
             virtualKey = 0;
             flags |= KeyEventScanCode;
@@ -137,10 +141,6 @@ public sealed class WindowsKeyboardOutput : IKeyboardOutput
         public InputUnion Data;
     }
 
-    // INPUT contains a union of MOUSEINPUT, KEYBDINPUT and HARDWAREINPUT.
-    // Including all members is important: on x64 MOUSEINPUT is 32 bytes, so the
-    // union is 32 bytes and INPUT itself is 40 bytes. Defining only KEYBDINPUT
-    // makes sizeof(INPUT) too small and SendInput rejects the buffer.
     [StructLayout(LayoutKind.Explicit)]
     internal struct InputUnion
     {
