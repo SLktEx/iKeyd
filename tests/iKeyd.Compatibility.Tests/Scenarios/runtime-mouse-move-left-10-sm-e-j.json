@@ -1,6 +1,6 @@
 {
   "id": "runtime-mouse-move-left-10-sm-e-j",
-  "description": "Holding E in Space-then-M mouse mode changes J movement to 10 pixels left.",
+  "description": "Holding E selects the slow continuous mouse curve; a short J tap still nudges exactly one pixel left.",
   "initialState": { "mode": "S", "ime": "off", "layers": ["S", "M"] },
   "input": [
     { "atMs": 10, "kind": "keyDown", "key": "E" },
@@ -8,6 +8,6 @@
     { "atMs": 21, "kind": "keyUp", "key": "J" },
     { "atMs": 30, "kind": "keyUp", "key": "E" }
   ],
-  "expected": { "actions": [ { "kind": "mouse", "value": "move-by:-10,0" } ] },
-  "tags": ["legacy", "runtime-long-tail", "mouse", "input-state", "deterministic"]
+  "expected": { "actions": [ { "kind": "mouse", "value": "move-by:-1,0" } ] },
+  "tags": ["runtime-long-tail", "mouse", "input-state", "deterministic", "intentional-difference", "issue-133"]
 }
