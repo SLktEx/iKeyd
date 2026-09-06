@@ -8,17 +8,17 @@ internal static class IKeydDslDocumentParser
         var mouse = IKeydMouseDslParser.Extract(text, sourcePath);
         var targets = IKeydTargetExtensionParser.Extract(mouse.SourceWithoutMouse, sourcePath);
         var profile = IKeydDslParser.Parse(targets.SourceWithoutTargetBlocks, sourcePath);
-        ValidateLiteralOutputInvocations(profile, sourcePath);
+        ValidateCompileTimeBehaviorInvocations(profile, sourcePath);
         return new IKeydDslDocument(profile, mouse.Profile, targets.Extensions);
     }
 
-    private static void ValidateLiteralOutputInvocations(AutomationProfile profile, string sourcePath)
+    private static void ValidateCompileTimeBehaviorInvocations(AutomationProfile profile, string sourcePath)
     {
         foreach (var keymap in profile.Keymaps.Values)
         {
             foreach (var mapping in keymap.BehaviorMappings)
             {
-                if (!IsLiteralOutputHelper(mapping.Invocation.Name))
+                if (!RequiresCompileTimeValidation(mapping.Invocation.Name))
                     continue;
 
                 try
@@ -35,9 +35,12 @@ internal static class IKeydDslDocumentParser
         }
     }
 
-    private static bool IsLiteralOutputHelper(string name)
+    private static bool RequiresCompileTimeValidation(string name)
         => name.Equals("UNICODE", StringComparison.OrdinalIgnoreCase) ||
-           name.Equals("TEXT", StringComparison.OrdinalIgnoreCase);
+           name.Equals("TEXT", StringComparison.OrdinalIgnoreCase) ||
+           name.Equals("EXEC", StringComparison.OrdinalIgnoreCase) ||
+           name.Equals("SHELL", StringComparison.OrdinalIgnoreCase) ||
+           name.Equals("QUERY", StringComparison.OrdinalIgnoreCase);
 }
 
 internal sealed record IKeydDslDocument(
