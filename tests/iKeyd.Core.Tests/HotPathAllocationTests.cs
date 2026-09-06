@@ -1,5 +1,7 @@
 using iKeyd.Core.Chords;
+using iKeyd.Core.Configuration;
 using iKeyd.Core.Keymaps;
+using iKeyd.Core.Runtime;
 using Xunit;
 
 namespace iKeyd.Core.Tests;
@@ -55,6 +57,46 @@ public sealed class HotPathAllocationTests
         Assert.Equal(0, allocated);
     }
 
+    [Fact]
+    public void Configured_tap_hold_runtime_allocates_zero_bytes_after_warmup()
+    {
+        var profile = new KeyBehaviorProfile(
+            behaviors:
+            [
+                new KeyBehaviorBinding(
+                    KeyCode.A,
+                    KeyBehaviorAction.Key("A"),
+                    KeyBehaviorAction.Modifier(KeyBehaviorModifier.Control)),
+                new KeyBehaviorBinding(
+                    KeyCode.Space,
+                    KeyBehaviorAction.Key("Space"),
+                    KeyBehaviorAction.Layer("NAV"))
+            ],
+            layers:
+            [
+                new KeyBehaviorLayer(
+                    "NAV",
+                    [new KeyBehaviorLayerBinding(KeyCode.H, KeyBehaviorAction.Key("Left"))])
+            ]);
+        var runtime = new ConfiguredKeyBehaviorRuntime(profile);
+
+        long timestamp = 0;
+        for (var i = 0; i < 100; i++)
+            timestamp = ExerciseBehaviors(runtime, timestamp);
+
+        var before = GC.GetAllocatedBytesForCurrentThread();
+        var checksum = 0;
+        for (var i = 0; i < 10_000; i++)
+        {
+            timestamp = ExerciseBehaviors(runtime, timestamp);
+            checksum += runtime.ActiveHoldCount;
+        }
+        var allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+
+        Assert.Equal(0, checksum);
+        Assert.Equal(0, allocated);
+    }
+
     private static long ExerciseEngine(ChordEngine<string> engine, long timestamp)
     {
         // Successful chord: Q + W.
@@ -89,6 +131,42 @@ public sealed class HotPathAllocationTests
             throw new InvalidOperationException("Layer state did not return to empty.");
 
         return state;
+    }
+
+    private static long ExerciseBehaviors(ConfiguredKeyBehaviorRuntime runtime, long timestamp)
+    {
+        var down = runtime.OnKeyDown(KeyCode.A, timestamp);
+        if (!down.Consumed || down.Transitions.Count != 0)
+            throw new InvalidOperationException("Expected A mod-tap to start pending.");
+
+        var interrupt = runtime.OnKeyDown(KeyCode.Q, timestamp + 1);
+        if (interrupt.Consumed || interrupt.Transitions.Count != 1 ||
+            interrupt.Transitions[0].Kind != KeyBehaviorTransitionKind.HoldStarted)
+        {
+            throw new InvalidOperationException("Expected Q to resolve A as a Control hold and continue.");
+        }
+
+        var unrelatedUp = runtime.OnKeyUp(KeyCode.Q, timestamp + 2);
+        if (unrelatedUp.Consumed || unrelatedUp.Transitions.Count != 0)
+            throw new InvalidOperationException("Unexpected behavior handling for unrelated Q release.");
+
+        var holdUp = runtime.OnKeyUp(KeyCode.A, timestamp + 3);
+        if (!holdUp.Consumed || holdUp.Transitions.Count != 1 ||
+            holdUp.Transitions[0].Kind != KeyBehaviorTransitionKind.HoldEnded)
+        {
+            throw new InvalidOperationException("Expected A release to end the Control hold.");
+        }
+
+        var tapDown = runtime.OnKeyDown(KeyCode.Space, timestamp + 10);
+        var tapUp = runtime.OnKeyUp(KeyCode.Space, timestamp + 20);
+        if (!tapDown.Consumed || tapDown.Transitions.Count != 0 ||
+            !tapUp.Consumed || tapUp.Transitions.Count != 1 ||
+            tapUp.Transitions[0].Kind != KeyBehaviorTransitionKind.Tap)
+        {
+            throw new InvalidOperationException("Expected Space layer-tap to resolve as a tap.");
+        }
+
+        return timestamp + 100;
     }
 
     private static void AssertNoOutput(bool hasOutput)
