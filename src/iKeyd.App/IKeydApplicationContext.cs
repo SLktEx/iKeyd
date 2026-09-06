@@ -31,8 +31,8 @@ internal sealed class IKeydApplicationContext : ApplicationContext
         ArgumentNullException.ThrowIfNull(configuration);
 
         _keyboard = new WindowsKeyboardBackend();
-        var send = new LegacySendOutput(_keyboard);
         var desktop = new WindowsDesktopBackend();
+        var send = new LegacySendOutput(_keyboard, desktop);
         _runtime = new IKeydRuntimeHandler(
             configuration,
             new WindowsInputMethod(),
