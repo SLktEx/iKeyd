@@ -118,7 +118,7 @@ internal sealed class IKeydApplicationContext : ApplicationContext
 
         _notifyIcon = new NotifyIcon
         {
-            Icon = SystemIcons.Application,
+            Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath) ?? SystemIcons.Application,
             Text = "iKeyd",
             ContextMenuStrip = _menu,
             Visible = true
