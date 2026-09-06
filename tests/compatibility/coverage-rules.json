@@ -203,10 +203,16 @@
       "evidence": ["tests/iKeyd.LegacySpec.Tests/LegacyRuntimeSpecTests.cs","tests/iKeyd.Windows.Tests","tests/COMPATIBILITY.md"]
     },
     {
-      "name": "process/application-specific legacy branches are explicitly handed to compatibility-fix work",
+      "name": "remaining process-specific context requires final real-Windows verification",
       "match": {"tag": "process-specific"},
-      "set": {"implementation":"deferred:#57","unit":"deferred:#57","scenario":"deferred:#57","exeDiff":"deferred:#57","ahkDiff":"deferred:#57","realWindows":"required","intentionalDifference":"pending:#57"},
-      "evidence": ["issue:#57","tests/COMPATIBILITY.md"]
+      "set": {"implementation":"partial","unit":"partial","scenario":"real-windows:#59","exeDiff":"unverified","ahkDiff":"unverified","realWindows":"required","intentionalDifference":"no"},
+      "evidence": ["issue:#59","tests/COMPATIBILITY.md"]
+    },
+    {
+      "name": "Console and gsview contextual hotkeys are implemented with deterministic routing regressions",
+      "match": {"ownerRegex": "^hotkey:(?:\\^v|\\^x|!e)$"},
+      "set": {"implementation":"implemented","unit":"covered","scenario":"regression","exeDiff":"unverified","ahkDiff":"unverified","realWindows":"required","intentionalDifference":"no"},
+      "evidence": ["src/iKeyd.App/LegacyContextualHotkeyHandler.cs","src/iKeyd.App/WindowsWindowCommand.cs","tests/iKeyd.Windows.Tests/LegacyContextualHotkeyHandlerTests.cs","issue:#57"]
     },
     {
       "name": "legacy macro function shells are represented by deterministic macro regressions",
