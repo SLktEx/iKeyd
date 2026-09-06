@@ -71,13 +71,15 @@ internal static class WindowsKeyMap
     public const ushort MediaPrevious = 0xB1;
     public const ushort MediaPlayPause = 0xB3;
 
-    // Japanese 106/109 layout OEM positions. The old iKeyd code used
-    // OemSemicolon/OemPlus as semantic aliases, so keep those names compatible
-    // while exposing the less-confusing physical constants beside them.
-    public const ushort OemColon = 0xBA;      // VK_OEM_1: ':' / '*'
-    public const ushort Oem1 = OemColon;
-    public const ushort OemSemicolon = 0xBB;  // VK_OEM_PLUS: ';' / '+'
-    public const ushort OemPlus = OemColon;   // legacy iKeyd alias: colon position
+    // JIS 106/109 physical punctuation positions. Keep the names introduced by
+    // #173 as compatibility aliases while the #174 registry uses physical
+    // KeyCode identities rather than character meanings.
+    public const ushort JisColon = 0xBA;      // VK_OEM_1: ':' / '*'
+    public const ushort JisSemicolon = 0xBB;  // VK_OEM_PLUS: ';' / '+'
+    public const ushort OemColon = JisColon;
+    public const ushort Oem1 = JisColon;
+    public const ushort OemSemicolon = JisSemicolon;
+    public const ushort OemPlus = JisColon;   // legacy iKeyd alias: colon position
     public const ushort OemComma = 0xBC;
     public const ushort OemMinus = 0xBD;
     public const ushort OemPeriod = 0xBE;
@@ -199,8 +201,8 @@ internal static class WindowsKeyMap
             case >= 'A' and <= 'Z': virtualKey = character; break;
             case >= '0' and <= '9': virtualKey = character; break;
             case ' ': virtualKey = Space; break;
-            case ';': virtualKey = OemSemicolon; break;
-            case ':': virtualKey = OemColon; break;
+            case ';': virtualKey = JisSemicolon; break;
+            case ':': virtualKey = JisColon; break;
             case ',': virtualKey = OemComma; break;
             case '.': virtualKey = OemPeriod; break;
             case '/': virtualKey = OemSlash; break;
@@ -278,8 +280,8 @@ internal static class WindowsKeyMap
 
         Add(result, KeyCode.CapsLock, CapsLock, 0x3A);
         AddLetterRow(result, "ASDFGHJKL", [0x1E, 0x1F, 0x20, 0x21, 0x22, 0x23, 0x24, 0x25, 0x26]);
-        Add(result, KeyCode.SColon, OemSemicolon, 0x27);
-        Add(result, KeyCode.Colon, OemColon, 0x28);
+        Add(result, KeyCode.SColon, JisSemicolon, 0x27);
+        Add(result, KeyCode.Colon, JisColon, 0x28);
         Add(result, KeyCode.RBracket, OemRBracket, 0x2B);
 
         Add(result, KeyCode.LeftShift, LeftShift, 0x2A);
