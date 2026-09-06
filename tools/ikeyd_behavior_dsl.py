@@ -29,26 +29,11 @@ def _strip_comment(line: str) -> str:
 def _compact_key_map(base: Any) -> dict[str, str]:
     keys = [key for row in base.JIS109_LAYOUT for key in row] + ["NumpadComma"]
     aliases = {
-        "esc": "Escape",
-        "return": "Enter",
-        "spc": "Space",
-        "bs": "Backspace",
-        "bspc": "Backspace",
-        "pgup": "PageUp",
-        "pgdn": "PageDown",
-        "lctrl": "LeftControl",
-        "rctrl": "RightControl",
-        "lshift": "LeftShift",
-        "rshift": "RightShift",
-        "lalt": "LeftAlt",
-        "ralt": "RightAlt",
-        "lgui": "LeftGui",
-        "rgui": "RightGui",
-        "lwin": "LeftGui",
-        "rwin": "RightGui",
-        "semicolon": "SColon",
-        "period": "Dot",
-        "at": "At",
+        "esc": "Escape", "return": "Enter", "spc": "Space", "bs": "Backspace", "bspc": "Backspace",
+        "pgup": "PageUp", "pgdn": "PageDown", "lctrl": "LeftControl", "rctrl": "RightControl",
+        "lshift": "LeftShift", "rshift": "RightShift", "lalt": "LeftAlt", "ralt": "RightAlt",
+        "lgui": "LeftGui", "rgui": "RightGui", "lwin": "LeftGui", "rwin": "RightGui",
+        "semicolon": "SColon", "period": "Dot", "at": "At",
     }
     result = {key.casefold(): key for key in keys}
     result.update(aliases)
@@ -56,8 +41,7 @@ def _compact_key_map(base: Any) -> dict[str, str]:
 
 
 def _canonical_key(base: Any, path: Path, lineno: int, value: str) -> str:
-    mapping = _compact_key_map(base)
-    canonical = mapping.get(value.casefold())
+    canonical = _compact_key_map(base).get(value.casefold())
     if canonical is None:
         raise base.DslError(path, lineno, f"unknown behavior key '{value}'")
     return canonical
@@ -96,6 +80,16 @@ def _choice(base: Any, path: Path, lineno: int, description: str, arg: str, choi
     raise base.DslError(path, lineno, f"unknown {description} '{arg}'; expected one of: {', '.join(choices)}")
 
 
+def _quoted(base: Any, path: Path, lineno: int, action: str, arg: str) -> str:
+    try:
+        value = json.loads(arg)
+    except json.JSONDecodeError as exc:
+        raise base.DslError(path, lineno, f"{action}(...) requires a quoted string: {exc.msg}") from exc
+    if not isinstance(value, str):
+        raise base.DslError(path, lineno, f"{action}(...) requires a quoted string")
+    return value
+
+
 def _action(base: Any, path: Path, lineno: int, expression: str, *, allow_hold: bool) -> OrderedDict[str, str]:
     expression = expression.strip().rstrip(";").strip()
     call = re.fullmatch(rf"({base.IDENT})\((.*)\)", expression)
@@ -108,13 +102,7 @@ def _action(base: Any, path: Path, lineno: int, expression: str, *, allow_hold: 
             raise base.DslError(path, lineno, "key(...) expects one key name")
         return OrderedDict(kind="key", value=_canonical_key(base, path, lineno, arg))
     if kind == "text":
-        try:
-            value = json.loads(arg)
-        except json.JSONDecodeError as exc:
-            raise base.DslError(path, lineno, f"text(...) requires a quoted string: {exc.msg}") from exc
-        if not isinstance(value, str):
-            raise base.DslError(path, lineno, "text(...) requires a quoted string")
-        return OrderedDict(kind="text", value=value)
+        return OrderedDict(kind="text", value=_quoted(base, path, lineno, "text", arg))
     if kind == "mouse_move":
         parts = [part.strip() for part in arg.split(",")]
         if len(parts) != 2:
@@ -129,26 +117,24 @@ def _action(base: Any, path: Path, lineno: int, expression: str, *, allow_hold: 
     if kind == "scroll":
         return OrderedDict(kind="scroll", value=_choice(base, path, lineno, "scroll direction", arg, ("Up", "Down")))
     if kind == "media":
-        return OrderedDict(kind="media", value=_choice(base, path, lineno, "media command", arg,
-            ("VolumeUp", "VolumeMute", "VolumeDown", "NextTrack", "PlayPause", "PreviousTrack")))
+        return OrderedDict(kind="media", value=_choice(base, path, lineno, "media command", arg, ("VolumeUp", "VolumeMute", "VolumeDown", "NextTrack", "PlayPause", "PreviousTrack")))
     if kind == "window":
-        return OrderedDict(kind="window", value=_choice(base, path, lineno, "window command", arg,
-            ("Minimize", "ToggleMaximize", "LeftHalf", "RightHalf", "TopHalf", "BottomHalf",
-             "ToggleTopMost", "OpacityUp", "OpacityDown", "ToggleCaption", "ActivateBottomSameClass")))
+        return OrderedDict(kind="window", value=_choice(base, path, lineno, "window command", arg, ("Minimize", "ToggleMaximize", "LeftHalf", "RightHalf", "TopHalf", "BottomHalf", "ToggleTopMost", "OpacityUp", "OpacityDown", "ToggleCaption", "ActivateBottomSameClass")))
+    if kind == "clipboard":
+        return OrderedDict(kind="clipboard", value=_choice(base, path, lineno, "clipboard command", arg, ("History",)))
+    if kind == "macro":
+        return OrderedDict(kind="macro", value=_quoted(base, path, lineno, "macro", arg))
     if kind == "layer" and allow_hold:
         if not re.fullmatch(base.IDENT, arg):
             raise base.DslError(path, lineno, "layer(...) expects one layer name")
         return OrderedDict(kind="layer", value=arg)
     if kind == "modifier" and allow_hold:
-        modifiers = {
-            "ctrl": "Control", "control": "Control", "shift": "Shift",
-            "alt": "Alt", "gui": "Gui", "win": "Gui", "super": "Gui",
-        }
+        modifiers = {"ctrl": "Control", "control": "Control", "shift": "Shift", "alt": "Alt", "gui": "Gui", "win": "Gui", "super": "Gui"}
         value = modifiers.get(arg.casefold())
         if value is None:
             raise base.DslError(path, lineno, f"unknown modifier '{arg}'")
         return OrderedDict(kind="modifier", value=value)
-    output = "key(...), text(...), mouse_move(...), mouse_click(...), scroll(...), media(...) or window(...)"
+    output = "key(...), text(...), mouse_move(...), mouse_click(...), scroll(...), media(...), window(...), clipboard(...) or macro(...)"
     allowed = f"{output}, layer(...) or modifier(...)" if allow_hold else output
     raise base.DslError(path, lineno, f"action must be {allowed}")
 
@@ -209,7 +195,6 @@ def extract(base: Any, text: str, path: Path) -> tuple[str, OrderedDict[str, Ord
         line = _strip_comment(raw).strip()
         if not line:
             continue
-
         if extracted is not None:
             clean[index] = ""
             if line == "}":
@@ -230,7 +215,6 @@ def extract(base: Any, text: str, path: Path) -> tuple[str, OrderedDict[str, Ord
                     raise base.DslError(path, lineno, f"duplicate key '{key}' in behavior layer '{extracted_name}'")
                 layer[key] = _action(base, path, lineno, match.group(2), allow_hold=False)
                 continue
-
             assert behavior_draft is not None
             assignment = re.fullmatch(rf"({base.IDENT})\s*=\s*(.+)", line)
             if not assignment:
@@ -238,65 +222,51 @@ def extract(base: Any, text: str, path: Path) -> tuple[str, OrderedDict[str, Ord
             name = assignment.group(1).casefold()
             value = assignment.group(2).strip().rstrip(";").strip()
             if name == "tap":
-                if "tap" in behavior_draft:
-                    raise base.DslError(path, lineno, "duplicate behavior tap setting")
+                if "tap" in behavior_draft: raise base.DslError(path, lineno, "duplicate behavior tap setting")
                 behavior_draft["tap"] = _action(base, path, lineno, value, allow_hold=False)
             elif name == "hold":
-                if "hold" in behavior_draft:
-                    raise base.DslError(path, lineno, "duplicate behavior hold setting")
+                if "hold" in behavior_draft: raise base.DslError(path, lineno, "duplicate behavior hold setting")
                 hold = _action(base, path, lineno, value, allow_hold=True)
-                if hold["kind"] not in {"layer", "modifier"}:
-                    raise base.DslError(path, lineno, "hold must be layer(...) or modifier(...)")
+                if hold["kind"] not in {"layer", "modifier"}: raise base.DslError(path, lineno, "hold must be layer(...) or modifier(...)")
                 behavior_draft["hold"] = hold
             elif name == "timeout":
                 timeout = re.fullmatch(r"(\d+)\s*ms", value, re.I)
-                if not timeout or int(timeout.group(1)) <= 0:
-                    raise base.DslError(path, lineno, "timeout must be a positive duration such as 180ms")
+                if not timeout or int(timeout.group(1)) <= 0: raise base.DslError(path, lineno, "timeout must be a positive duration such as 180ms")
                 behavior_draft["timeoutMs"] = int(timeout.group(1))
             elif name == "interrupt":
                 policy = value.casefold()
-                if policy not in {"hold", "tap"}:
-                    raise base.DslError(path, lineno, "interrupt must be 'hold' or 'tap'")
+                if policy not in {"hold", "tap"}: raise base.DslError(path, lineno, "interrupt must be 'hold' or 'tap'")
                 behavior_draft["interrupt"] = policy
             else:
                 raise base.DslError(path, lineno, f"unknown behavior setting '{assignment.group(1)}'")
             continue
 
         if ordinary_depth:
-            if line.endswith("{"):
-                ordinary_depth += 1
-            if line == "}":
-                ordinary_depth -= 1
+            if line.endswith("{"): ordinary_depth += 1
+            if line == "}": ordinary_depth -= 1
             continue
-
         if re.fullmatch(rf"(?:profile\s+{base.IDENT}|layout\s+{base.IDENT}|keymap\s+{base.IDENT}(?:\s+using\s+{base.IDENT})?|quirks)\s*\{{", line):
             ordinary_depth = 1
             continue
-
         layer_start = re.fullmatch(rf"layer\s+({base.IDENT})\s*\{{", line)
         if layer_start:
             name = layer_start.group(1)
-            if any(existing.casefold() == name.casefold() for existing in layers):
-                raise base.DslError(path, lineno, f"duplicate behavior layer '{name}'")
+            if any(existing.casefold() == name.casefold() for existing in layers): raise base.DslError(path, lineno, f"duplicate behavior layer '{name}'")
             layers[name] = OrderedDict()
             extracted, extracted_name = "layer", name
             clean[index] = ""
             continue
-
         block = re.fullmatch(rf"behavior\s+({base.KEY_REF})\s*\{{", line)
         if block:
             trigger = _canonical_key(base, path, lineno, base.resolve_key_ref(path, lineno, block.group(1), layouts))
-            if any(existing.casefold() == trigger.casefold() for existing in behaviors):
-                raise base.DslError(path, lineno, f"duplicate behavior trigger '{trigger}'")
+            if any(existing.casefold() == trigger.casefold() for existing in behaviors): raise base.DslError(path, lineno, f"duplicate behavior trigger '{trigger}'")
             extracted, behavior_trigger, behavior_draft = "behavior", trigger, _new_behavior()
             clean[index] = ""
             continue
-
         short = re.fullmatch(rf"behavior\s+({base.KEY_REF})\s*=\s*(.+)", line)
         if short:
             trigger = _canonical_key(base, path, lineno, base.resolve_key_ref(path, lineno, short.group(1), layouts))
-            if any(existing.casefold() == trigger.casefold() for existing in behaviors):
-                raise base.DslError(path, lineno, f"duplicate behavior trigger '{trigger}'")
+            if any(existing.casefold() == trigger.casefold() for existing in behaviors): raise base.DslError(path, lineno, f"duplicate behavior trigger '{trigger}'")
             behavior = _shorthand(base, path, lineno, short.group(2))
             _validate_behavior(base, path, lineno, trigger, behavior, layers, check_layer=False)
             behaviors[trigger] = behavior
@@ -313,14 +283,10 @@ def merge(profile: dict[str, object], layers: OrderedDict[str, object], behavior
     result: OrderedDict[str, object] = OrderedDict()
     for key, value in profile.items():
         if key == "knownQuirks":
-            if layers:
-                result["layers"] = layers
-            if behaviors:
-                result["behaviors"] = behaviors
+            if layers: result["layers"] = layers
+            if behaviors: result["behaviors"] = behaviors
         result[key] = value
     if "knownQuirks" not in profile:
-        if layers:
-            result["layers"] = layers
-        if behaviors:
-            result["behaviors"] = behaviors
+        if layers: result["layers"] = layers
+        if behaviors: result["behaviors"] = behaviors
     return result
