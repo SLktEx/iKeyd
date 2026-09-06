@@ -12,8 +12,8 @@
       { "kind": "keyUp", "key": "Home" }
     ]
   },
-  "tags": ["legacy", "runtime-long-tail", "function-layer", "deterministic"],
+  "tags": ["legacy", "runtime-long-tail", "function-layer", "send-event-diff", "hosted-windows"],
   "inventoryIds": ["legacy-send-2de512fceb"],
-  "requiredEnvironment": ["deterministic-windows-runtime"],
-  "oracleTargets": ["ikeyd-runtime"]
+  "requiredEnvironment": ["hosted-windows"],
+  "oracleTargets": ["compiled-exe", "ahk-source", "ikeyd-runtime"]
 }
