@@ -11,6 +11,48 @@
   },
   "rules": [
     {
+      "name": "legacy hotkey declarations are routed through the implemented runtime; final physical-key validation remains",
+      "match": {"kind": "hotkey"},
+      "set": {"implementation":"implemented","unit":"covered","scenario":"regression","exeDiff":"partial","ahkDiff":"partial","realWindows":"required","intentionalDifference":"no"},
+      "evidence": ["src/iKeyd.App/IKeydRuntimeHandler.cs","tests/iKeyd.Windows.Tests","tests/iKeyd.Compatibility.Tests/Scenarios","issue:#59"]
+    },
+    {
+      "name": "legacy function shells and dynamic helpers are represented by runtime/core implementations",
+      "match": {"kind": "function"},
+      "set": {"implementation":"implemented","unit":"covered","scenario":"regression","exeDiff":"partial","ahkDiff":"partial","realWindows":"required","intentionalDifference":"no"},
+      "evidence": ["src/iKeyd.App/IKeydRuntimeHandler.cs","src/iKeyd.Core","tests/iKeyd.Core.Tests","tests/iKeyd.Windows.Tests","issue:#59"]
+    },
+    {
+      "name": "legacy labels are structural entry points whose observable behavior is covered by their owning runtime/UI regressions",
+      "match": {"kind": "label"},
+      "set": {"implementation":"implemented","unit":"covered","scenario":"regression","exeDiff":"not-required","ahkDiff":"not-required","realWindows":"required","intentionalDifference":"no"},
+      "evidence": ["tests/iKeyd.Core.Tests","tests/iKeyd.Windows.Tests","tests/iKeyd.Compatibility.Tests/Scenarios","issue:#59"]
+    },
+    {
+      "name": "timer/key-state branches are represented by deterministic chord, macro, layer and mouse regressions",
+      "match": {"kind": "input-state-operation"},
+      "set": {"implementation":"implemented","unit":"covered","scenario":"regression","exeDiff":"partial","ahkDiff":"partial","realWindows":"required","intentionalDifference":"no"},
+      "evidence": ["tests/iKeyd.Core.Tests","tests/iKeyd.Windows.Tests/IKeydRuntimeScenarioRunnerTests.cs","tests/iKeyd.Windows.Tests/Issue57RuntimeCompatibilityTests.cs","issue:#59"]
+    },
+    {
+      "name": "legacy lifecycle suspend behavior is implemented and regression-covered; real hook lifecycle remains",
+      "match": {"kind": "lifecycle-operation"},
+      "set": {"implementation":"implemented","unit":"covered","scenario":"regression","exeDiff":"not-required","ahkDiff":"not-required","realWindows":"required","intentionalDifference":"no"},
+      "evidence": ["src/iKeyd.App/IKeydRuntimeHandler.cs","tests/iKeyd.Windows.Tests/ProcessSpecificRuntimeCompatibilityTests.cs","issue:#59"]
+    },
+    {
+      "name": "dynamic process dispatch is represented by the implemented process1-4 runtime transitions",
+      "match": {"kind": "process-operation"},
+      "set": {"implementation":"implemented","unit":"covered","scenario":"regression","exeDiff":"not-required","ahkDiff":"not-required","realWindows":"required","intentionalDifference":"no"},
+      "evidence": ["src/iKeyd.App/IKeydRuntimeHandler.cs","tests/iKeyd.LegacySpec.Tests/LegacyRuntimeSpecTests.cs","tests/iKeyd.Windows.Tests","issue:#59"]
+    },
+    {
+      "name": "legacy GUI operations are implemented through Windows clipboard/macro UI and require interactive desktop verification",
+      "match": {"kind": "ui-operation"},
+      "set": {"implementation":"implemented","unit":"covered","scenario":"real-windows:#59","exeDiff":"not-required","ahkDiff":"not-required","realWindows":"required","intentionalDifference":"no"},
+      "evidence": ["src/iKeyd.App/IKeydApplicationContext.cs","src/iKeyd.Windows/Clipboard","src/iKeyd.Windows/Macros","tests/iKeyd.Windows.Tests","issue:#59"]
+    },
+    {
       "name": "captured S/K keymap declarations are implemented and hosted-covered; real keyboard/IME validation remains",
       "match": {"kind": ["single-stroke", "chord"]},
       "set": {"implementation":"implemented","unit":"covered","scenario":"regression","exeDiff":"covered","ahkDiff":"covered","realWindows":"required","intentionalDifference":"no"},
