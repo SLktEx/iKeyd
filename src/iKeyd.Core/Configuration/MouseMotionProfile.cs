@@ -8,7 +8,7 @@ public sealed record MouseMotionProfile
         45,
         2,
         "smoothstep",
-        2200.0,
+        1000.0,
         800.0,
         240.0,
         4400.0,
