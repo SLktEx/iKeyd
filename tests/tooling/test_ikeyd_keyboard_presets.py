@@ -46,6 +46,66 @@ keymap S {
             profile["chords"]["S"],
         )
 
+    def test_pos_aliases_declared_jis109_physical_keyboard_before_base(self):
+        text = """
+profile demo {
+    chord_window = 40ms
+}
+keyboard JIS109
+layout BASE {
+    row Q W E
+}
+keymap S {
+    POS.Ro = ro
+    combo POS.Muhenkan + POS.Yen = physical
+    combo BASE[1,1] + BASE[1,2] = logical-subset
+}
+""".strip()
+
+        profile = module.compile_dsl(text, Path("profile.ikeyd"))
+        self.assertEqual({"Ro": "ro"}, profile["singleStroke"]["S"])
+        self.assertEqual(
+            [["Muhenkan", "Yen", "physical"], ["Q", "W", "logical-subset"]],
+            profile["chords"]["S"],
+        )
+
+    def test_pos_keeps_legacy_base_alias_without_keyboard_preset(self):
+        text = """
+profile demo {
+    chord_window = 40ms
+}
+layout BASE {
+    row Q W E
+}
+keymap S {
+    POS.Q = q
+    combo POS[1,1] + POS.W = legacy
+}
+""".strip()
+
+        profile = module.compile_dsl(text, Path("profile.ikeyd"))
+        self.assertEqual({"Q": "q"}, profile["singleStroke"]["S"])
+        self.assertEqual([["Q", "W", "legacy"]], profile["chords"]["S"])
+
+    def test_explicit_pos_layout_overrides_keyboard_preset(self):
+        text = """
+profile demo {
+    chord_window = 40ms
+}
+keyboard JIS109
+layout POS {
+    row CustomA CustomB
+}
+keymap S {
+    POS.CustomA = a
+    combo POS.CustomA + POS.CustomB = custom
+}
+""".strip()
+
+        profile = module.compile_dsl(text, Path("profile.ikeyd"))
+        self.assertEqual({"CustomA": "a"}, profile["singleStroke"]["S"])
+        self.assertEqual([["CustomA", "CustomB", "custom"]], profile["chords"]["S"])
+
     def test_keyboard_preset_names_are_case_insensitive(self):
         text = """
 profile demo {
