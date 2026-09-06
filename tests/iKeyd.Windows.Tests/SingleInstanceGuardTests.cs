@@ -1,4 +1,5 @@
 using iKeyd.App;
+using Xunit;
 
 namespace iKeyd.Windows.Tests;
 
