@@ -496,7 +496,6 @@ internal sealed class IKeydRuntimeHandler : IKeyboardEventHandler, IMacroActionD
 
     private bool DispatchMouseMedia(KeyId key)
     {
-        var amount = GetMouseMoveAmount();
         switch (key.Code)
         {
             case KeyCode.D:
@@ -504,16 +503,16 @@ internal sealed class IKeydRuntimeHandler : IKeyboardEventHandler, IMacroActionD
             case KeyCode.C:
                 return true;
             case KeyCode.J:
-                _desktop.MovePointerBy(-amount, 0);
+                MoveMouse(-1, 0);
                 return true;
             case KeyCode.K:
-                _desktop.MovePointerBy(0, amount);
+                MoveMouse(0, 1);
                 return true;
             case KeyCode.L:
-                _desktop.MovePointerBy(amount, 0);
+                MoveMouse(1, 0);
                 return true;
             case KeyCode.I:
-                _desktop.MovePointerBy(0, -amount);
+                MoveMouse(0, -1);
                 return true;
             case KeyCode.U:
                 _desktop.Click(DesktopMouseButton.Left);
@@ -525,7 +524,10 @@ internal sealed class IKeydRuntimeHandler : IKeyboardEventHandler, IMacroActionD
                 ToggleMouseButton(DesktopMouseButton.Left);
                 return true;
             case KeyCode.H:
-                ToggleMouseButton(DesktopMouseButton.Right);
+                // Preserve the pinned legacy typo: down is unreachable from up,
+                // but an already-held right button can be released.
+                if (_desktop.IsMouseButtonDown(DesktopMouseButton.Right))
+                    _desktop.SetMouseButton(DesktopMouseButton.Right, false);
                 return true;
             case KeyCode.N:
                 MovePointerToActiveWindowCorner(bottomRight: false);
@@ -576,7 +578,10 @@ internal sealed class IKeydRuntimeHandler : IKeyboardEventHandler, IMacroActionD
 
     private void MovePointerToActiveWindowCorner(bool bottomRight)
     {
-        var bounds = _desktop.GetWindowBounds(_desktop.GetActiveWindow());
+        var window = _desktop.GetActiveWindow();
+        if (!_desktop.IsWindow(window))
+            return;
+        var bounds = _desktop.GetWindowBounds(window);
         if (bounds.X < 0)
             return;
 
@@ -585,15 +590,27 @@ internal sealed class IKeydRuntimeHandler : IKeyboardEventHandler, IMacroActionD
             : new DesktopPoint(bounds.X + 1, bounds.Y + 1));
     }
 
-    private int GetMouseMoveAmount()
+    private void MoveMouse(int xDirection, int yDirection)
     {
         if (_keyboardState.IsVirtualKeyPressed((ushort)'D'))
-            return 30;
+        {
+            _desktop.MovePointerBy(xDirection * 30, yDirection * 30);
+            return;
+        }
         if (_keyboardState.IsVirtualKeyPressed((ushort)'E'))
-            return 10;
+        {
+            _desktop.MovePointerBy(xDirection * 10, yDirection * 10);
+            return;
+        }
         if (_keyboardState.IsVirtualKeyPressed((ushort)'C'))
-            return Math.Max(1, _desktop.GetPrimaryWorkArea().Width / 4);
-        return 100;
+        {
+            var area = _desktop.GetPrimaryWorkArea();
+            _desktop.MovePointerBy(
+                xDirection * Math.Max(1, area.Width / 4),
+                yDirection * Math.Max(1, area.Height / 4));
+            return;
+        }
+        _desktop.MovePointerBy(xDirection * 100, yDirection * 100);
     }
 
     private void SendLayerAction(LayerAction action)

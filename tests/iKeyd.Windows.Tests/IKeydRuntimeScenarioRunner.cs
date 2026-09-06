@@ -16,6 +16,10 @@ namespace iKeyd.Windows.Tests;
 public sealed class IKeydRuntimeScenarioRunner : ICompatibilityScenarioRunner
 {
     private static string ProfilePath => Path.Combine(AppContext.BaseDirectory, "Fixtures", "hotkeySKG.behavior.json");
+    private readonly DesktopMouseButton[] _initialMouseButtons;
+
+    public IKeydRuntimeScenarioRunner(params DesktopMouseButton[] initialMouseButtons)
+        => _initialMouseButtons = initialMouseButtons ?? [];
 
     public string Name => "iKeyd.Runtime";
     public bool IsAvailable => true;
@@ -36,6 +40,7 @@ public sealed class IKeydRuntimeScenarioRunner : ICompatibilityScenarioRunner
         var keyboardState = new KeyboardState();
         var keyboard = new RecordingKeyboardOutput();
         var desktop = new RecordingDesktopBackend();
+        desktop.SetInitialMouseButtons(_initialMouseButtons);
         var inputMethod = new FixedInputMethod(
             string.Equals(scenario.InitialState.Ime, "on", StringComparison.OrdinalIgnoreCase));
         var send = new LegacySendOutput(keyboard);
@@ -235,6 +240,13 @@ public sealed class IKeydRuntimeScenarioRunner : ICompatibilityScenarioRunner
         private DesktopPoint _pointer = new(400, 300);
 
         public List<ObservedAction> Actions { get; } = [];
+
+        public void SetInitialMouseButtons(IEnumerable<DesktopMouseButton> buttons)
+        {
+            _buttons.Clear();
+            foreach (var button in buttons)
+                _buttons.Add(button);
+        }
 
         public WindowHandle GetActiveWindow() => _window;
         public DesktopWindowState GetWindowState(WindowHandle window) => _windowState;
