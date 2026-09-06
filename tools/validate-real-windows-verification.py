@@ -110,7 +110,12 @@ def validate_report(plan: dict[str, Any], report: dict[str, Any], require_comple
             errors.append(f"{check_id}: failed checks require notes")
 
     automated = report.get("automated", {})
-    for automated_id in ("legacyDifferential", "backendCompatibility", "clipboardCompatibility"):
+    for automated_id in (
+        "legacyDifferential",
+        "backendCompatibility",
+        "clipboardCompatibility",
+        "physicalInputCompatibility",
+    ):
         automated_item = automated.get(automated_id)
         if not isinstance(automated_item, dict):
             errors.append(f"automated.{automated_id} is required")
@@ -143,6 +148,8 @@ def validate_report(plan: dict[str, Any], report: dict[str, Any], require_comple
             errors.append("real-Win32 backend E2E did not pass")
         if automated.get("clipboardCompatibility", {}).get("status") not in {"pass", "skipped"}:
             errors.append("safe clipboard E2E was not attempted")
+        if automated.get("physicalInputCompatibility", {}).get("status") != "pass":
+            errors.append("Windows hook/SendInput E2E did not pass")
         if not report.get("environment", {}).get("japaneseImeConfigured"):
             errors.append("Japanese IME was not recorded as configured")
         if not binaries.get("ikeyd", {}).get("sha256"):

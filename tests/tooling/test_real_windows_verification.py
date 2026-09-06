@@ -45,6 +45,7 @@ class RealWindowsVerificationTests(unittest.TestCase):
                 "legacyDifferential": {"status": "pass"},
                 "backendCompatibility": {"status": "pass"},
                 "clipboardCompatibility": {"status": "pass", "message": "verified"},
+                "physicalInputCompatibility": {"status": "pass"},
             },
             "checks": checks,
             "summary": {
@@ -112,6 +113,15 @@ class RealWindowsVerificationTests(unittest.TestCase):
             "message": "Clipboard contained a non-text/custom format and was not mutated.",
         }
         self.assertEqual([], module.validate_report(self.plan, skipped, require_complete=True))
+
+    def test_complete_report_requires_windows_hook_sendinput_e2e(self):
+        report = self.complete_report()
+        report["automated"]["physicalInputCompatibility"]["status"] = "not-run"
+        report["summary"]["complete"] = False
+
+        errors = module.validate_report(self.plan, report, require_complete=True)
+
+        self.assertTrue(any("hook/SendInput E2E" in error for error in errors))
 
     def test_report_rejects_inventory_drift_and_wrong_legacy_binary(self):
         report = self.complete_report()
