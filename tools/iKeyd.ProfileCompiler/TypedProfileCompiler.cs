@@ -1,9 +1,11 @@
 using System.Text;
+using iKeyd.Core.Chords;
 using iKeyd.Core.Configuration;
+using iKeyd.Core.Keymaps;
 
 internal static class TypedProfileCompiler
 {
-    private const int CompactKeyCount = 54; // KeyCode.A..KeyCode.At
+    private const int CompactKeyCount = Keymap<string>.CompactKeyCount;
     private const int MaxBehaviorStatementDepth = 32;
 
     public static string CompileFile(string inputPath)
@@ -226,43 +228,15 @@ internal static class TypedProfileCompiler
     {
         if (string.IsNullOrWhiteSpace(key))
             throw new InvalidDataException($"{location} contains an empty key name.");
-        var normalized = key.Trim().ToUpperInvariant();
-        string? token = null;
-        var code = 0;
-        if (normalized.Length == 1 && normalized[0] is >= 'A' and <= 'Z')
-        {
-            token = normalized;
-            code = 1 + normalized[0] - 'A';
-        }
-        else if (normalized.Length == 1 && normalized[0] is >= '0' and <= '9')
-        {
-            token = $"Digit{normalized}";
-            code = 27 + normalized[0] - '0';
-        }
-        else if (normalized.Length is 2 or 3 && normalized[0] == 'F' &&
-                 int.TryParse(normalized.AsSpan(1), out var functionNumber) &&
-                 functionNumber is >= 1 and <= 12)
-        {
-            token = normalized;
-            code = 37 + functionNumber - 1;
-        }
-        else
-        {
-            (token, code) = normalized switch
-            {
-                "SCOLON" => ("SColon", 49),
-                "COLON" => ("Colon", 50),
-                "COMMA" => ("Comma", 51),
-                "DOT" => ("Dot", 52),
-                "SLASH" => ("Slash", 53),
-                "AT" => ("At", 54),
-                _ => (null, 0),
-            };
-        }
 
-        if (token is null || code is < 1 or > CompactKeyCount)
+        if (!KeyId.TryParseCompact(key, out var code))
             throw new InvalidDataException($"{location} contains unsupported key '{key}' for the compiled Windows profile.");
-        return new KeyInfo($"new KeyId(KeyCode.{token})", code);
+
+        var numericCode = (int)code;
+        if (numericCode is < 1 or > CompactKeyCount)
+            throw new InvalidDataException($"{location} contains unsupported key '{key}' for the compiled Windows profile.");
+
+        return new KeyInfo($"new KeyId(KeyCode.{code})", numericCode);
     }
 
     private static int GetCompactChordIndex(int firstCode, int secondCode)

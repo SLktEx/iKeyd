@@ -36,6 +36,7 @@ internal readonly record struct InputDiagnosticEntry(
     InputDiagnosticKind DiagnosticKind,
     ushort VirtualKey,
     ushort ScanCode,
+    bool IsExtended,
     KeyEventKind EventKind,
     KeyEventOrigin Origin,
     KeyboardDisposition Disposition,
@@ -72,6 +73,7 @@ internal sealed class InputDiagnosticsBuffer
             InputDiagnosticKind.Event,
             keyboardEvent.Key.VirtualKey,
             keyboardEvent.Key.ScanCode,
+            keyboardEvent.Key.IsExtended,
             keyboardEvent.Kind,
             keyboardEvent.Origin,
             disposition,
@@ -93,6 +95,7 @@ internal sealed class InputDiagnosticsBuffer
             kind,
             0,
             0,
+            false,
             KeyEventKind.Down,
             KeyEventOrigin.OwnInjected,
             KeyboardDisposition.Suppress,
@@ -114,6 +117,7 @@ internal sealed class InputDiagnosticsBuffer
             kind,
             0,
             0,
+            false,
             KeyEventKind.Down,
             KeyEventOrigin.Physical,
             KeyboardDisposition.Suppress,
@@ -135,7 +139,7 @@ internal sealed class InputDiagnosticsBuffer
     public string ExportText()
     {
         var entries = Snapshot();
-        var text = new StringBuilder(entries.Length * 190 + 256);
+        var text = new StringBuilder(entries.Length * 196 + 256);
         text.AppendLine("iKeyd input diagnostics");
         text.AppendLine("Privacy: no literal keymap output text is stored; payloads are length + fingerprint only.");
         text.AppendLine("seq\tts\tkind\tkey\tevent\tdisposition\tbefore\tafter\tpayload\tdetail");
@@ -146,7 +150,8 @@ internal sealed class InputDiagnosticsBuffer
                 .Append(entry.TimestampMs).Append('\t')
                 .Append(entry.DiagnosticKind).Append('\t')
                 .Append("vk=").Append(entry.VirtualKey.ToString("X2"))
-                .Append("/sc=").Append(entry.ScanCode.ToString("X3")).Append('\t')
+                .Append("/sc=").Append(entry.ScanCode.ToString("X3"))
+                .Append("/ext=").Append(entry.IsExtended ? '1' : '0').Append('\t')
                 .Append(entry.Origin).Append('/').Append(entry.EventKind).Append('\t')
                 .Append(entry.Disposition).Append('\t');
             AppendState(text, entry.Before);

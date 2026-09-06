@@ -54,6 +54,26 @@ public sealed class InputDiagnosticsTests
     }
 
     [Fact]
+    public void Export_preserves_extended_physical_key_identity()
+    {
+        var diagnostics = new InputDiagnosticsBuffer();
+        var state = EmptyState();
+        var numpadEnter = new KeyboardKey(WindowsKeyMap.Enter, 0x1C, true);
+
+        diagnostics.RecordEvent(
+            new KeyboardEvent(numpadEnter, KeyEventKind.Down, KeyEventOrigin.Physical, 10),
+            state,
+            state,
+            KeyboardDisposition.Suppress);
+
+        var entry = Assert.Single(diagnostics.Snapshot());
+        Assert.Equal(WindowsKeyMap.Enter, entry.VirtualKey);
+        Assert.Equal(0x1C, entry.ScanCode);
+        Assert.True(entry.IsExtended);
+        Assert.Contains("vk=0D/sc=01C/ext=1", diagnostics.ExportText(), StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void NonConvert_F_trace_records_legacy_vk_sc_output_and_clean_release_state()
     {
         using var fixture = CreateRuntime(InputMode.R);
@@ -75,6 +95,27 @@ public sealed class InputDiagnosticsTests
         Assert.Equal(KeyboardModifierMask.None, release.After.PhysicalModifiers);
         Assert.Equal(0, release.After.LayerCount);
         Assert.Equal(LayerModifiers.None, release.After.LayerModifiers);
+    }
+
+    [Fact]
+    public void Scan_only_NonConvert_is_the_same_physical_layer_trigger()
+    {
+        using var fixture = CreateRuntime(InputMode.R);
+        var nonConvert = new KeyboardKey(0x00, 0x7B, false);
+
+        Assert.Equal(KeyboardDisposition.Suppress, Dispatch(fixture, nonConvert, KeyEventKind.Down, 0));
+        Assert.Equal(KeyboardDisposition.Suppress, Dispatch(fixture, WindowsKeyMap.Keyboard('F'), KeyEventKind.Down, 10));
+        Assert.Equal(KeyboardDisposition.Suppress, Dispatch(fixture, WindowsKeyMap.Keyboard('F'), KeyEventKind.Up, 11));
+        Assert.Equal(KeyboardDisposition.Suppress, Dispatch(fixture, nonConvert, KeyEventKind.Up, 20));
+
+        var snapshot = fixture.Runtime.GetInputDiagnosticSnapshot();
+        Assert.Contains(snapshot, entry => entry.DiagnosticKind == InputDiagnosticKind.LegacyVirtualScan);
+        var release = snapshot.Last(entry =>
+            entry.DiagnosticKind == InputDiagnosticKind.Event &&
+            entry.ScanCode == 0x7B &&
+            entry.EventKind == KeyEventKind.Up);
+        Assert.Equal(0, release.After.HeldLayerCount);
+        Assert.Equal(0, release.After.LayerCount);
     }
 
     [Fact]
@@ -193,9 +234,16 @@ public sealed class InputDiagnosticsTests
         ushort virtualKey,
         KeyEventKind kind,
         long timestampMs)
+        => Dispatch(fixture, WindowsKeyMap.Keyboard(virtualKey), kind, timestampMs);
+
+    private static KeyboardDisposition Dispatch(
+        RuntimeFixture fixture,
+        KeyboardKey key,
+        KeyEventKind kind,
+        long timestampMs)
     {
         var keyboardEvent = new KeyboardEvent(
-            WindowsKeyMap.Keyboard(virtualKey),
+            key,
             kind,
             KeyEventOrigin.Physical,
             timestampMs);

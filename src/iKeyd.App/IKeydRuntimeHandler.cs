@@ -25,8 +25,8 @@ internal sealed class IKeydRuntimeHandler : IKeyboardEventHandler, IInputStateRe
     private readonly WindowGroupController _windowGroups;
     private readonly ChordEngine<string> _sEngine;
     private readonly ChordEngine<string> _kEngine;
-    private readonly HashSet<ushort> _suppressedKeys = new(64);
-    private readonly Dictionary<ushort, LayerEvent> _heldLayerPresses = new(4);
+    private readonly HashSet<KeyboardKey> _suppressedKeys = new(64);
+    private readonly Dictionary<KeyCode, LayerEvent> _heldLayerPresses = new(4);
     private readonly Timer _chordTimer;
     private readonly KeyboardMouseMotion _mouseMotion;
     private readonly InputDiagnosticsBuffer _diagnostics = new();
@@ -154,16 +154,16 @@ internal sealed class IKeydRuntimeHandler : IKeyboardEventHandler, IInputStateRe
 
         if (keyboardEvent.Kind == KeyEventKind.Up && _mouseMotion.TryRelease(keyboardEvent.Key.VirtualKey))
         {
-            _suppressedKeys.Remove(keyboardEvent.Key.VirtualKey);
+            _suppressedKeys.Remove(keyboardEvent.Key);
             return KeyboardDisposition.Suppress;
         }
 
         if (keyboardEvent.Kind == KeyEventKind.Up)
-            return _suppressedKeys.Remove(keyboardEvent.Key.VirtualKey)
+            return _suppressedKeys.Remove(keyboardEvent.Key)
                 ? KeyboardDisposition.Suppress
                 : KeyboardDisposition.PassThrough;
 
-        var keyId = WindowsKeyMap.TryResolveKeyId(keyboardEvent.Key.VirtualKey);
+        var keyId = WindowsKeyMap.TryResolveKeyId(keyboardEvent.Key);
 
         if (_layers.Layers.Count != 0)
         {
@@ -171,7 +171,7 @@ internal sealed class IKeydRuntimeHandler : IKeyboardEventHandler, IInputStateRe
             _layers = _layers.MarkConsumed();
             if (handled)
             {
-                _suppressedKeys.Add(keyboardEvent.Key.VirtualKey);
+                _suppressedKeys.Add(keyboardEvent.Key);
                 return KeyboardDisposition.Suppress;
             }
 
@@ -203,7 +203,7 @@ internal sealed class IKeydRuntimeHandler : IKeyboardEventHandler, IInputStateRe
         else
             CancelTimeout();
 
-        _suppressedKeys.Add(keyboardEvent.Key.VirtualKey);
+        _suppressedKeys.Add(keyboardEvent.Key);
         return KeyboardDisposition.Suppress;
     }
 
@@ -296,21 +296,22 @@ internal sealed class IKeydRuntimeHandler : IKeyboardEventHandler, IInputStateRe
 
     private bool TryHandleLayerKey(KeyboardEvent keyboardEvent)
     {
-        var virtualKey = keyboardEvent.Key.VirtualKey;
-        if (!IsLayerTrigger(virtualKey))
+        var keyId = WindowsKeyMap.TryResolveKeyId(keyboardEvent.Key);
+        if (keyId is null || !IsLayerTrigger(keyId.Value.Code))
             return false;
 
+        var physicalCode = keyId.Value.Code;
         if (keyboardEvent.Kind == KeyEventKind.Down)
         {
             // Low-level keyboard hooks receive repeated Down events while a key is
             // held. A layer press is an edge, not a repeatable action. Reapplying
             // MDown/SpaceDown used to reset Consumed and KanaDown could even toggle
             // K repeatedly, eventually corrupting the state machine.
-            if (_heldLayerPresses.ContainsKey(virtualKey))
+            if (_heldLayerPresses.ContainsKey(physicalCode))
                 return true;
 
-            var pressEvent = ResolveLayerPress(virtualKey);
-            _heldLayerPresses.Add(virtualKey, pressEvent);
+            var pressEvent = ResolveLayerPress(physicalCode);
+            _heldLayerPresses.Add(physicalCode, pressEvent);
             ApplyLayerEvent(pressEvent);
             return true;
         }
@@ -318,7 +319,7 @@ internal sealed class IKeydRuntimeHandler : IKeyboardEventHandler, IInputStateRe
         // Release must match the variant selected at key-down. Recomputing from
         // the current Alt state means Alt+Convert followed by Alt-up, Convert-up
         // incorrectly becomes HUp instead of AltHUp and can leave A/H stuck.
-        if (!_heldLayerPresses.Remove(virtualKey, out var originalPress))
+        if (!_heldLayerPresses.Remove(physicalCode, out var originalPress))
             return true;
 
         var releaseEvent = ResolveLayerRelease(originalPress);
@@ -336,19 +337,19 @@ internal sealed class IKeydRuntimeHandler : IKeyboardEventHandler, IInputStateRe
             SendLayerAction(action);
     }
 
-    private LayerEvent ResolveLayerPress(ushort virtualKey)
+    private LayerEvent ResolveLayerPress(KeyCode physicalCode)
     {
         var altPressed = IsAltPressed();
-        return virtualKey switch
+        return physicalCode switch
         {
-            WindowsKeyMap.NonConvert => LayerEvent.MDown,
-            WindowsKeyMap.Convert when altPressed => LayerEvent.AltHDown,
-            WindowsKeyMap.Convert => LayerEvent.HDown,
-            WindowsKeyMap.Space when altPressed => LayerEvent.AltSpaceDown,
-            WindowsKeyMap.Space => LayerEvent.SpaceDown,
-            WindowsKeyMap.Kana when altPressed => LayerEvent.AltKanaDown,
-            WindowsKeyMap.Kana => LayerEvent.KanaDown,
-            _ => throw new ArgumentOutOfRangeException(nameof(virtualKey))
+            KeyCode.NonConvert => LayerEvent.MDown,
+            KeyCode.Convert when altPressed => LayerEvent.AltHDown,
+            KeyCode.Convert => LayerEvent.HDown,
+            KeyCode.Space when altPressed => LayerEvent.AltSpaceDown,
+            KeyCode.Space => LayerEvent.SpaceDown,
+            KeyCode.Kana when altPressed => LayerEvent.AltKanaDown,
+            KeyCode.Kana => LayerEvent.KanaDown,
+            _ => throw new ArgumentOutOfRangeException(nameof(physicalCode))
         };
     }
 
@@ -366,11 +367,11 @@ internal sealed class IKeydRuntimeHandler : IKeyboardEventHandler, IInputStateRe
 
     private bool IsAltPressed()
         => _keyboardState.IsVirtualKeyPressed(WindowsKeyMap.Alt) ||
-           _keyboardState.IsVirtualKeyPressed(0xA4) ||
-           _keyboardState.IsVirtualKeyPressed(0xA5);
+           _keyboardState.IsVirtualKeyPressed(WindowsKeyMap.LeftAlt) ||
+           _keyboardState.IsVirtualKeyPressed(WindowsKeyMap.RightAlt);
 
-    private static bool IsLayerTrigger(ushort virtualKey)
-        => virtualKey is WindowsKeyMap.NonConvert or WindowsKeyMap.Convert or WindowsKeyMap.Space or WindowsKeyMap.Kana;
+    private static bool IsLayerTrigger(KeyCode physicalCode)
+        => physicalCode is KeyCode.NonConvert or KeyCode.Convert or KeyCode.Space or KeyCode.Kana;
 
     private bool DispatchLayeredKey(KeyId key, ushort virtualKey)
     {
@@ -892,9 +893,9 @@ internal sealed class IKeydRuntimeHandler : IKeyboardEventHandler, IInputStateRe
             return 5;
         if (_heldLayerPresses.Count > 4)
             return 6;
-        foreach (var virtualKey in _heldLayerPresses.Keys)
+        foreach (var physicalCode in _heldLayerPresses.Keys)
         {
-            if (!IsLayerTrigger(virtualKey))
+            if (!IsLayerTrigger(physicalCode))
                 return 7;
         }
         return 0;
