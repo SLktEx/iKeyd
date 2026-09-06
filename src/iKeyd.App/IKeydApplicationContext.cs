@@ -1,4 +1,5 @@
 using iKeyd.Core.Clipboard;
+using iKeyd.Core.Configuration;
 using iKeyd.Core.Macros;
 using iKeyd.Core.Modes;
 using iKeyd.Windows.Clipboard;
@@ -16,6 +17,7 @@ internal sealed class IKeydApplicationContext : ApplicationContext
     private readonly WindowsClipboardController _clipboard;
     private readonly NotifyIcon _notifyIcon;
     private readonly ContextMenuStrip _menu;
+    private readonly Control _uiDispatcher = new();
     private readonly Dictionary<InputMode, ToolStripMenuItem> _modeItems = [];
     private readonly ToolStripMenuItem _cancelMacroItem;
     private readonly WindowsMacroEditor _macroEditor = new();
@@ -29,6 +31,7 @@ internal sealed class IKeydApplicationContext : ApplicationContext
     public IKeydApplicationContext(IKeydConfiguration configuration)
     {
         ArgumentNullException.ThrowIfNull(configuration);
+        _uiDispatcher.CreateControl();
 
         _keyboard = new WindowsKeyboardBackend();
         var desktop = new WindowsDesktopBackend();
@@ -82,8 +85,14 @@ internal sealed class IKeydApplicationContext : ApplicationContext
         };
         _notifyIcon.DoubleClick += (_, _) => ShowClipboardHistory();
 
+        var hostActions = new DelegateConfiguredHostActionSink(PostConfiguredHostAction);
         UpdateModeChecks();
-        _keyboard.Start(new ConfiguredBehaviorKeyboardHandler(configuration.Profile.KeyBehaviors, _keyboard, desktop, _runtime));
+        _keyboard.Start(new ConfiguredBehaviorKeyboardHandler(
+            configuration.Profile.KeyBehaviors,
+            _keyboard,
+            desktop,
+            hostActions,
+            _runtime));
     }
 
     protected override void ExitThreadCore()
@@ -107,11 +116,39 @@ internal sealed class IKeydApplicationContext : ApplicationContext
             _keyboard.Dispose();
             _notifyIcon.Dispose();
             _menu.Dispose();
+            _uiDispatcher.Dispose();
             _macroCancellation?.Dispose();
             _macroCancellation = null;
         }
 
         base.ExitThreadCore();
+    }
+
+    private void PostConfiguredHostAction(KeyBehaviorAction action)
+    {
+        if (_stopping || _uiDispatcher.IsDisposed)
+            return;
+
+        _uiDispatcher.BeginInvoke((Action)(() => DispatchConfiguredHostAction(action)));
+    }
+
+    private void DispatchConfiguredHostAction(KeyBehaviorAction action)
+    {
+        if (_stopping)
+            return;
+
+        switch (action.Kind)
+        {
+            case KeyBehaviorActionKind.Clipboard when string.Equals(action.Value, "History", StringComparison.OrdinalIgnoreCase):
+                ShowClipboardHistory();
+                break;
+            case KeyBehaviorActionKind.Macro:
+                _ = RunConfiguredMacroAsync(action.Value);
+                break;
+            default:
+                ShowError("Configured host action failed.", new InvalidOperationException($"Unsupported host action '{action.Kind}:{action.Value}'."));
+                break;
+        }
     }
 
     private void ChangeMode(InputMode mode)
@@ -147,6 +184,29 @@ internal sealed class IKeydApplicationContext : ApplicationContext
         }
     }
 
+    private async Task RunConfiguredMacroAsync(string template)
+    {
+        if (_macroCancellation is not null)
+            return;
+
+        try
+        {
+            _macroCancellation = new CancellationTokenSource();
+            _cancelMacroItem.Enabled = true;
+            await _macroExecutor.ExecuteAsync(template, MacroRepeat.Once, _macroCancellation.Token);
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            ShowError("Configured macro failed.", exception);
+        }
+        finally
+        {
+            _cancelMacroItem.Enabled = false;
+            _macroCancellation?.Dispose();
+            _macroCancellation = null;
+        }
+    }
+
     private async Task EditAndRunMacroAsync()
     {
         if (_macroCancellation is not null)
@@ -163,10 +223,7 @@ internal sealed class IKeydApplicationContext : ApplicationContext
             _macroCancellation = new CancellationTokenSource();
             _cancelMacroItem.Enabled = true;
 
-            var result = await _macroExecutor.ExecuteAsync(
-                _macroTemplate,
-                _macroRepeat,
-                _macroCancellation.Token);
+            var result = await _macroExecutor.ExecuteAsync(_macroTemplate, _macroRepeat, _macroCancellation.Token);
             _macroTemplate = result.UpdatedTemplate;
             _macroRepeat = result.NextRepeat;
         }
