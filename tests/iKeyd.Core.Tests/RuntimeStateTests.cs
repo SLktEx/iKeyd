@@ -99,24 +99,30 @@ public sealed class RuntimeStateTests
             EmptySystemQuerySnapshot.Instance,
             document.Profile.State,
             store));
+        var a = new KeyId("A");
+        var b = new KeyId("B");
+        var c = new KeyId("C");
+        var d = new KeyId("D");
 
-        Assert.Equal(BehaviorActionKind.StateSet, Assert.Single(runtime.OnKeyDown("A", 0).Actions).Kind);
-        store.SetScalar("mode", "coding");
-        Assert.Equal(new KeyId("Escape"), Assert.Single(runtime.OnKeyDown("B", 10).Actions).Key);
-        _ = runtime.OnKeyUp("A", 20);
-        _ = runtime.OnKeyUp("B", 21);
+        var set = Assert.Single(runtime.OnKeyDown(a, 0).Actions);
+        Assert.Equal(BehaviorActionKind.StateSet, set.Kind);
+        store.SetScalar(set.Name!, set.Text!);
+        Assert.Equal(new KeyId("Escape"), Assert.Single(runtime.OnKeyDown(b, 10).Actions).Key);
+        _ = runtime.OnKeyUp(a, 20);
+        _ = runtime.OnKeyUp(b, 21);
 
-        var toggle = Assert.Single(runtime.OnKeyDown("C", 30).Actions);
+        var toggle = Assert.Single(runtime.OnKeyDown(c, 30).Actions);
         Assert.Equal(BehaviorActionKind.StateToggle, toggle.Kind);
         store.Toggle(toggle.Name!);
-        var text = Assert.Single(runtime.OnKeyDown("D", 40).Actions);
+        var text = Assert.Single(runtime.OnKeyDown(d, 40).Actions);
         Assert.Equal(BehaviorActionKind.SendText, text.Kind);
         Assert.Equal("locked", text.Text);
 
         var generated = TypedProfileCompiler.Compile(document.Profile);
         Assert.Contains("RuntimeStateFieldProfile.String(\"mode\", \"normal\")", generated, StringComparison.Ordinal);
         Assert.Contains("RuntimeStateFieldProfile.Bool(\"nav_locked\", false)", generated, StringComparison.Ordinal);
-        Assert.Contains("\"StateSet\"", BehaviorActionKind.StateSet.ToString(), StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("new BehaviorInvocationProfile(\"SET\"", generated, StringComparison.Ordinal);
+        Assert.Contains("new BehaviorInvocationProfile(\"TOGGLE\"", generated, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -170,7 +176,7 @@ public sealed class RuntimeStateTests
             document.Profile.State,
             store));
 
-        var down = runtime.OnKeyDown("A", 0);
+        var down = runtime.OnKeyDown(new KeyId("A"), 0);
         Assert.Equal(
             [new KeyId("Escape"), new KeyId("Left")],
             down.Actions.Where(action => action.Kind == BehaviorActionKind.SendKey).Select(action => action.Key).ToArray());
