@@ -15,15 +15,11 @@ public sealed class ConfiguredBehaviorKeyboardHandlerTests
         var output = new RecordingKeyboardOutput();
         var desktop = new RecordingDesktopBackend();
         var fallback = new RecordingHandler();
+        var host = new RecordingHostActionSink();
         var profile = new KeyBehaviorProfile([
-            new KeyBehaviorBinding(
-                KeyCode.A,
-                KeyBehaviorAction.Key("A"),
-                KeyBehaviorAction.Modifier(KeyBehaviorModifier.Control),
-                180,
-                TapHoldInterruptPolicy.Hold)
+            new KeyBehaviorBinding(KeyCode.A, KeyBehaviorAction.Key("A"), KeyBehaviorAction.Modifier(KeyBehaviorModifier.Control), 180, TapHoldInterruptPolicy.Hold)
         ]);
-        var handler = new ConfiguredBehaviorKeyboardHandler(profile, output, desktop, fallback);
+        var handler = new ConfiguredBehaviorKeyboardHandler(profile, output, desktop, host, fallback);
 
         Assert.Equal(KeyboardDisposition.Suppress, handler.OnKeyboardEvent(Event('A', KeyEventKind.Down, 0)));
         Assert.Equal(KeyboardDisposition.Suppress, handler.OnKeyboardEvent(Event('Q', KeyEventKind.Down, 50)));
@@ -31,14 +27,12 @@ public sealed class ConfiguredBehaviorKeyboardHandlerTests
         Assert.Equal(KeyboardDisposition.Suppress, handler.OnKeyboardEvent(Event('A', KeyEventKind.Up, 70)));
 
         Assert.Empty(fallback.Events);
-        Assert.Equal(
-            [
-                new Observed(WindowsKeyMap.LeftControl, KeyEventKind.Down),
-                new Observed((ushort)'Q', KeyEventKind.Down),
-                new Observed((ushort)'Q', KeyEventKind.Up),
-                new Observed(WindowsKeyMap.LeftControl, KeyEventKind.Up),
-            ],
-            output.Events);
+        Assert.Equal([
+            new Observed(WindowsKeyMap.LeftControl, KeyEventKind.Down),
+            new Observed((ushort)'Q', KeyEventKind.Down),
+            new Observed((ushort)'Q', KeyEventKind.Up),
+            new Observed(WindowsKeyMap.LeftControl, KeyEventKind.Up),
+        ], output.Events);
     }
 
     [Fact]
@@ -47,10 +41,11 @@ public sealed class ConfiguredBehaviorKeyboardHandlerTests
         var output = new RecordingKeyboardOutput();
         var desktop = new RecordingDesktopBackend();
         var fallback = new RecordingHandler();
+        var host = new RecordingHostActionSink();
         var profile = new KeyBehaviorProfile(
             [new KeyBehaviorBinding(KeyCode.Space, KeyBehaviorAction.Key("Space"), KeyBehaviorAction.Layer("NAV"))],
             [new KeyBehaviorLayer("NAV", [new KeyBehaviorLayerBinding(KeyCode.H, KeyBehaviorAction.Key("Left"))])]);
-        var handler = new ConfiguredBehaviorKeyboardHandler(profile, output, desktop, fallback);
+        var handler = new ConfiguredBehaviorKeyboardHandler(profile, output, desktop, host, fallback);
 
         handler.OnKeyboardEvent(new KeyboardEvent(WindowsKeyMap.Keyboard(WindowsKeyMap.Space), KeyEventKind.Down, KeyEventOrigin.Physical, 0));
         var hDown = handler.OnKeyboardEvent(Event('H', KeyEventKind.Down, 50));
@@ -60,12 +55,10 @@ public sealed class ConfiguredBehaviorKeyboardHandlerTests
         Assert.Equal(KeyboardDisposition.Suppress, hDown);
         Assert.Equal(KeyboardDisposition.Suppress, hUp);
         Assert.Empty(fallback.Events);
-        Assert.Equal(
-            [
-                new Observed(WindowsKeyMap.Left, KeyEventKind.Down),
-                new Observed(WindowsKeyMap.Left, KeyEventKind.Up),
-            ],
-            output.Events);
+        Assert.Equal([
+            new Observed(WindowsKeyMap.Left, KeyEventKind.Down),
+            new Observed(WindowsKeyMap.Left, KeyEventKind.Up),
+        ], output.Events);
     }
 
     [Fact]
@@ -74,21 +67,20 @@ public sealed class ConfiguredBehaviorKeyboardHandlerTests
         var output = new RecordingKeyboardOutput();
         var desktop = new RecordingDesktopBackend();
         var fallback = new RecordingHandler();
+        var host = new RecordingHostActionSink();
         var profile = new KeyBehaviorProfile(
             [new KeyBehaviorBinding(KeyCode.Space, KeyBehaviorAction.Key("Space"), KeyBehaviorAction.Layer("NAV"))],
             [new KeyBehaviorLayer("NAV", [])]);
-        var handler = new ConfiguredBehaviorKeyboardHandler(profile, output, desktop, fallback);
+        var handler = new ConfiguredBehaviorKeyboardHandler(profile, output, desktop, host, fallback);
 
         handler.OnKeyboardEvent(new KeyboardEvent(WindowsKeyMap.Keyboard(WindowsKeyMap.Space), KeyEventKind.Down, KeyEventOrigin.Physical, 0));
         handler.OnKeyboardEvent(new KeyboardEvent(WindowsKeyMap.Keyboard(WindowsKeyMap.Space), KeyEventKind.Up, KeyEventOrigin.Physical, 100));
 
         Assert.Empty(fallback.Events);
-        Assert.Equal(
-            [
-                new Observed(WindowsKeyMap.Space, KeyEventKind.Down),
-                new Observed(WindowsKeyMap.Space, KeyEventKind.Up),
-            ],
-            output.Events);
+        Assert.Equal([
+            new Observed(WindowsKeyMap.Space, KeyEventKind.Down),
+            new Observed(WindowsKeyMap.Space, KeyEventKind.Up),
+        ], output.Events);
     }
 
     [Fact]
@@ -97,6 +89,7 @@ public sealed class ConfiguredBehaviorKeyboardHandlerTests
         var output = new RecordingKeyboardOutput();
         var desktop = new RecordingDesktopBackend();
         var fallback = new RecordingHandler();
+        var host = new RecordingHostActionSink();
         var profile = new KeyBehaviorProfile(
             [new KeyBehaviorBinding(KeyCode.Space, KeyBehaviorAction.Key("Space"), KeyBehaviorAction.Layer("DESKTOP"))],
             [new KeyBehaviorLayer("DESKTOP",
@@ -107,7 +100,7 @@ public sealed class ConfiguredBehaviorKeyboardHandlerTests
                 new KeyBehaviorLayerBinding(KeyCode.L, KeyBehaviorAction.Media("PlayPause")),
                 new KeyBehaviorLayerBinding(KeyCode.U, KeyBehaviorAction.Window("LeftHalf")),
             ])]);
-        var handler = new ConfiguredBehaviorKeyboardHandler(profile, output, desktop, fallback);
+        var handler = new ConfiguredBehaviorKeyboardHandler(profile, output, desktop, host, fallback);
 
         handler.OnKeyboardEvent(new KeyboardEvent(WindowsKeyMap.Keyboard(WindowsKeyMap.Space), KeyEventKind.Down, KeyEventOrigin.Physical, 0));
         Press(handler, 'H', 20);
@@ -127,15 +120,44 @@ public sealed class ConfiguredBehaviorKeyboardHandlerTests
     }
 
     [Fact]
+    public void Clipboard_and_macro_actions_are_posted_to_host_sink()
+    {
+        var output = new RecordingKeyboardOutput();
+        var desktop = new RecordingDesktopBackend();
+        var fallback = new RecordingHandler();
+        var host = new RecordingHostActionSink();
+        var profile = new KeyBehaviorProfile(
+            [new KeyBehaviorBinding(KeyCode.Space, KeyBehaviorAction.Key("Space"), KeyBehaviorAction.Layer("HOST"))],
+            [new KeyBehaviorLayer("HOST",
+            [
+                new KeyBehaviorLayerBinding(KeyCode.H, KeyBehaviorAction.Clipboard("History")),
+                new KeyBehaviorLayerBinding(KeyCode.J, KeyBehaviorAction.Macro("hello")),
+            ])]);
+        var handler = new ConfiguredBehaviorKeyboardHandler(profile, output, desktop, host, fallback);
+
+        handler.OnKeyboardEvent(new KeyboardEvent(WindowsKeyMap.Keyboard(WindowsKeyMap.Space), KeyEventKind.Down, KeyEventOrigin.Physical, 0));
+        Press(handler, 'H', 20);
+        Press(handler, 'J', 30);
+
+        Assert.Equal([
+            KeyBehaviorAction.Clipboard("History"),
+            KeyBehaviorAction.Macro("hello")
+        ], host.Actions);
+        Assert.Empty(output.Events);
+        Assert.Empty(fallback.Events);
+    }
+
+    [Fact]
     public void Configured_key_output_preserves_jis_scan_code_identity()
     {
         var output = new RecordingKeyboardOutput();
         var desktop = new RecordingDesktopBackend();
         var fallback = new RecordingHandler();
+        var host = new RecordingHostActionSink();
         var profile = new KeyBehaviorProfile(
             [new KeyBehaviorBinding(KeyCode.Space, KeyBehaviorAction.Key("Space"), KeyBehaviorAction.Layer("JIS"))],
             [new KeyBehaviorLayer("JIS", [new KeyBehaviorLayerBinding(KeyCode.H, KeyBehaviorAction.Key("Ro"))])]);
-        var handler = new ConfiguredBehaviorKeyboardHandler(profile, output, desktop, fallback);
+        var handler = new ConfiguredBehaviorKeyboardHandler(profile, output, desktop, host, fallback);
 
         handler.OnKeyboardEvent(new KeyboardEvent(WindowsKeyMap.Keyboard(WindowsKeyMap.Space), KeyEventKind.Down, KeyEventOrigin.Physical, 0));
         Press(handler, 'H', 20);
@@ -151,10 +173,11 @@ public sealed class ConfiguredBehaviorKeyboardHandlerTests
         var output = new RecordingKeyboardOutput();
         var desktop = new RecordingDesktopBackend();
         var fallback = new RecordingHandler();
+        var host = new RecordingHostActionSink();
         var profile = new KeyBehaviorProfile(
             [new KeyBehaviorBinding(KeyCode.Space, KeyBehaviorAction.Key("Space"), KeyBehaviorAction.Layer("TEXT"))],
             [new KeyBehaviorLayer("TEXT", [new KeyBehaviorLayerBinding(KeyCode.H, KeyBehaviorAction.Text("^+{}"))])]);
-        var handler = new ConfiguredBehaviorKeyboardHandler(profile, output, desktop, fallback);
+        var handler = new ConfiguredBehaviorKeyboardHandler(profile, output, desktop, host, fallback);
 
         handler.OnKeyboardEvent(new KeyboardEvent(WindowsKeyMap.Keyboard(WindowsKeyMap.Space), KeyEventKind.Down, KeyEventOrigin.Physical, 0));
         Press(handler, 'H', 20);
@@ -169,7 +192,8 @@ public sealed class ConfiguredBehaviorKeyboardHandlerTests
         var output = new RecordingKeyboardOutput();
         var desktop = new RecordingDesktopBackend();
         var fallback = new RecordingHandler();
-        var handler = new ConfiguredBehaviorKeyboardHandler(KeyBehaviorProfile.Empty, output, desktop, fallback);
+        var host = new RecordingHostActionSink();
+        var handler = new ConfiguredBehaviorKeyboardHandler(KeyBehaviorProfile.Empty, output, desktop, host, fallback);
         var input = Event('Q', KeyEventKind.Down, 1);
 
         var disposition = handler.OnKeyboardEvent(input);
@@ -187,6 +211,12 @@ public sealed class ConfiguredBehaviorKeyboardHandlerTests
 
     private static KeyboardEvent Event(char key, KeyEventKind kind, long timestamp)
         => new(WindowsKeyMap.Keyboard(key), kind, KeyEventOrigin.Physical, timestamp);
+
+    private sealed class RecordingHostActionSink : IConfiguredHostActionSink
+    {
+        public List<KeyBehaviorAction> Actions { get; } = [];
+        public void Post(KeyBehaviorAction action) => Actions.Add(action);
+    }
 
     private sealed class RecordingHandler : IKeyboardEventHandler
     {
@@ -226,7 +256,6 @@ public sealed class ConfiguredBehaviorKeyboardHandlerTests
     private sealed class RecordingDesktopBackend : IDesktopBackend
     {
         private static readonly WindowHandle Active = new(1);
-
         public List<(int X, int Y)> Moves { get; } = [];
         public List<DesktopMouseButton> Clicks { get; } = [];
         public List<int> Scrolls { get; } = [];
