@@ -96,6 +96,63 @@ keymap BASE {
         )
         self.assertEqual([["Q", "W", "escape"]], second_profile["chords"]["BASE"])
 
+    def test_behavior_invocation_compiles_separately_from_string_mappings(self):
+        text = """
+profile demo {
+    chord_window = 40ms
+}
+layout BASE {
+    row Q W E
+}
+keymap BASE {
+    POS[1,1] = LT(NUM, Z)
+    POS[1,2] = "w"
+}
+""".strip()
+
+        profile = module.compile_dsl(text, Path("profile.ikeyd"))
+
+        self.assertEqual({"W": "w"}, profile["singleStroke"]["BASE"])
+        self.assertEqual(
+            {
+                "Q": {
+                    "name": "LT",
+                    "arguments": ["NUM", "Z"],
+                }
+            },
+            profile["behaviors"]["BASE"],
+        )
+
+    def test_behavior_invocation_rejects_non_identifier_arguments_for_now(self):
+        text = """
+profile demo {
+    chord_window = 40ms
+}
+keymap BASE {
+    Q = LT(NUM, 170ms)
+}
+""".strip()
+
+        with self.assertRaisesRegex(
+            module.DslError,
+            r"profile\.ikeyd:5: behavior arguments must be identifiers",
+        ):
+            module.compile_dsl(text, Path("profile.ikeyd"))
+
+    def test_string_and_behavior_mapping_cannot_share_the_same_key(self):
+        text = """
+profile demo {
+    chord_window = 40ms
+}
+keymap BASE {
+    Q = "q"
+    Q = LT(NUM, Z)
+}
+""".strip()
+
+        with self.assertRaisesRegex(module.DslError, r"duplicate key mapping 'BASE\.Q'"):
+            module.compile_dsl(text, Path("profile.ikeyd"))
+
     def test_position_reference_reports_out_of_range_coordinates(self):
         text = """
 profile demo {
