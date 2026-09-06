@@ -120,7 +120,7 @@ internal sealed class KeyboardMouseMotionController : IDisposable
     {
         // Do not hold the controller lock while consulting the runtime predicate;
         // input dispatch may call Wake while holding its own runtime lock.
-        var enabled = !_suspended && _isEnabled();
+        var enabled = _isEnabled();
 
         lock (_gate)
         {
@@ -138,7 +138,7 @@ internal sealed class KeyboardMouseMotionController : IDisposable
             if (_blockUntilDirectionReleased)
             {
                 _engine.Reset();
-                if (x == 0 && y == 0)
+                if (x == 0 && y == 0 && !HasDirectionPressed())
                 {
                     _blockUntilDirectionReleased = false;
                     return;
@@ -177,17 +177,10 @@ internal sealed class KeyboardMouseMotionController : IDisposable
     }
 
     private bool HasDirectionPressed()
-    {
-        var (x, y) = ReadDirection();
-        if (x != 0 || y != 0)
-            return true;
-
-        // SOCD can produce a zero vector while both opposing keys are held.
-        return _keyboardState.IsVirtualKeyPressed((ushort)'J') ||
-               _keyboardState.IsVirtualKeyPressed((ushort)'L') ||
-               _keyboardState.IsVirtualKeyPressed((ushort)'I') ||
-               _keyboardState.IsVirtualKeyPressed((ushort)'K');
-    }
+        => _keyboardState.IsVirtualKeyPressed((ushort)'J') ||
+           _keyboardState.IsVirtualKeyPressed((ushort)'L') ||
+           _keyboardState.IsVirtualKeyPressed((ushort)'I') ||
+           _keyboardState.IsVirtualKeyPressed((ushort)'K');
 
     private double GetSpeedPixelsPerSecond()
     {
