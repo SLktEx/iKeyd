@@ -25,6 +25,7 @@ internal sealed class IKeydRuntimeHandler : IKeyboardEventHandler, IMacroActionD
     private readonly ChordEngine<string> _kEngine;
     private readonly HashSet<ushort> _suppressedKeys = new(64);
     private readonly Timer _chordTimer;
+    private readonly KeyboardMouseMotionController _mouseMotion;
 
     private ILegacyMacroSlotActions? _macroSlots;
     private InputModeState _mode;
@@ -53,6 +54,7 @@ internal sealed class IKeydRuntimeHandler : IKeyboardEventHandler, IMacroActionD
         _kEngine = new ChordEngine<string>(configuration.KKeymap, configuration.ChordWindowMs);
         _mode = InputModeState.Initial.SwitchTo(configuration.StartupMode);
         _chordTimer = new Timer(OnChordTimeout, null, Timeout.Infinite, Timeout.Infinite);
+        _mouseMotion = new KeyboardMouseMotionController(keyboardState, desktop, IsMouseLayerActive);
     }
 
     public InputModeState Mode
@@ -76,11 +78,15 @@ internal sealed class IKeydRuntimeHandler : IKeyboardEventHandler, IMacroActionD
         }
     }
 
+    internal void SetPointerSuspended(bool suspended)
+        => _mouseMotion.SetSuspended(suspended);
+
     public void SetMode(InputMode mode)
     {
         lock (_gate)
         {
             ThrowIfDisposed();
+            _mouseMotion.BlockUntilDirectionReleased();
             FlushAllPending();
             _mode = _mode.SwitchTo(mode);
         }
@@ -208,6 +214,7 @@ internal sealed class IKeydRuntimeHandler : IKeyboardEventHandler, IMacroActionD
             _suppressedKeys.Clear();
         }
         slots?.Cancel();
+        _mouseMotion.Dispose();
         _chordTimer.Dispose();
     }
 
@@ -234,6 +241,8 @@ internal sealed class IKeydRuntimeHandler : IKeyboardEventHandler, IMacroActionD
         FlushAllPending();
         var transition = LayerStateMachine.Apply(_layers, layerEvent.Value);
         _layers = transition.State;
+        if (!_layers.Layers.IsExact(LayerKey.S, LayerKey.M))
+            _mouseMotion.BlockUntilDirectionReleased();
         foreach (var action in transition.Actions)
             SendLayerAction(action);
         return true;
@@ -496,7 +505,6 @@ internal sealed class IKeydRuntimeHandler : IKeyboardEventHandler, IMacroActionD
 
     private bool DispatchMouseMedia(KeyId key)
     {
-        var amount = GetMouseMoveAmount();
         switch (key.Code)
         {
             case KeyCode.D:
@@ -504,16 +512,10 @@ internal sealed class IKeydRuntimeHandler : IKeyboardEventHandler, IMacroActionD
             case KeyCode.C:
                 return true;
             case KeyCode.J:
-                _desktop.MovePointerBy(-amount, 0);
-                return true;
             case KeyCode.K:
-                _desktop.MovePointerBy(0, amount);
-                return true;
             case KeyCode.L:
-                _desktop.MovePointerBy(amount, 0);
-                return true;
             case KeyCode.I:
-                _desktop.MovePointerBy(0, -amount);
+                _mouseMotion.Wake();
                 return true;
             case KeyCode.U:
                 _desktop.Click(DesktopMouseButton.Left);
@@ -585,15 +587,10 @@ internal sealed class IKeydRuntimeHandler : IKeyboardEventHandler, IMacroActionD
             : new DesktopPoint(bounds.X + 1, bounds.Y + 1));
     }
 
-    private int GetMouseMoveAmount()
+    private bool IsMouseLayerActive()
     {
-        if (_keyboardState.IsVirtualKeyPressed((ushort)'D'))
-            return 30;
-        if (_keyboardState.IsVirtualKeyPressed((ushort)'E'))
-            return 10;
-        if (_keyboardState.IsVirtualKeyPressed((ushort)'C'))
-            return Math.Max(1, _desktop.GetPrimaryWorkArea().Width / 4);
-        return 100;
+        lock (_gate)
+            return !_disposed && _layers.Layers.IsExact(LayerKey.S, LayerKey.M);
     }
 
     private void SendLayerAction(LayerAction action)
