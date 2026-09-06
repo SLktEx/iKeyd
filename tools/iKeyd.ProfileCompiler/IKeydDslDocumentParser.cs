@@ -8,16 +8,19 @@ internal static class IKeydDslDocumentParser
         var mouse = IKeydMouseDslParser.Extract(text, sourcePath);
         var targets = IKeydTargetExtensionParser.Extract(mouse.SourceWithoutMouse, sourcePath);
         var profile = IKeydDslParser.Parse(targets.SourceWithoutTargetBlocks, sourcePath);
-        ValidateBehaviorInvocations(profile, sourcePath);
+        ValidateLiteralOutputInvocations(profile, sourcePath);
         return new IKeydDslDocument(profile, mouse.Profile, targets.Extensions);
     }
 
-    private static void ValidateBehaviorInvocations(AutomationProfile profile, string sourcePath)
+    private static void ValidateLiteralOutputInvocations(AutomationProfile profile, string sourcePath)
     {
         foreach (var keymap in profile.Keymaps.Values)
         {
             foreach (var mapping in keymap.BehaviorMappings)
             {
+                if (!IsLiteralOutputHelper(mapping.Invocation.Name))
+                    continue;
+
                 try
                 {
                     _ = BehaviorDefinitionFactory.Create(mapping.Invocation, profile.BehaviorDefinitions);
@@ -31,6 +34,10 @@ internal static class IKeydDslDocumentParser
             }
         }
     }
+
+    private static bool IsLiteralOutputHelper(string name)
+        => name.Equals("UNICODE", StringComparison.OrdinalIgnoreCase) ||
+           name.Equals("TEXT", StringComparison.OrdinalIgnoreCase);
 }
 
 internal sealed record IKeydDslDocument(
