@@ -7,12 +7,14 @@ namespace iKeyd.Core.Configuration;
 public sealed record AutomationProfile
 {
     private readonly IReadOnlyDictionary<string, AutomationKeymapProfile> _keymaps;
+    private readonly IReadOnlyDictionary<string, UserBehaviorDefinitionProfile> _behaviorDefinitions;
 
     public AutomationProfile(
         int chordWindowMs,
         IEnumerable<AutomationKeymapProfile> keymaps,
         string startupMode = "S",
-        IEnumerable<HotkeyBinding>? hotkeys = null)
+        IEnumerable<HotkeyBinding>? hotkeys = null,
+        IEnumerable<UserBehaviorDefinitionProfile>? behaviorDefinitions = null)
     {
         if (chordWindowMs < 0)
             throw new ArgumentOutOfRangeException(nameof(chordWindowMs));
@@ -31,14 +33,28 @@ public sealed record AutomationProfile
             if (!byName.TryAdd(keymap.Name, keymap))
                 throw new ArgumentException($"Duplicate keymap name '{keymap.Name}'.", nameof(keymaps));
         }
-
         _keymaps = byName;
+
+        var definitions = new Dictionary<string, UserBehaviorDefinitionProfile>(StringComparer.OrdinalIgnoreCase);
+        foreach (var definition in behaviorDefinitions ?? [])
+        {
+            ArgumentNullException.ThrowIfNull(definition);
+            if (!definitions.TryAdd(definition.Name, definition))
+                throw new ArgumentException($"Duplicate behavior definition '{definition.Name}'.", nameof(behaviorDefinitions));
+            if (definition.Name.Equals("LT", StringComparison.OrdinalIgnoreCase) ||
+                definition.Name.Equals("MT", StringComparison.OrdinalIgnoreCase))
+            {
+                throw new ArgumentException($"Behavior definition '{definition.Name}' conflicts with a standard behavior.", nameof(behaviorDefinitions));
+            }
+        }
+        _behaviorDefinitions = definitions;
     }
 
     public int ChordWindowMs { get; }
     public string StartupMode { get; }
     public IReadOnlyList<HotkeyBinding> Hotkeys { get; }
     public IReadOnlyDictionary<string, AutomationKeymapProfile> Keymaps => _keymaps;
+    public IReadOnlyDictionary<string, UserBehaviorDefinitionProfile> BehaviorDefinitions => _behaviorDefinitions;
 
     public AutomationKeymapProfile GetKeymap(string name)
     {
@@ -88,10 +104,15 @@ public sealed record AutomationKeymapProfile
     public Keymap<string> BuildKeymap() => new(SingleMappings, ChordMappings);
 
     public IReadOnlyDictionary<KeyId, BehaviorDefinition> BuildBehaviorBindings()
+        => BuildBehaviorBindings(new Dictionary<string, UserBehaviorDefinitionProfile>(StringComparer.OrdinalIgnoreCase));
+
+    public IReadOnlyDictionary<KeyId, BehaviorDefinition> BuildBehaviorBindings(
+        IReadOnlyDictionary<string, UserBehaviorDefinitionProfile> userDefinitions)
     {
+        ArgumentNullException.ThrowIfNull(userDefinitions);
         var result = new Dictionary<KeyId, BehaviorDefinition>();
         foreach (var mapping in BehaviorMappings)
-            result.Add(mapping.Key, mapping.Invocation.BuildDefinition());
+            result.Add(mapping.Key, BehaviorDefinitionFactory.Create(mapping.Invocation, userDefinitions));
         return result;
     }
 }
