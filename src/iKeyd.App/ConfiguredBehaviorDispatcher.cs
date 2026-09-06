@@ -1,4 +1,5 @@
 using System.Globalization;
+using iKeyd.Core.Automation;
 using iKeyd.Core.Chords;
 using iKeyd.Core.Configuration;
 using iKeyd.Core.Desktop;
@@ -21,6 +22,7 @@ internal sealed class ConfiguredBehaviorDispatcher
     private readonly IKeyboardOutput _keyboard;
     private readonly IDesktopBackend _desktop;
     private readonly DesktopActionService _desktopActions;
+    private readonly ISystemQuerySnapshot _systemQueries;
     private readonly IConfiguredHostActionSink _hostActions;
     private readonly List<KeyboardKey> _modifiers = new(4);
 
@@ -29,12 +31,23 @@ internal sealed class ConfiguredBehaviorDispatcher
         IKeyboardOutput keyboard,
         IDesktopBackend desktop,
         IConfiguredHostActionSink hostActions)
+        : this(profile, keyboard, desktop, EmptySystemQuerySnapshot.Instance, hostActions)
+    {
+    }
+
+    public ConfiguredBehaviorDispatcher(
+        KeyBehaviorProfile profile,
+        IKeyboardOutput keyboard,
+        IDesktopBackend desktop,
+        ISystemQuerySnapshot systemQueries,
+        IConfiguredHostActionSink hostActions)
     {
         _profile = profile ?? throw new ArgumentNullException(nameof(profile));
         _runtime = new ConfiguredKeyBehaviorRuntime(profile);
         _keyboard = keyboard ?? throw new ArgumentNullException(nameof(keyboard));
         _desktop = desktop ?? throw new ArgumentNullException(nameof(desktop));
         _desktopActions = new DesktopActionService(desktop);
+        _systemQueries = systemQueries ?? throw new ArgumentNullException(nameof(systemQueries));
         _hostActions = hostActions ?? throw new ArgumentNullException(nameof(hostActions));
     }
 
@@ -103,6 +116,18 @@ internal sealed class ConfiguredBehaviorDispatcher
     {
         switch (action.Kind)
         {
+            case KeyBehaviorActionKind.When:
+                var conditional = action.GetConditional();
+                var selected = conditional.Condition.Evaluate(_systemQueries)
+                    ? conditional.Then
+                    : conditional.Else;
+                if (selected is { } selectedAction)
+                    EmitOutputAction(selectedAction, applyModifiersToKey);
+                return;
+            case KeyBehaviorActionKind.Query:
+                if (_systemQueries.TryGetValue(action.Value, out var queryValue))
+                    _keyboard.SendText(queryValue);
+                return;
             case KeyBehaviorActionKind.Key:
                 if (!WindowsKeyMap.TryResolveNamedKey(action.Value, out var key))
                     throw new InvalidOperationException($"Configured behavior output key '{action.Value}' is not supported on Windows.");
@@ -131,7 +156,6 @@ internal sealed class ConfiguredBehaviorDispatcher
             case KeyBehaviorActionKind.Macro:
             case KeyBehaviorActionKind.Exec:
             case KeyBehaviorActionKind.Shell:
-            case KeyBehaviorActionKind.Query:
                 _hostActions.Post(action);
                 return;
             default:

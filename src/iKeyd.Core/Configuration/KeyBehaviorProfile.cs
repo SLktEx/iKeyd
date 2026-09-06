@@ -1,3 +1,4 @@
+using iKeyd.Core.Automation;
 using iKeyd.Core.Chords;
 
 namespace iKeyd.Core.Configuration;
@@ -17,7 +18,8 @@ public enum KeyBehaviorActionKind
     Macro,
     Exec,
     Shell,
-    Query
+    Query,
+    When
 }
 
 public enum KeyBehaviorModifier
@@ -34,10 +36,45 @@ public enum TapHoldInterruptPolicy
     Tap
 }
 
+public enum SystemQueryConditionOperator
+{
+    Equals,
+    NotEquals
+}
+
+public sealed record SystemQueryCondition
+{
+    public SystemQueryCondition(string query, SystemQueryConditionOperator @operator, string expected)
+    {
+        Query = SystemQueryKeys.Normalize(query);
+        Operator = @operator;
+        Expected = expected ?? throw new ArgumentNullException(nameof(expected));
+    }
+
+    public string Query { get; }
+    public SystemQueryConditionOperator Operator { get; }
+    public string Expected { get; }
+
+    public bool Evaluate(ISystemQuerySnapshot snapshot)
+    {
+        ArgumentNullException.ThrowIfNull(snapshot);
+        if (!snapshot.TryGetValue(Query, out var actual))
+            return false;
+        var equals = string.Equals(actual, Expected, StringComparison.OrdinalIgnoreCase);
+        return Operator == SystemQueryConditionOperator.Equals ? equals : !equals;
+    }
+}
+
+public sealed record ConditionalBehaviorAction(
+    SystemQueryCondition Condition,
+    KeyBehaviorAction Then,
+    KeyBehaviorAction? Else);
+
 public readonly record struct KeyBehaviorAction(
     KeyBehaviorActionKind Kind,
     string Value,
-    IReadOnlyList<string>? Arguments = null)
+    IReadOnlyList<string>? Arguments = null,
+    ConditionalBehaviorAction? Conditional = null)
 {
     public static KeyBehaviorAction Key(string key) => new(KeyBehaviorActionKind.Key, RequireValue(key, nameof(key)));
     public static KeyBehaviorAction Text(string text) => new(KeyBehaviorActionKind.Text, text ?? throw new ArgumentNullException(nameof(text)));
@@ -56,9 +93,25 @@ public readonly record struct KeyBehaviorAction(
         return new KeyBehaviorAction(KeyBehaviorActionKind.Exec, RequireValue(executable, nameof(executable)), Array.AsReadOnly(argv));
     }
     public static KeyBehaviorAction Shell(string command) => new(KeyBehaviorActionKind.Shell, RequireValue(command, nameof(command)));
-    public static KeyBehaviorAction Query(string key) => new(KeyBehaviorActionKind.Query, RequireValue(key, nameof(key)));
+    public static KeyBehaviorAction Query(string key) => new(KeyBehaviorActionKind.Query, SystemQueryKeys.Normalize(key));
+    public static KeyBehaviorAction When(SystemQueryCondition condition, KeyBehaviorAction thenAction, KeyBehaviorAction? elseAction = null)
+    {
+        ArgumentNullException.ThrowIfNull(condition);
+        if (thenAction.IsHoldAction || elseAction is { IsHoldAction: true })
+            throw new ArgumentException("Conditional branches must be output actions, not layer/modifier holds.");
+        return new KeyBehaviorAction(
+            KeyBehaviorActionKind.When,
+            string.Empty,
+            null,
+            new ConditionalBehaviorAction(condition, thenAction, elseAction));
+    }
 
     public IReadOnlyList<string> GetArguments() => Arguments ?? Array.Empty<string>();
+
+    public ConditionalBehaviorAction GetConditional()
+        => Kind == KeyBehaviorActionKind.When && Conditional is not null
+            ? Conditional
+            : throw new InvalidOperationException("Behavior action is not a conditional action.");
 
     public KeyBehaviorModifier GetModifier()
         => Kind == KeyBehaviorActionKind.Modifier && Enum.TryParse<KeyBehaviorModifier>(Value, ignoreCase: true, out var modifier)
@@ -147,6 +200,7 @@ public sealed class KeyBehaviorProfile
 {
     private readonly IReadOnlyDictionary<KeyId, KeyBehaviorBinding> _behaviors;
     private readonly IReadOnlyDictionary<string, KeyBehaviorLayer> _layers;
+    private readonly IReadOnlyList<string> _systemQueries;
 
     public KeyBehaviorProfile(
         IEnumerable<KeyBehaviorBinding>? behaviors = null,
@@ -174,14 +228,24 @@ public sealed class KeyBehaviorProfile
                 throw new ArgumentException($"Behavior '{behavior.Trigger}' references unknown layer '{behavior.Hold.Value}'.", nameof(behaviors));
         }
 
+        var queries = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var behavior in byTrigger.Values)
+            if (behavior.Tap is { } tap)
+                CollectSystemQueries(tap, queries);
+        foreach (var layer in byName.Values)
+            foreach (var action in layer.Bindings.Values)
+                CollectSystemQueries(action, queries);
+
         _behaviors = byTrigger;
         _layers = byName;
+        _systemQueries = queries.OrderBy(value => value, StringComparer.OrdinalIgnoreCase).ToArray();
     }
 
     public static KeyBehaviorProfile Empty { get; } = new();
 
     public IReadOnlyDictionary<KeyId, KeyBehaviorBinding> Behaviors => _behaviors;
     public IReadOnlyDictionary<string, KeyBehaviorLayer> Layers => _layers;
+    public IReadOnlyList<string> SystemQueries => _systemQueries;
     public bool IsEmpty => _behaviors.Count == 0 && _layers.Count == 0;
 
     public bool TryGetBehavior(KeyId trigger, out KeyBehaviorBinding behavior)
@@ -193,5 +257,19 @@ public sealed class KeyBehaviorProfile
             return configuredLayer.TryGetAction(key, out action);
         action = default;
         return false;
+    }
+
+    private static void CollectSystemQueries(KeyBehaviorAction action, ISet<string> queries)
+    {
+        if (action.Kind == KeyBehaviorActionKind.Query)
+            queries.Add(SystemQueryKeys.Normalize(action.Value));
+        if (action.Kind != KeyBehaviorActionKind.When)
+            return;
+
+        var conditional = action.GetConditional();
+        queries.Add(conditional.Condition.Query);
+        CollectSystemQueries(conditional.Then, queries);
+        if (conditional.Else is { } elseAction)
+            CollectSystemQueries(elseAction, queries);
     }
 }

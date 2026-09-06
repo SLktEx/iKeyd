@@ -294,15 +294,102 @@ internal static class IKeydBehaviorDsl
                 if (!SystemQueryKeys.TryNormalize(argument, out var query))
                     throw Error(path, lineNumber, $"unknown system query '{argument}'");
                 return Action("query", query);
+            case "when":
+                if (allowHoldActions)
+                    throw Error(path, lineNumber, "when(...) is an output action and cannot be used as a hold action");
+                return ParseWhen(path, lineNumber, argument);
             case "layer" when allowHoldActions:
                 if (!Regex.IsMatch(argument, $@"^{Ident}$", RegexOptions.CultureInvariant)) throw Error(path, lineNumber, "layer(...) expects one layer name");
                 return Action("layer", argument);
             case "modifier" when allowHoldActions:
                 return Action("modifier", NormalizeModifier(path, lineNumber, argument));
             default:
-                var output = "key(...), text(...), mouse_move(...), mouse_click(...), scroll(...), media(...), window(...), clipboard(...), macro(...), exec(...), shell(...) or query(...)";
+                var output = "key(...), text(...), mouse_move(...), mouse_click(...), scroll(...), media(...), window(...), clipboard(...), macro(...), exec(...), shell(...), query(...) or when(...)";
                 throw Error(path, lineNumber, allowHoldActions ? $"action must be {output}, layer(...) or modifier(...)" : $"action must be {output}");
         }
+    }
+
+    private static JsonObject ParseWhen(string path, int lineNumber, string argument)
+    {
+        var parts = SplitTopLevelArguments(path, lineNumber, argument);
+        if (parts.Count is not (2 or 3))
+            throw Error(path, lineNumber, "when(...) expects condition, then action, and optional else action");
+
+        var condition = ParseCondition(path, lineNumber, parts[0]);
+        var result = new JsonObject
+        {
+            ["kind"] = "when",
+            ["condition"] = condition,
+            ["then"] = ParseAction(path, lineNumber, parts[1], allowHoldActions: false)
+        };
+        if (parts.Count == 3)
+            result["else"] = ParseAction(path, lineNumber, parts[2], allowHoldActions: false);
+        return result;
+    }
+
+    private static JsonObject ParseCondition(string path, int lineNumber, string expression)
+    {
+        var match = Regex.Match(expression.Trim(), @"^([A-Za-z0-9_.]+)\s*(==|!=)\s*(.+)$", RegexOptions.CultureInvariant);
+        if (!match.Success)
+            throw Error(path, lineNumber, "condition must be '<query> == <value>' or '<query> != <value>'");
+        var queryText = match.Groups[1].Value;
+        if (!SystemQueryKeys.TryNormalize(queryText, out var query))
+            throw Error(path, lineNumber, $"unknown system query '{queryText}'");
+        var expected = ParseConditionValue(path, lineNumber, match.Groups[3].Value.Trim());
+        return new JsonObject
+        {
+            ["query"] = query,
+            ["operator"] = match.Groups[2].Value == "==" ? "equals" : "not_equals",
+            ["value"] = expected
+        };
+    }
+
+    private static string ParseConditionValue(string path, int lineNumber, string value)
+    {
+        if (string.Equals(value, "true", StringComparison.OrdinalIgnoreCase)) return "true";
+        if (string.Equals(value, "false", StringComparison.OrdinalIgnoreCase)) return "false";
+        if (!value.StartsWith('"'))
+            throw Error(path, lineNumber, "condition value must be a quoted string or boolean literal");
+        return ParseQuotedString(path, lineNumber, value, "condition");
+    }
+
+    private static List<string> SplitTopLevelArguments(string path, int lineNumber, string value)
+    {
+        var result = new List<string>();
+        var start = 0;
+        var depth = 0;
+        var inString = false;
+        var escaped = false;
+        for (var index = 0; index < value.Length; index++)
+        {
+            var character = value[index];
+            if (inString)
+            {
+                if (escaped) escaped = false;
+                else if (character == '\\') escaped = true;
+                else if (character == '"') inString = false;
+                continue;
+            }
+            if (character == '"') { inString = true; continue; }
+            if (character == '(') { depth++; continue; }
+            if (character == ')')
+            {
+                depth--;
+                if (depth < 0) throw Error(path, lineNumber, "unbalanced ')' in when(...)");
+                continue;
+            }
+            if (character == ',' && depth == 0)
+            {
+                result.Add(value[start..index].Trim());
+                start = index + 1;
+            }
+        }
+        if (inString || depth != 0)
+            throw Error(path, lineNumber, "unbalanced string or parentheses in when(...)");
+        result.Add(value[start..].Trim());
+        if (result.Any(item => item.Length == 0))
+            throw Error(path, lineNumber, "when(...) arguments must not be empty");
+        return result;
     }
 
     private static JsonObject ParseExec(string path, int lineNumber, string argument)

@@ -40,4 +40,11 @@ jobs:
             tests/tooling/fixtures/automation-actions.ikeyd `
             "$env:RUNNER_TEMP/AutomationActions.g.cs" `
             --emit-json "$env:RUNNER_TEMP/automation-actions.json"
+      - name: Compile conditional action DSL
+        shell: pwsh
+        run: |
+          dotnet tools/iKeyd.ProfileCompiler/bin/Release/net8.0/iKeyd.ProfileCompiler.dll `
+            tests/tooling/fixtures/conditional-actions.ikeyd `
+            "$env:RUNNER_TEMP/ConditionalActions.g.cs" `
+            --emit-json "$env:RUNNER_TEMP/conditional-actions.json"
       - run: dotnet test iKeyd.sln --no-build --configuration Release

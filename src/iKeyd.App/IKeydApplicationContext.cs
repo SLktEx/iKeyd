@@ -17,7 +17,7 @@ internal sealed class IKeydApplicationContext : ApplicationContext
     private readonly WindowsKeyboardBackend _keyboard;
     private readonly IKeydRuntimeHandler _runtime;
     private readonly WindowsCommandActionQueue _commandActions;
-    private readonly WindowsSystemQueryProvider _systemQueries;
+    private readonly WindowsSystemQueryCache _systemQueryCache;
     private readonly WindowsClipboardService _clipboardService;
     private readonly WindowsClipboardController _clipboard;
     private readonly NotifyIcon _notifyIcon;
@@ -49,7 +49,9 @@ internal sealed class IKeydApplicationContext : ApplicationContext
             send,
             desktop);
         _commandActions = new WindowsCommandActionQueue();
-        _systemQueries = new WindowsSystemQueryProvider(inputMethod);
+        _systemQueryCache = new WindowsSystemQueryCache(
+            new WindowsSystemQueryProvider(inputMethod),
+            configuration.Profile.KeyBehaviors.SystemQueries);
         _commandActions.Completed += OnCommandCompleted;
 
         _clipboardService = new WindowsClipboardService();
@@ -100,6 +102,7 @@ internal sealed class IKeydApplicationContext : ApplicationContext
             configuration.Profile.KeyBehaviors,
             _keyboard,
             desktop,
+            _systemQueryCache,
             hostActions,
             _runtime));
     }
@@ -121,6 +124,7 @@ internal sealed class IKeydApplicationContext : ApplicationContext
         {
             _commandActions.Completed -= OnCommandCompleted;
             _commandActions.Dispose();
+            _systemQueryCache.Dispose();
             _clipboard.Dispose();
             _clipboardService.Dispose();
             _runtime.Dispose();
@@ -150,30 +154,11 @@ internal sealed class IKeydApplicationContext : ApplicationContext
                 if (!_commandActions.TryEnqueue(CommandRequest.Shell(action.Value)))
                     Trace.WriteLine("iKeyd command queue is full; dropped shell action.");
                 return;
-            case KeyBehaviorActionKind.Query:
-                ThreadPool.QueueUserWorkItem(_ => RunConfiguredQuery(action.Value));
-                return;
         }
 
         if (_uiDispatcher.IsDisposed)
             return;
         _uiDispatcher.BeginInvoke((Action)(() => DispatchConfiguredHostAction(action)));
-    }
-
-    private void RunConfiguredQuery(string query)
-    {
-        if (_stopping)
-            return;
-        try
-        {
-            var value = _systemQueries.GetValue(query);
-            if (!_stopping)
-                _keyboard.SendText(value);
-        }
-        catch (Exception exception)
-        {
-            Trace.WriteLine($"iKeyd system query '{query}' failed: {exception.Message}");
-        }
     }
 
     private static void OnCommandCompleted(CommandResult result)
