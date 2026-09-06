@@ -10,6 +10,18 @@ Public naming line:
 
 The product idea is simple: make the keyboard behave *your* way.
 
+## Official mark
+
+The cyan `K` mark is the official iKeyd application icon and the primary brand mark.
+
+<p align="center">
+  <img src="assets/brand/ikeyd-icon.png" alt="iKeyd official icon" width="180">
+</p>
+
+Use the mark as-is. Do not redraw, recolor, distort, add text inside it, or replace its dark rounded-square background. Small-size variants may be sharpened for legibility, but the silhouette and colors should stay recognizably identical.
+
+The Windows executable and tray icon use `src/iKeyd.App/Assets/ikeyd.ico`, generated from the same artwork.
+
 ## Visual direction
 
 The visual language should feel like a real developer tool, not an AI-product mascot brand.
@@ -30,7 +42,7 @@ The visual language should feel like a real developer tool, not an AI-product ma
 | Primary text | `#E5E7EB` |
 | Secondary text | `#6B7280` |
 
-The palette is intentionally small. Blue is for focus, active keys, links, and small brand marks.
+The palette is intentionally small. Blue is for focus, active keys, links, and small brand marks. The official icon keeps its original cyan-to-blue treatment and should not be flattened to the UI accent color.
 
 ## Typography
 
@@ -54,6 +66,8 @@ Secondary:
 
 Brand assets live in `docs/assets/brand/`.
 
-- `readme-hero.jpg` — GitHub README hero.
+- `ikeyd-icon.png` — official iKeyd icon / primary brand mark.
+- `readme-hero.jpg` — supporting GitHub README hero.
+- `src/iKeyd.App/Assets/ikeyd.ico` — Windows executable and tray icon source.
 
-Future website, release, and OGP images should reuse this same visual system rather than inventing a separate look for each surface.
+Future website, release, and OGP images should reuse this same visual system and make the official mark the primary identifier rather than inventing a separate logo for each surface.
