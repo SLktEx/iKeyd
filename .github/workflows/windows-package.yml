@@ -5,9 +5,14 @@ on:
   push:
     tags:
       - 'v*'
+    branches:
+      - main
+    paths:
+      - 'RELEASE_VERSION'
   pull_request:
     paths:
       - '.github/workflows/windows-package.yml'
+      - 'RELEASE_VERSION'
       - 'src/iKeyd.App/**'
       - 'src/iKeyd.Core/**'
       - 'src/iKeyd.Windows/**'
@@ -54,23 +59,50 @@ jobs:
           if-no-files-found: error
 
   release:
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'push' && github.ref == 'refs/heads/main')
     needs: package
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
           name: iKeyd-win-x64
           path: artifacts
+      - name: Resolve release tag
+        shell: bash
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            echo "RELEASE_TAG=$GITHUB_REF_NAME" >> "$GITHUB_ENV"
+            echo "VERIFY_TAG=true" >> "$GITHUB_ENV"
+          else
+            version="$(tr -d '[:space:]' < RELEASE_VERSION)"
+            if [[ ! "$version" =~ ^v?[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z.]+)?$ ]]; then
+              echo "Invalid RELEASE_VERSION: $version" >&2
+              exit 1
+            fi
+            if [[ "$version" != v* ]]; then
+              version="v$version"
+            fi
+            echo "RELEASE_TAG=$version" >> "$GITHUB_ENV"
+            echo "VERIFY_TAG=false" >> "$GITHUB_ENV"
+          fi
       - name: Publish GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: >-
-          gh release create "${GITHUB_REF_NAME}"
-          artifacts/iKeyd-win-x64.zip
-          artifacts/iKeyd-win-x64/iKeyd.exe
-          --verify-tag
-          --generate-notes
-          --title "iKeyd ${GITHUB_REF_NAME}"
+        shell: bash
+        run: |
+          args=(
+            "$RELEASE_TAG"
+            artifacts/iKeyd-win-x64.zip
+            artifacts/iKeyd-win-x64/iKeyd.exe
+            --generate-notes
+            --title "iKeyd $RELEASE_TAG"
+          )
+          if [[ "$VERIFY_TAG" == "true" ]]; then
+            args+=(--verify-tag)
+          else
+            args+=(--target "$GITHUB_SHA")
+          fi
+          gh release create "${args[@]}"
