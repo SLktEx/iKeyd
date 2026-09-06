@@ -1,0 +1,32 @@
+profile behaviorDemo {
+    chord_window = 40ms
+}
+
+keyboard JIS109
+
+layer NAV {
+    POS.H = key(Left)
+    POS.J = key(Down)
+    POS.K = key(Up)
+    POS.L = key(Right)
+}
+
+behavior POS.Space = layer_tap(NAV, Space)
+behavior POS.A = mod_tap(Ctrl, A)
+behavior POS.Yen = layer(NAV)
+behavior POS.Muhenkan = modifier(Ctrl)
+
+behavior POS.Henkan {
+    tap = key(Enter)
+    hold = modifier(Shift)
+    timeout = 200ms
+    interrupt = tap
+}
+
+keymap S {
+    Q = q
+}
+
+keymap K {
+    Q = q
+}
