@@ -33,7 +33,53 @@ BASE[1,1]
 BASE[2,4]
 ```
 
-`POS[row,col]` aliases `BASE[row,col]` unless a dedicated `POS` layout is declared. This provides a physical-position spelling that stays useful when logical layouts change later.
+Named physical references are also supported:
+
+```text
+BASE.Q
+BASE.SColon
+```
+
+`POS[row,col]` and `POS.Name` alias `BASE` unless a dedicated `POS` layout is declared. This provides a physical-position spelling that stays useful when logical outputs change later.
+
+### Built-in JIS109 keyboard
+
+A standard Japanese 109-key physical keyboard does not need to be written out by hand. Declare the built-in preset once:
+
+```text
+keyboard JIS109
+```
+
+The declaration registers the complete 109-key physical layout, including the function row, JIS-specific keys, left/right modifiers, navigation cluster, arrows and numeric keypad. Physical keys can then be referenced by name:
+
+```text
+JIS109.Ro
+JIS109.Yen
+JIS109.Henkan
+JIS109.Muhenkan
+JIS109.KatakanaHiragana
+JIS109.ZenkakuHankaku
+JIS109.NumpadEnter
+```
+
+For example:
+
+```text
+profile myProfile {
+    chord_window = 40ms
+}
+
+keyboard JIS109
+
+keymap S {
+    JIS109.Ro = backslash
+    combo JIS109.Muhenkan + JIS109.Ro = Escape
+}
+```
+
+The `JIS109` preset contains exactly 109 unique physical keys. `NumpadComma` remains a supported compact iKeyd key for hardware that provides it, but it is not part of the standard 109-key preset.
+
+You can still declare custom `layout` blocks alongside a keyboard preset. This is useful when a logical typing layout only needs a compact three-row map while combos or special bindings refer to the full physical JIS keyboard.
 
 ### JIS physical keys
 
@@ -107,6 +153,7 @@ Direct physical-position references are also valid:
 ```text
 BASE[1,1] = q
 POS[2,4] = x
+JIS109.Ro = backslash
 ```
 
 ## Combos
@@ -116,7 +163,7 @@ A one-off combo can be written directly:
 ```text
 combo K + Q = fa
 combo POS[2,8] + BASE[1,1] = fa
-combo Muhenkan + Ro = Escape
+combo JIS109.Muhenkan + JIS109.Ro = Escape
 ```
 
 When many combos share one key, group them:
