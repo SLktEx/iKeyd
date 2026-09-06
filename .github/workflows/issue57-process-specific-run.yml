@@ -21,7 +21,9 @@ jobs:
         with:
           dotnet-version: 8.0.x
       - name: Apply process-specific patch
-        run: python -B tools/issue57_process_specific_patch.py
+        run: |
+          python -B tools/issue57_process_specific_patch.py
+          python -B tools/issue57_process_specific_test_fix.py
       - name: Restore
         run: dotnet restore iKeyd.sln
       - name: Build
@@ -33,6 +35,7 @@ jobs:
         run: |
           Remove-Item .github/workflows/issue57-process-specific-run.yml
           Remove-Item tools/issue57_process_specific_patch.py
+          Remove-Item tools/issue57_process_specific_test_fix.py
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
