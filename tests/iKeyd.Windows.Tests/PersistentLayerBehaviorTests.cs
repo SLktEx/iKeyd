@@ -9,17 +9,14 @@ namespace iKeyd.Windows.Tests;
 public sealed class PersistentLayerBehaviorTests
 {
     [Fact]
-    public void TG_latches_layer_until_toggled_off()
+    public void TG_latches_layer_and_transparently_falls_through_to_base_to_toggle_off()
     {
         var keyboard = new RecordingKeyboardOutput();
         var fallback = new RecordingHandler();
         using var router = Router(
             [
                 Keymap("S", behaviors: [Behavior("A", "TG", "NUM")]),
-                Keymap(
-                    "NUM",
-                    singles: [new SingleMapping<string>("B", "num-b")],
-                    behaviors: [Behavior("A", "TG", "NUM")])
+                Keymap("NUM", singles: [new SingleMapping<string>("B", "num-b")])
             ],
             keyboard,
             fallback);
@@ -30,6 +27,8 @@ public sealed class PersistentLayerBehaviorTests
         Assert.Equal(["num-b"], keyboard.Text);
         Assert.Empty(fallback.Events);
 
+        // NUM does not define A. The active layer is transparent at that position,
+        // so the base TG binding must remain reachable to unlatch NUM.
         Press(router, 'A', 40);
         var disposition = router.OnKeyboardEvent(Physical('B', KeyEventKind.Down, 60));
 
