@@ -1,0 +1,23 @@
+{
+  "id": "runtime-h-colon-default-key-semantics",
+  "description": "H+physical sc028 verifies that legacy applies Ctrl to defaultKey_Colon=':' rather than blindly reusing the input VK.",
+  "initialState": { "mode": "S", "ime": "off", "modifiers": [] },
+  "input": [
+    { "atMs": 0, "kind": "keyDown", "key": "CONVERT" },
+    { "atMs": 30, "kind": "keyDown", "key": "COLON" },
+    { "atMs": 50, "kind": "keyUp", "key": "COLON" },
+    { "atMs": 80, "kind": "keyUp", "key": "CONVERT" }
+  ],
+  "expected": {
+    "text": "",
+    "events": [
+      { "kind": "keyDown", "key": "CTRL" },
+      { "kind": "keyDown", "key": "SHIFT" },
+      { "kind": "keyDown", "key": "SCOLON" },
+      { "kind": "keyUp", "key": "SCOLON" },
+      { "kind": "keyUp", "key": "SHIFT" },
+      { "kind": "keyUp", "key": "CTRL" }
+    ]
+  },
+  "tags": ["hosted-legacy", "hosted-legacy-runtime", "jis-symbol", "default-key-semantics", "long-tail"]
+}
