@@ -1,0 +1,53 @@
+name: Validate latest main sync with cmd
+
+on:
+  push:
+    branches: [issue-46-hotkeyskg-full-compat]
+    paths:
+      - .github/workflows/issue46-sync-main-v3.yml
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: issue-46-hotkeyskg-full-compat
+          fetch-depth: 0
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - name: Merge latest main
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch origin main
+          cmd /c "git merge origin/main --no-commit --no-ff"
+          if ($LASTEXITCODE -ne 0) {
+            $conflicts = @(git diff --name-only --diff-filter=U)
+            $unexpected = @($conflicts | Where-Object { $_ -ne 'src/iKeyd.App/IKeydRuntimeHandler.cs' })
+            if ($unexpected.Count -ne 0) { throw "Unexpected merge conflicts: $($unexpected -join ', ')" }
+            git checkout --theirs -- src/iKeyd.App/IKeydRuntimeHandler.cs
+            git add src/iKeyd.App/IKeydRuntimeHandler.cs
+          }
+          python tools/issue46_sync_runtime_patch.py
+          git add src/iKeyd.App/IKeydRuntimeHandler.cs
+      - name: Restore
+        run: dotnet restore iKeyd.sln
+      - name: Build
+        run: dotnet build iKeyd.sln --no-restore --configuration Release
+      - name: Test
+        run: dotnet test iKeyd.sln --no-build --configuration Release
+      - name: Commit validated merge
+        shell: powershell
+        run: |
+          Remove-Item .github/workflows/issue46-sync-main-v3.yml
+          Remove-Item tools/issue46_sync_runtime_patch.py
+          git add -A
+          git commit -m "Merge latest main into hotkeySKG compatibility"
+          git push origin HEAD:issue-46-hotkeyskg-full-compat
