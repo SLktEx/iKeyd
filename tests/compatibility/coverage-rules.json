@@ -152,6 +152,30 @@
       ]
     },
     {
+      "name": "clipboard operations have explicit deterministic regression coverage",
+      "match": {"kind": "clipboard-operation"},
+      "set": {
+        "scenario": "regression"
+      },
+      "evidence": [
+        "tests/iKeyd.Core.Tests/ClipboardHistoryTests.cs",
+        "tests/iKeyd.Windows.Tests/ClipboardControllerTests.cs",
+        "tests/COMPATIBILITY.md"
+      ]
+    },
+    {
+      "name": "macro operations have explicit deterministic regression coverage",
+      "match": {"kind": "macro-operation"},
+      "set": {
+        "scenario": "regression"
+      },
+      "evidence": [
+        "tests/iKeyd.Core.Tests/MacroExecutorTests.cs",
+        "tests/iKeyd.Core.Tests/MacroParserTests.cs",
+        "tests/COMPATIBILITY.md"
+      ]
+    },
+    {
       "name": "IME behavior requires a real Japanese IME for final verification",
       "match": {"tag": "ime"},
       "set": {
