@@ -15,6 +15,7 @@ internal sealed class IKeydApplicationContext : ApplicationContext
     private readonly BehaviorWindowsInputRouter _keyboardHandler;
     private readonly LegacySuspendToggleHandler _suspendHandler;
     private readonly WindowsClipboardService _clipboardService;
+    private readonly WindowsClipboardHistoryPersistence _clipboardPersistence;
     private readonly WindowsClipboardController _clipboard;
     private readonly NotifyIcon _notifyIcon;
     private readonly ContextMenuStrip _menu;
@@ -38,11 +39,15 @@ internal sealed class IKeydApplicationContext : ApplicationContext
         var send = new LegacySendOutput(_keyboard, desktop);
 
         _clipboardService = new WindowsClipboardService();
+        _clipboardPersistence = new WindowsClipboardHistoryPersistence();
+        var clipboardPicker = new WindowsClipboardPicker();
         _clipboard = new WindowsClipboardController(
             _clipboardService,
             new ClipboardHistory(),
-            new WindowsClipboardPicker(),
-            _keyboard);
+            clipboardPicker,
+            _keyboard,
+            new ClipboardPayloadHistory(persistence: _clipboardPersistence),
+            clipboardPicker);
 
         var inputMethod = new WindowsInputMethod();
         _runtime = new IKeydRuntimeHandler(
@@ -121,6 +126,7 @@ internal sealed class IKeydApplicationContext : ApplicationContext
         {
             _legacyMacroSlots.Dispose();
             _clipboard.Dispose();
+            _clipboardPersistence.Dispose();
             _clipboardService.Dispose();
             _keyboardHandler.Dispose();
             _runtime.Dispose();
