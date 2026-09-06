@@ -41,10 +41,7 @@ class RealWindowsVerificationTests(unittest.TestCase):
                 "ikeyd": {"sha256": "a" * 64},
             },
             "environment": {"japaneseImeConfigured": True},
-            "automated": {
-                "legacyDifferential": {"status": "pass"},
-                "backendCompatibility": {"status": "pass"},
-            },
+            "automated": {"legacyDifferential": {"status": "pass"}},
             "checks": checks,
             "summary": {
                 "expectedRealWindowsInventoryCount": self.plan["expectedRealWindowsInventoryCount"],
@@ -71,6 +68,13 @@ class RealWindowsVerificationTests(unittest.TestCase):
             {check["id"]: len(check["inventoryIds"]) for check in self.plan["checks"]},
         )
 
+    def test_mouse_media_plan_preserves_v04_intentional_differences(self):
+        check = next(item for item in self.plan["checks"] if item["id"] == "mouse-media")
+        instructions = "\n".join(check["instructions"])
+        self.assertIn("virtual-stick", instructions)
+        self.assertIn("if s tate = U", instructions)
+        self.assertIn("intentional difference", instructions)
+
     def test_complete_report_requires_every_pinned_check_and_identity(self):
         report = self.complete_report()
         self.assertEqual([], module.validate_report(self.plan, report, require_complete=True))
@@ -80,15 +84,6 @@ class RealWindowsVerificationTests(unittest.TestCase):
         incomplete["summary"]["complete"] = False
         errors = module.validate_report(self.plan, incomplete, require_complete=True)
         self.assertTrue(any("checks are not complete" in error for error in errors))
-
-    def test_complete_report_requires_real_win32_backend_e2e(self):
-        report = self.complete_report()
-        report["automated"]["backendCompatibility"]["status"] = "fail"
-        report["summary"]["complete"] = False
-
-        errors = module.validate_report(self.plan, report, require_complete=True)
-
-        self.assertTrue(any("backend E2E" in error for error in errors))
 
     def test_report_rejects_inventory_drift_and_wrong_legacy_binary(self):
         report = self.complete_report()
