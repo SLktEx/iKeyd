@@ -440,7 +440,7 @@ internal static class IKeydDslParser
 
             var eventName = string.Empty;
             IReadOnlyList<string> handlerParameters = [];
-            var handler = Regex.Match(line, @"^on_(press|release)\s*\{$", RegexOptions.CultureInvariant);
+            var handler = Regex.Match(line, @"^on_(press|hold|tap|release)\s*\{$", RegexOptions.CultureInvariant);
             if (handler.Success)
             {
                 eventName = handler.Groups[1].Value;
