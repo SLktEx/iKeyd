@@ -3,8 +3,8 @@ name: Legacy differential
 on:
   workflow_dispatch:
   push:
-    branches: [main]
-    paths:
+    branches: [main, issue-46-hotkeyskg-full-compat]
+    paths: &legacy_paths
       - tests/legacy-binary/hotkeySKG.exe.gpg
       - tests/legacy-binary/hotkeySKG.ahk.gpg.asc
       - .github/workflows/legacy-differential.yml
@@ -14,23 +14,28 @@ on:
       - tools/validate-scenario-inventory-links.py
       - tests/compatibility/coverage-rules.json
       - config/hotkeySKG.behavior.json
-      - tests/iKeyd.Compatibility.Tests/Scenarios/**
-      - tests/iKeyd.Compatibility.Tests/ScenarioInventoryLinks.json
-      - tests/iKeyd.Windows.Tests/LegacyDifferentialComparison.cs
-      - tests/iKeyd.Windows.Tests/HostedTModeLegacyRunner.cs
-      - tests/iKeyd.Windows.Tests/HostedLegacyDifferentialTests.cs
-      - tests/iKeyd.Windows.Tests/HostedAutoHotkeySourceRunner.cs
-      - tests/iKeyd.Windows.Tests/HostedAutoHotkeySourceDifferentialTests.cs
+      - src/iKeyd.Core/Chords/**
+      - src/iKeyd.Core/Input/**
+      - src/iKeyd.App/IKeydRuntimeHandler.cs
+      - src/iKeyd.App/LegacySendOutput.cs
+      - src/iKeyd.App/WindowsKeyMap.cs
+      - src/iKeyd.Profiles.HotkeySkg/**
+      - src/iKeyd.Windows/Input/**
+      - tests/iKeyd.Compatibility.Tests/**
+      - tests/iKeyd.Windows.Tests/**
+  pull_request:
+    paths: *legacy_paths
 
 permissions:
   contents: read
 
 concurrency:
-  group: legacy-oracles-v1
+  group: legacy-oracles-v1-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
   compare:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: windows-latest
     timeout-minutes: 20
 
@@ -71,22 +76,13 @@ jobs:
           if ([string]::IsNullOrWhiteSpace($env:LEGACY_EXE_GPG_PASSPHRASE)) {
             throw 'Repository secret LEGACY_EXE_GPG_PASSPHRASE is not configured.'
           }
-
           $encrypted = Join-Path $PWD 'tests\legacy-binary\hotkeySKG.exe.gpg'
           $path = Join-Path $env:RUNNER_TEMP 'compiled-hotkeySKG.exe'
-          & '${{ steps.gpg.outputs.path }}' `
-            --batch --yes --pinentry-mode loopback `
-            --passphrase $env:LEGACY_EXE_GPG_PASSPHRASE `
-            --output $path --decrypt $encrypted
-          if ($LASTEXITCODE -ne 0) {
-            throw "GnuPG failed to decrypt the compiled legacy executable (exit code $LASTEXITCODE)."
-          }
-
+          & '${{ steps.gpg.outputs.path }}' --batch --yes --pinentry-mode loopback --passphrase $env:LEGACY_EXE_GPG_PASSPHRASE --output $path --decrypt $encrypted
+          if ($LASTEXITCODE -ne 0) { throw "GnuPG failed to decrypt the compiled legacy executable (exit code $LASTEXITCODE)." }
           $actual = (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant()
           $expected = '5492198ce403d796c8588b17419bce82a0e6de3961bb40896a875ee5dee359ea'
-          if ($actual -ne $expected) {
-            throw "Compiled legacy executable SHA-256 mismatch. Expected $expected, actual $actual."
-          }
+          if ($actual -ne $expected) { throw "Compiled legacy executable SHA-256 mismatch. Expected $expected, actual $actual." }
           "path=$path" >> $env:GITHUB_OUTPUT
           Write-Host "Verified compiled hotkeySKG.exe SHA-256: $actual"
 
@@ -99,19 +95,11 @@ jobs:
           $ErrorActionPreference = 'Stop'
           $encrypted = Join-Path $PWD 'tests\legacy-binary\hotkeySKG.ahk.gpg.asc'
           $path = Join-Path $env:RUNNER_TEMP 'hotkeySKG.ahk'
-          & '${{ steps.gpg.outputs.path }}' `
-            --batch --yes --pinentry-mode loopback `
-            --passphrase $env:LEGACY_EXE_GPG_PASSPHRASE `
-            --output $path --decrypt $encrypted
-          if ($LASTEXITCODE -ne 0) {
-            throw "GnuPG failed to decrypt the legacy AHK source (exit code $LASTEXITCODE)."
-          }
-
+          & '${{ steps.gpg.outputs.path }}' --batch --yes --pinentry-mode loopback --passphrase $env:LEGACY_EXE_GPG_PASSPHRASE --output $path --decrypt $encrypted
+          if ($LASTEXITCODE -ne 0) { throw "GnuPG failed to decrypt the legacy AHK source (exit code $LASTEXITCODE)." }
           $actual = (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant()
           $expected = 'fde46d179a2cfb8123a314d4ea6b8de714a65302867d4b3a654af07f9472bab7'
-          if ($actual -ne $expected) {
-            throw "Legacy AHK source SHA-256 mismatch. Expected $expected, actual $actual."
-          }
+          if ($actual -ne $expected) { throw "Legacy AHK source SHA-256 mismatch. Expected $expected, actual $actual." }
           "path=$path" >> $env:GITHUB_OUTPUT
           Write-Host "Verified hotkeySKG.ahk SHA-256: $actual"
 
@@ -125,30 +113,10 @@ jobs:
           New-Item -ItemType Directory -Force -Path $outputDir | Out-Null
           $matrix = Join-Path $outputDir 'compatibility-matrix.json'
           $markdown = Join-Path $outputDir 'compatibility-matrix.md'
-          python tools/analyze-legacy-compatibility.py $env:IKEYD_LEGACY_AHK `
-            --coverage tests/compatibility/coverage-rules.json `
-            --profile config/hotkeySKG.behavior.json `
-            --scenarios tests/iKeyd.Compatibility.Tests/Scenarios `
-            --json $matrix `
-            --markdown $markdown
-
-          python tools/apply-scenario-coverage.py `
-            --matrix $matrix `
-            --scenarios tests/iKeyd.Compatibility.Tests/Scenarios `
-            --links tests/iKeyd.Compatibility.Tests/ScenarioInventoryLinks.json `
-            --markdown $markdown
-
-          python tools/validate-scenario-inventory-links.py `
-            --matrix $matrix `
-            --scenarios tests/iKeyd.Compatibility.Tests/Scenarios `
-            --links tests/iKeyd.Compatibility.Tests/ScenarioInventoryLinks.json `
-            --json (Join-Path $outputDir 'scenario-inventory-links.json') `
-            --markdown (Join-Path $outputDir 'scenario-inventory-links.md')
-
-          python tools/analyze-send-syntax.py `
-            --matrix $matrix `
-            --json (Join-Path $outputDir 'send-syntax-inventory.json') `
-            --markdown (Join-Path $outputDir 'send-syntax-inventory.md')
+          python tools/analyze-legacy-compatibility.py $env:IKEYD_LEGACY_AHK --coverage tests/compatibility/coverage-rules.json --profile config/hotkeySKG.behavior.json --scenarios tests/iKeyd.Compatibility.Tests/Scenarios --json $matrix --markdown $markdown
+          python tools/apply-scenario-coverage.py --matrix $matrix --scenarios tests/iKeyd.Compatibility.Tests/Scenarios --links tests/iKeyd.Compatibility.Tests/ScenarioInventoryLinks.json --markdown $markdown
+          python tools/validate-scenario-inventory-links.py --matrix $matrix --scenarios tests/iKeyd.Compatibility.Tests/Scenarios --links tests/iKeyd.Compatibility.Tests/ScenarioInventoryLinks.json --json (Join-Path $outputDir 'scenario-inventory-links.json') --markdown (Join-Path $outputDir 'scenario-inventory-links.md')
+          python tools/analyze-send-syntax.py --matrix $matrix --json (Join-Path $outputDir 'send-syntax-inventory.json') --markdown (Join-Path $outputDir 'send-syntax-inventory.md')
 
       - name: Download pinned AutoHotkey v1.1.16.05 interpreter
         id: ahk
@@ -158,38 +126,19 @@ jobs:
           $url = 'https://raw.githubusercontent.com/2wayne/AutoHotkey_LPortable/2fca5b7f6b84e8c9574b78b01c101831068016e5/App/AutoHotkey/AutoHotkey.exe'
           $path = Join-Path $env:RUNNER_TEMP 'AutoHotkey-v1.1.16.05.exe'
           Invoke-WebRequest -Uri $url -OutFile $path -MaximumRedirection 10
-
           $length = (Get-Item -LiteralPath $path).Length
-          if ($length -ne 910848) {
-            throw "Unexpected AutoHotkey v1.1.16.05 interpreter size: $length."
-          }
+          if ($length -ne 910848) { throw "Unexpected AutoHotkey v1.1.16.05 interpreter size: $length." }
           $gitBlob = (& git hash-object $path).Trim().ToLowerInvariant()
           $expectedGitBlob = 'a776454e1eccfdcb92b7ab5214bca2832d52a1e8'
-          if ($gitBlob -ne $expectedGitBlob) {
-            throw "AutoHotkey interpreter Git blob mismatch. Expected $expectedGitBlob, actual $gitBlob."
-          }
-
+          if ($gitBlob -ne $expectedGitBlob) { throw "AutoHotkey interpreter Git blob mismatch. Expected $expectedGitBlob, actual $gitBlob." }
           $versionFile = Join-Path $env:RUNNER_TEMP 'ahk-version.txt'
           $probeFile = Join-Path $env:RUNNER_TEMP 'ahk-version-probe.ahk'
-          @(
-            "FileAppend, %A_AhkVersion%, $versionFile",
-            'ExitApp'
-          ) | Set-Content -LiteralPath $probeFile -Encoding ASCII
+          @("FileAppend, %A_AhkVersion%, $versionFile", 'ExitApp') | Set-Content -LiteralPath $probeFile -Encoding ASCII
           $probe = Start-Process -FilePath $path -ArgumentList $probeFile -Wait -PassThru
-          if ($probe.ExitCode -ne 0 -or -not (Test-Path -LiteralPath $versionFile)) {
-            throw "AutoHotkey version probe failed with exit code $($probe.ExitCode)."
-          }
+          if ($probe.ExitCode -ne 0 -or -not (Test-Path -LiteralPath $versionFile)) { throw "AutoHotkey version probe failed with exit code $($probe.ExitCode)." }
           $runtimeVersion = (Get-Content -LiteralPath $versionFile -Raw).Trim()
-          if ($runtimeVersion -ne '1.1.16.05') {
-            throw "Unexpected AutoHotkey runtime version: $runtimeVersion."
-          }
-
-          $sha256 = (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($runtimeVersion -ne '1.1.16.05') { throw "Unexpected AutoHotkey runtime version: $runtimeVersion." }
           "path=$path" >> $env:GITHUB_OUTPUT
-          "sha256=$sha256" >> $env:GITHUB_OUTPUT
-          Write-Host "Verified AutoHotkey interpreter Git blob: $gitBlob"
-          Write-Host "Verified AutoHotkey runtime version: $runtimeVersion"
-          Write-Host "AutoHotkey interpreter SHA-256: $sha256"
 
       - name: Restore
         run: dotnet restore iKeyd.sln
@@ -201,22 +150,17 @@ jobs:
           IKEYD_LEGACY_EXE_SHA256: 5492198ce403d796c8588b17419bce82a0e6de3961bb40896a875ee5dee359ea
           IKEYD_DIFFERENTIAL_REPORT_DIR: ${{ github.workspace }}\TestResults\legacy-differential\compiled-exe
         run: |
-          dotnet test tests/iKeyd.Windows.Tests/iKeyd.Windows.Tests.csproj `
-            --no-restore `
-            --configuration Release `
-            --filter 'Category=HostedLegacyDifferentialE2E'
+          dotnet test tests/iKeyd.Windows.Tests/iKeyd.Windows.Tests.csproj --no-restore --configuration Release --filter 'Category=HostedLegacyDifferentialE2E'
 
       - name: Run AHK v1 source differential
+        if: always()
         shell: powershell
         env:
           IKEYD_AHK_V1_EXE: ${{ steps.ahk.outputs.path }}
           IKEYD_LEGACY_AHK: ${{ steps.source.outputs.path }}
           IKEYD_DIFFERENTIAL_REPORT_DIR: ${{ github.workspace }}\TestResults\legacy-differential\ahk-source
         run: |
-          dotnet test tests/iKeyd.Windows.Tests/iKeyd.Windows.Tests.csproj `
-            --no-restore `
-            --configuration Release `
-            --filter 'Category=HostedAhkSourceDifferentialE2E'
+          dotnet test tests/iKeyd.Windows.Tests/iKeyd.Windows.Tests.csproj --no-restore --configuration Release --filter 'Category=HostedAhkSourceDifferentialE2E'
 
       - name: Upload differential reports
         if: always()
