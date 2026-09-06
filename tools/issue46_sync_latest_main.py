@@ -1,4 +1,5 @@
 from pathlib import Path
+import json
 
 
 def ensure_contains(path: str, marker: str, old: str, new: str) -> None:
@@ -46,3 +47,14 @@ ensure_contains(
     '''                0x12 => "Alt",\n                0x20 => "Space",''',
     '''                0x12 => "Alt",\n                0x1B => "Escape",\n                0x20 => "Space",''',
 )
+
+# main briefly modeled SM+H as a repaired right-button toggle. The pinned source and
+# docs intentionally preserve the `if s tate = U` typo: while the button is up, H is
+# a no-op; when already down it can release. Keep the catalog scenario honest and
+# leave the pre-held release branch to Issue57RuntimeCompatibilityTests.
+scenario_path = Path("tests/iKeyd.Compatibility.Tests/Scenarios/runtime-mouse-right-hold-toggle-sm-h.json")
+if scenario_path.exists():
+    scenario = json.loads(scenario_path.read_text(encoding="utf-8"))
+    scenario["description"] = "Space then M plus H preserves the legacy typo: while right button is up, repeated H is a no-op."
+    scenario.setdefault("expected", {})["actions"] = []
+    scenario_path.write_text(json.dumps(scenario, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
