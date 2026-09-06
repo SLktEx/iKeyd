@@ -9,5 +9,9 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../iKeyd.Core/iKeyd.Core.csproj" />
+    <ProjectReference Include="../../tools/iKeyd.ProfileCompiler/iKeyd.ProfileCompiler.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="iKeyd.Core.Tests" />
   </ItemGroup>
 </Project>
