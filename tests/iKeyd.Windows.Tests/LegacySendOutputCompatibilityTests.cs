@@ -8,7 +8,7 @@ namespace iKeyd.Windows.Tests;
 public sealed class LegacySendOutputCompatibilityTests
 {
     [Fact]
-    public void Combined_modifiers_preserve_down_press_reverse_up_order()
+    public void Combined_modifier_prefixes_use_left_identity_and_declaration_order_release()
     {
         var keyboard = new RecordingKeyboardOutput();
         var output = new LegacySendOutput(keyboard);
@@ -17,12 +17,12 @@ public sealed class LegacySendOutputCompatibilityTests
 
         Assert.Equal(
         [
-            Event(WindowsKeyMap.Control, KeyEventKind.Down),
-            Event(WindowsKeyMap.Shift, KeyEventKind.Down),
+            Event(WindowsKeyMap.LeftControl, KeyEventKind.Down),
+            Event(WindowsKeyMap.LeftShift, KeyEventKind.Down),
             Event(WindowsKeyMap.Tab, KeyEventKind.Down),
             Event(WindowsKeyMap.Tab, KeyEventKind.Up),
-            Event(WindowsKeyMap.Shift, KeyEventKind.Up),
-            Event(WindowsKeyMap.Control, KeyEventKind.Up)
+            Event(WindowsKeyMap.LeftControl, KeyEventKind.Up),
+            Event(WindowsKeyMap.LeftShift, KeyEventKind.Up)
         ],
         keyboard.Events);
     }
@@ -97,8 +97,8 @@ public sealed class LegacySendOutputCompatibilityTests
 
         output.Send("^$!_^{!}");
 
-        Assert.Contains(keyboard.Events, item => item.Key.VirtualKey == WindowsKeyMap.Control && item.Kind == KeyEventKind.Down);
-        Assert.Contains(keyboard.Events, item => item.Key.VirtualKey == WindowsKeyMap.Shift && item.Kind == KeyEventKind.Down);
+        Assert.Contains(keyboard.Events, item => item.Key.VirtualKey == WindowsKeyMap.LeftControl && item.Kind == KeyEventKind.Down);
+        Assert.Contains(keyboard.Events, item => item.Key.VirtualKey == WindowsKeyMap.LeftShift && item.Kind == KeyEventKind.Down);
         Assert.Contains(keyboard.Events, item => item.Key.VirtualKey == (ushort)'4');
         Assert.Contains(keyboard.Events, item => item.Key.VirtualKey == 0xE2);
         Assert.Contains(keyboard.Events, item => item.Key.VirtualKey == (ushort)'1');
@@ -131,7 +131,7 @@ public sealed class LegacySendOutputCompatibilityTests
     }
 
     [Fact]
-    public void Mixed_menu_sequence_releases_alt_before_following_plain_text()
+    public void Mixed_menu_sequence_releases_left_alt_before_following_plain_text()
     {
         var keyboard = new RecordingKeyboardOutput();
         var output = new LegacySendOutput(keyboard);
@@ -140,10 +140,10 @@ public sealed class LegacySendOutputCompatibilityTests
 
         Assert.Equal(
         [
-            Event(WindowsKeyMap.Alt, KeyEventKind.Down),
+            Event(WindowsKeyMap.LeftAlt, KeyEventKind.Down),
             Event(WindowsKeyMap.Space, KeyEventKind.Down),
             Event(WindowsKeyMap.Space, KeyEventKind.Up),
-            Event(WindowsKeyMap.Alt, KeyEventKind.Up)
+            Event(WindowsKeyMap.LeftAlt, KeyEventKind.Up)
         ],
         keyboard.Events);
         Assert.Equal(["ep"], keyboard.Text);
