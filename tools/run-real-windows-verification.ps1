@@ -14,7 +14,8 @@ param(
     [switch]$Interactive,
     [switch]$SkipDifferential,
     [switch]$SkipBackendE2E,
-    [switch]$SkipClipboardE2E
+    [switch]$SkipClipboardE2E,
+    [switch]$SkipPhysicalInputE2E
 )
 
 $ErrorActionPreference = "Stop"
@@ -89,6 +90,7 @@ $differentialDirectory = Join-Path $resolvedReportDirectory "legacy-differential
 $backendDirectory = Join-Path $resolvedReportDirectory "win32-backend"
 $clipboardDirectory = Join-Path $resolvedReportDirectory "clipboard"
 $clipboardResultPath = Join-Path $clipboardDirectory "clipboard-e2e-result.json"
+$physicalInputDirectory = Join-Path $resolvedReportDirectory "physical-input"
 
 $userLanguages = @()
 try {
@@ -141,6 +143,11 @@ $automated = [ordered]@{
     clipboardCompatibility = [ordered]@{
         status = "not-run"
         resultPath = $clipboardResultPath
+        message = $null
+    }
+    physicalInputCompatibility = [ordered]@{
+        status = "not-run"
+        reportDirectory = $physicalInputDirectory
         message = $null
     }
 }
@@ -223,6 +230,27 @@ if (-not $SkipClipboardE2E) {
     }
 }
 
+if (-not $SkipPhysicalInputE2E) {
+    Write-Host "Running real Windows hook/SendInput E2E..."
+    New-Item -ItemType Directory -Force -Path $physicalInputDirectory | Out-Null
+    try {
+        & dotnet test tests/iKeyd.Windows.Tests/iKeyd.Windows.Tests.csproj `
+            --configuration Release `
+            --filter "Category=WindowsE2E" `
+            --results-directory $physicalInputDirectory `
+            --logger "trx;LogFileName=physical-input-e2e.trx"
+        if ($LASTEXITCODE -ne 0) {
+            throw "Windows hook/SendInput E2E exited with code $LASTEXITCODE."
+        }
+        $automated.physicalInputCompatibility.status = "pass"
+    }
+    catch {
+        $automated.physicalInputCompatibility.status = "fail"
+        $automated.physicalInputCompatibility.message = $_.Exception.Message
+        Write-Warning "Windows hook/SendInput E2E failed: $($_.Exception.Message)"
+    }
+}
+
 $checkResults = @()
 $allChecks = @($plan.checks) + @($plan.supplementalChecks)
 foreach ($check in $allChecks) {
@@ -273,6 +301,7 @@ $complete = (
     $automated.legacyDifferential.status -eq "pass" -and
     $automated.backendCompatibility.status -eq "pass" -and
     $clipboardAttemptedSafely -and
+    $automated.physicalInputCompatibility.status -eq "pass" -and
     $manualComplete -and
     -not [string]::IsNullOrWhiteSpace($iKeydSha) -and
     $japaneseImeConfigured -and
@@ -318,6 +347,7 @@ Write-Host "Inventory covered by plan: $($uniqueInventoryIds.Count)/$($plan.expe
 Write-Host "Automated differential: $($automated.legacyDifferential.status)"
 Write-Host "Real-Win32 backend E2E: $($automated.backendCompatibility.status)"
 Write-Host "Clipboard E2E: $($automated.clipboardCompatibility.status)"
+Write-Host "Hook/SendInput E2E: $($automated.physicalInputCompatibility.status)"
 Write-Host "Manual checks: pass=$($report.summary.passedChecks), fail=$($report.summary.failedChecks), skipped=$($report.summary.skippedChecks), pending=$($report.summary.pendingChecks)"
 Write-Host "Complete: $complete"
 
