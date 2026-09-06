@@ -1,7 +1,11 @@
+using System.Diagnostics;
 using System.Text;
+using iKeyd.Core.Automation;
+using iKeyd.Core.Behaviors;
 using iKeyd.Core.Clipboard;
 using iKeyd.Core.Macros;
 using iKeyd.Core.Modes;
+using iKeyd.Windows.Automation;
 using iKeyd.Windows.Clipboard;
 using iKeyd.Windows.Desktop;
 using iKeyd.Windows.Input;
@@ -16,6 +20,8 @@ internal sealed class IKeydApplicationContext : ApplicationContext
     private readonly BehaviorWindowsInputRouter _keyboardHandler;
     private readonly LegacyContextualHotkeyHandler _contextualHotkeys;
     private readonly LegacySuspendToggleHandler _suspendHandler;
+    private readonly WindowsCommandActionQueue _commandActions;
+    private readonly WindowsSystemQueryProvider _systemQueries;
     private readonly WindowsClipboardService _clipboardService;
     private readonly WindowsClipboardHistoryPersistence? _clipboardPersistence;
     private readonly WindowsClipboardController _clipboard;
@@ -61,6 +67,10 @@ internal sealed class IKeydApplicationContext : ApplicationContext
             clipboardSettings.Images);
 
         var inputMethod = new WindowsInputMethod();
+        _commandActions = new WindowsCommandActionQueue();
+        _systemQueries = new WindowsSystemQueryProvider(inputMethod);
+        _commandActions.Completed += OnCommandCompleted;
+
         var clipboardHotkeys = new DeferredClipboardHistoryActions(
             _clipboard,
             SynchronizationContext.Current ?? new WindowsFormsSynchronizationContext(),
@@ -78,7 +88,8 @@ internal sealed class IKeydApplicationContext : ApplicationContext
             () => _runtime.Mode.Route(inputMethod).Keymap?.ToString(),
             send,
             _keyboard,
-            _runtime);
+            _runtime,
+            PostBehaviorHostAction);
         _contextualHotkeys = new LegacyContextualHotkeyHandler(
             _keyboard.State,
             desktop,
@@ -152,6 +163,8 @@ internal sealed class IKeydApplicationContext : ApplicationContext
         }
         finally
         {
+            _commandActions.Completed -= OnCommandCompleted;
+            _commandActions.Dispose();
             _inputDiagnosticsAutoLog.Dispose();
             _legacyMacroSlots.Dispose();
             _clipboard.Dispose();
@@ -167,6 +180,65 @@ internal sealed class IKeydApplicationContext : ApplicationContext
         }
 
         base.ExitThreadCore();
+    }
+
+    private void PostBehaviorHostAction(BehaviorAction action)
+    {
+        if (_stopping)
+            return;
+
+        switch (action.Kind)
+        {
+            case BehaviorActionKind.Exec:
+                if (action.Name is null)
+                    throw new InvalidOperationException("Exec behavior is missing an executable.");
+                if (!_commandActions.TryEnqueue(CommandRequest.Exec(action.Name, action.Arguments)))
+                    Trace.WriteLine($"iKeyd command queue is full; dropped exec '{action.Name}'.");
+                return;
+
+            case BehaviorActionKind.Shell:
+                if (action.Text is null)
+                    throw new InvalidOperationException("Shell behavior is missing a command.");
+                if (!_commandActions.TryEnqueue(CommandRequest.Shell(action.Text)))
+                    Trace.WriteLine("iKeyd command queue is full; dropped shell action.");
+                return;
+
+            case BehaviorActionKind.Query:
+                if (action.Name is null)
+                    throw new InvalidOperationException("Query behavior is missing a query key.");
+                var query = action.Name;
+                ThreadPool.QueueUserWorkItem(_ => RunBehaviorQuery(query));
+                return;
+
+            default:
+                throw new InvalidOperationException($"Unsupported host behavior action '{action.Kind}'.");
+        }
+    }
+
+    private void RunBehaviorQuery(string query)
+    {
+        if (_stopping)
+            return;
+
+        try
+        {
+            var value = _systemQueries.GetValue(query);
+            if (!_stopping)
+                _keyboard.SendText(value);
+        }
+        catch (Exception exception)
+        {
+            Trace.WriteLine($"iKeyd system query '{query}' failed: {exception.Message}");
+        }
+    }
+
+    private static void OnCommandCompleted(CommandResult result)
+    {
+        if (result.Succeeded)
+            return;
+
+        var detail = result.Error ?? $"exit code {result.ExitCode}: {result.StandardError.Trim()}";
+        Trace.WriteLine($"iKeyd command '{result.Request.Command}' failed: {detail}");
     }
 
     private void ChangeMode(InputMode mode)

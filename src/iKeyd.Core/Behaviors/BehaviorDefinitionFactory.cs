@@ -38,6 +38,12 @@ public static class BehaviorDefinitionFactory
             return CreateUnicode(invocation);
         if (string.Equals(invocation.Name, "TEXT", StringComparison.OrdinalIgnoreCase))
             return CreateText(invocation);
+        if (string.Equals(invocation.Name, "EXEC", StringComparison.OrdinalIgnoreCase))
+            return CreateExec(invocation);
+        if (string.Equals(invocation.Name, "SHELL", StringComparison.OrdinalIgnoreCase))
+            return CreateShell(invocation);
+        if (string.Equals(invocation.Name, "QUERY", StringComparison.OrdinalIgnoreCase))
+            return CreateQuery(invocation);
         if (userDefinitions.TryGetValue(invocation.Name, out var userDefinition))
             return new ScriptedBehaviorDefinition(userDefinition, invocation);
 
@@ -102,6 +108,55 @@ public static class BehaviorDefinitionFactory
     private static BehaviorDefinition CreateText(BehaviorInvocationProfile invocation)
         => StandardBehaviors.Text(ReadLiteralValue(invocation, "TEXT"));
 
+    private static BehaviorDefinition CreateExec(BehaviorInvocationProfile invocation)
+    {
+        if (invocation.Arguments.Count != 0)
+        {
+            RequireNoOptions(invocation);
+            return StandardBehaviors.Press(
+                BehaviorAction.Exec(invocation.Arguments[0], invocation.Arguments.Skip(1)));
+        }
+
+        ValidateExecOptions(invocation);
+        var executable = RequireOption(invocation, "executable");
+        var arguments = ReadIndexedOptions(invocation, "arg");
+        return StandardBehaviors.Press(BehaviorAction.Exec(executable, arguments));
+    }
+
+    private static BehaviorDefinition CreateShell(BehaviorInvocationProfile invocation)
+    {
+        if (invocation.Arguments.Count == 1 && invocation.Options.Count == 0)
+            return StandardBehaviors.Press(BehaviorAction.Shell(invocation.Arguments[0]));
+
+        RequireCount(invocation, 0, "SHELL() { command = \"...\" }");
+        ValidateKnownOptions(invocation, ["command"]);
+        return StandardBehaviors.Press(BehaviorAction.Shell(RequireOption(invocation, "command")));
+    }
+
+    private static BehaviorDefinition CreateQuery(BehaviorInvocationProfile invocation)
+    {
+        string key;
+        if (invocation.Arguments.Count == 1 && invocation.Options.Count == 0)
+        {
+            key = invocation.Arguments[0];
+        }
+        else
+        {
+            RequireCount(invocation, 0, "QUERY() { key = foreground.process }");
+            ValidateKnownOptions(invocation, ["key"]);
+            key = RequireOption(invocation, "key");
+        }
+
+        try
+        {
+            return StandardBehaviors.Press(BehaviorAction.Query(key));
+        }
+        catch (ArgumentException exception)
+        {
+            throw new InvalidDataException(exception.Message, exception);
+        }
+    }
+
     private static string ReadLiteralValue(BehaviorInvocationProfile invocation, string helper)
     {
         if (invocation.Arguments.Count == 1 && invocation.Options.Count == 0)
@@ -110,6 +165,50 @@ public static class BehaviorDefinitionFactory
         RequireCount(invocation, 0, $"{helper}() {{ value = \"...\" }}");
         ValidateKnownOptions(invocation, ["value"]);
         return RequireOption(invocation, "value");
+    }
+
+    private static void ValidateExecOptions(BehaviorInvocationProfile invocation)
+    {
+        foreach (var option in invocation.Options.Keys)
+        {
+            if (option.Equals("executable", StringComparison.OrdinalIgnoreCase))
+                continue;
+            if (option.StartsWith("arg", StringComparison.OrdinalIgnoreCase) &&
+                int.TryParse(option.AsSpan(3), out var index) && index >= 0)
+            {
+                continue;
+            }
+
+            throw new InvalidDataException($"EXEC does not support option '{option}'.");
+        }
+    }
+
+    private static IReadOnlyList<string> ReadIndexedOptions(BehaviorInvocationProfile invocation, string prefix)
+    {
+        var indexed = new SortedDictionary<int, string>();
+        foreach (var option in invocation.Options)
+        {
+            if (!option.Key.StartsWith(prefix, StringComparison.OrdinalIgnoreCase) ||
+                !int.TryParse(option.Key.AsSpan(prefix.Length), out var index) || index < 0)
+            {
+                continue;
+            }
+
+            indexed[index] = option.Value;
+        }
+
+        if (indexed.Count == 0)
+            return Array.Empty<string>();
+
+        var result = new string[indexed.Count];
+        var expected = 0;
+        foreach (var pair in indexed)
+        {
+            if (pair.Key != expected)
+                throw new InvalidDataException($"EXEC arguments must use contiguous options arg0..argN; missing arg{expected}.");
+            result[expected++] = pair.Value;
+        }
+        return result;
     }
 
     private static void RequireNoOptions(BehaviorInvocationProfile invocation)

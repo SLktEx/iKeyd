@@ -1,5 +1,6 @@
 using System.Buffers;
 using System.Text;
+using iKeyd.Core.Automation;
 using iKeyd.Core.Chords;
 
 namespace iKeyd.Core.Behaviors;
@@ -17,7 +18,10 @@ public enum BehaviorActionKind
     LayerOn,
     LayerOff,
     ModifierDown,
-    ModifierUp
+    ModifierUp,
+    Exec,
+    Shell,
+    Query
 }
 
 /// <summary>
@@ -32,17 +36,21 @@ public enum BehaviorRepeatPolicy
 
 public readonly record struct BehaviorAction
 {
+    private static readonly IReadOnlyList<string> EmptyArguments = Array.Empty<string>();
+
     private BehaviorAction(
         BehaviorActionKind kind,
         KeyId key,
         string? name,
         string? text,
+        IReadOnlyList<string>? arguments,
         BehaviorRepeatPolicy repeatPolicy)
     {
         Kind = kind;
         Key = key;
         Name = name;
         Text = text;
+        Arguments = arguments ?? EmptyArguments;
         RepeatPolicy = repeatPolicy;
     }
 
@@ -50,10 +58,11 @@ public readonly record struct BehaviorAction
     public KeyId Key { get; }
     public string? Name { get; }
     public string? Text { get; }
+    public IReadOnlyList<string> Arguments { get; }
     public BehaviorRepeatPolicy RepeatPolicy { get; }
 
     public static BehaviorAction SendKey(KeyId key)
-        => new(BehaviorActionKind.SendKey, key, null, null, BehaviorRepeatPolicy.PhysicalKeyDown);
+        => new(BehaviorActionKind.SendKey, key, null, null, null, BehaviorRepeatPolicy.PhysicalKeyDown);
 
     public static BehaviorAction SendUnicode(string scalar)
         => new(
@@ -61,6 +70,7 @@ public readonly record struct BehaviorAction
             default,
             null,
             RequireUnicodeScalar(scalar, nameof(scalar)),
+            null,
             BehaviorRepeatPolicy.PhysicalKeyDown);
 
     public static BehaviorAction SendText(string text)
@@ -69,19 +79,53 @@ public readonly record struct BehaviorAction
             default,
             null,
             RequireUnicodeText(text, nameof(text)),
+            null,
             BehaviorRepeatPolicy.Never);
 
     public static BehaviorAction LayerOn(string layer)
-        => new(BehaviorActionKind.LayerOn, default, RequireName(layer, nameof(layer)), null, BehaviorRepeatPolicy.Never);
+        => new(BehaviorActionKind.LayerOn, default, RequireName(layer, nameof(layer)), null, null, BehaviorRepeatPolicy.Never);
 
     public static BehaviorAction LayerOff(string layer)
-        => new(BehaviorActionKind.LayerOff, default, RequireName(layer, nameof(layer)), null, BehaviorRepeatPolicy.Never);
+        => new(BehaviorActionKind.LayerOff, default, RequireName(layer, nameof(layer)), null, null, BehaviorRepeatPolicy.Never);
 
     public static BehaviorAction ModifierDown(string modifier)
-        => new(BehaviorActionKind.ModifierDown, default, RequireName(modifier, nameof(modifier)), null, BehaviorRepeatPolicy.Never);
+        => new(BehaviorActionKind.ModifierDown, default, RequireName(modifier, nameof(modifier)), null, null, BehaviorRepeatPolicy.Never);
 
     public static BehaviorAction ModifierUp(string modifier)
-        => new(BehaviorActionKind.ModifierUp, default, RequireName(modifier, nameof(modifier)), null, BehaviorRepeatPolicy.Never);
+        => new(BehaviorActionKind.ModifierUp, default, RequireName(modifier, nameof(modifier)), null, null, BehaviorRepeatPolicy.Never);
+
+    public static BehaviorAction Exec(string executable, IEnumerable<string>? arguments = null)
+    {
+        var request = CommandRequest.Exec(executable, arguments);
+        return new(
+            BehaviorActionKind.Exec,
+            default,
+            request.Command,
+            null,
+            request.Arguments,
+            BehaviorRepeatPolicy.Never);
+    }
+
+    public static BehaviorAction Shell(string command)
+    {
+        var request = CommandRequest.Shell(command);
+        return new(
+            BehaviorActionKind.Shell,
+            default,
+            null,
+            request.Command,
+            null,
+            BehaviorRepeatPolicy.Never);
+    }
+
+    public static BehaviorAction Query(string key)
+        => new(
+            BehaviorActionKind.Query,
+            default,
+            SystemQueryKeys.Normalize(key),
+            null,
+            null,
+            BehaviorRepeatPolicy.Never);
 
     private static string RequireName(string value, string parameterName)
     {
