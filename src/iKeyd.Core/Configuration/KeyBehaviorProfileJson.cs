@@ -13,12 +13,10 @@ internal static class KeyBehaviorProfileJson
         {
             if (layersElement.ValueKind != JsonValueKind.Object)
                 throw new InvalidDataException("layers must be an object.");
-
             foreach (var layerProperty in layersElement.EnumerateObject())
             {
                 if (layerProperty.Value.ValueKind != JsonValueKind.Object)
                     throw new InvalidDataException($"layers.{layerProperty.Name} must be an object.");
-
                 var bindings = new List<KeyBehaviorLayerBinding>();
                 foreach (var bindingProperty in layerProperty.Value.EnumerateObject())
                 {
@@ -28,7 +26,6 @@ internal static class KeyBehaviorProfileJson
                         throw new InvalidDataException($"layers.{layerProperty.Name}.{bindingProperty.Name} must emit an output action, not layer/modifier.");
                     bindings.Add(new KeyBehaviorLayerBinding(key, action));
                 }
-
                 layers.Add(new KeyBehaviorLayer(layerProperty.Name, bindings));
             }
         }
@@ -38,33 +35,25 @@ internal static class KeyBehaviorProfileJson
         {
             if (behaviorsElement.ValueKind != JsonValueKind.Object)
                 throw new InvalidDataException("behaviors must be an object.");
-
             foreach (var behaviorProperty in behaviorsElement.EnumerateObject())
             {
                 if (behaviorProperty.Value.ValueKind != JsonValueKind.Object)
                     throw new InvalidDataException($"behaviors.{behaviorProperty.Name} must be an object.");
-
                 var location = $"behaviors.{behaviorProperty.Name}";
                 var trigger = ParseCompactKey(behaviorProperty.Name, "behaviors");
                 KeyBehaviorAction? tap = null;
                 if (behaviorProperty.Value.TryGetProperty("tap", out var tapElement))
                     tap = ParseAction(tapElement, $"{location}.tap");
-
                 if (!behaviorProperty.Value.TryGetProperty("hold", out var holdElement))
                     throw new InvalidDataException($"{location}.hold is required.");
                 var hold = ParseAction(holdElement, $"{location}.hold");
-
-                var timeoutMs = behaviorProperty.Value.TryGetProperty("timeoutMs", out var timeoutElement)
-                    ? timeoutElement.GetInt32()
-                    : 180;
+                var timeoutMs = behaviorProperty.Value.TryGetProperty("timeoutMs", out var timeoutElement) ? timeoutElement.GetInt32() : 180;
                 if (timeoutMs <= 0)
                     throw new InvalidDataException($"{location}.timeoutMs must be positive.");
-
                 var interrupt = TapHoldInterruptPolicy.Hold;
                 if (behaviorProperty.Value.TryGetProperty("interrupt", out var interruptElement))
                 {
-                    var value = interruptElement.GetString()
-                        ?? throw new InvalidDataException($"{location}.interrupt must be a string.");
+                    var value = interruptElement.GetString() ?? throw new InvalidDataException($"{location}.interrupt must be a string.");
                     interrupt = value.ToLowerInvariant() switch
                     {
                         "hold" => TapHoldInterruptPolicy.Hold,
@@ -72,26 +61,13 @@ internal static class KeyBehaviorProfileJson
                         _ => throw new InvalidDataException($"{location}.interrupt must be 'hold' or 'tap'.")
                     };
                 }
-
-                try
-                {
-                    behaviors.Add(new KeyBehaviorBinding(trigger, tap, hold, timeoutMs, interrupt));
-                }
-                catch (ArgumentException exception)
-                {
-                    throw new InvalidDataException($"Invalid {location}: {exception.Message}", exception);
-                }
+                try { behaviors.Add(new KeyBehaviorBinding(trigger, tap, hold, timeoutMs, interrupt)); }
+                catch (ArgumentException exception) { throw new InvalidDataException($"Invalid {location}: {exception.Message}", exception); }
             }
         }
 
-        try
-        {
-            return new KeyBehaviorProfile(behaviors, layers);
-        }
-        catch (ArgumentException exception)
-        {
-            throw new InvalidDataException($"Invalid key behavior profile: {exception.Message}", exception);
-        }
+        try { return new KeyBehaviorProfile(behaviors, layers); }
+        catch (ArgumentException exception) { throw new InvalidDataException($"Invalid key behavior profile: {exception.Message}", exception); }
     }
 
     public static void Write(KeyBehaviorProfile profile, Utf8JsonWriter writer)
@@ -113,7 +89,6 @@ internal static class KeyBehaviorProfileJson
             }
             writer.WriteEndObject();
         }
-
         if (profile.Behaviors.Count > 0)
         {
             writer.WritePropertyName("behaviors");
@@ -122,11 +97,7 @@ internal static class KeyBehaviorProfileJson
             {
                 writer.WritePropertyName(behavior.Trigger.Value);
                 writer.WriteStartObject();
-                if (behavior.Tap is { } tap)
-                {
-                    writer.WritePropertyName("tap");
-                    WriteAction(tap, writer);
-                }
+                if (behavior.Tap is { } tap) { writer.WritePropertyName("tap"); WriteAction(tap, writer); }
                 writer.WritePropertyName("hold");
                 WriteAction(behavior.Hold, writer);
                 writer.WriteNumber("timeoutMs", behavior.TimeoutMs);
@@ -148,12 +119,8 @@ internal static class KeyBehaviorProfileJson
     {
         if (element.ValueKind != JsonValueKind.Object)
             throw new InvalidDataException($"{location} must be an action object.");
-
-        var kindText = element.GetProperty("kind").GetString()
-            ?? throw new InvalidDataException($"{location}.kind must be a string.");
-        var value = element.GetProperty("value").GetString()
-            ?? throw new InvalidDataException($"{location}.value must be a string.");
-
+        var kindText = element.GetProperty("kind").GetString() ?? throw new InvalidDataException($"{location}.kind must be a string.");
+        var value = element.GetProperty("value").GetString() ?? throw new InvalidDataException($"{location}.value must be a string.");
         return kindText.ToLowerInvariant() switch
         {
             "key" => KeyBehaviorAction.Key(value),
@@ -164,9 +131,9 @@ internal static class KeyBehaviorProfileJson
             "mouse_click" => KeyBehaviorAction.MouseClick(ParseChoice(value, location, "Left", "Right", "Middle")),
             "scroll" => KeyBehaviorAction.Scroll(ParseChoice(value, location, "Up", "Down")),
             "media" => KeyBehaviorAction.Media(ParseChoice(value, location, "VolumeUp", "VolumeMute", "VolumeDown", "NextTrack", "PlayPause", "PreviousTrack")),
-            "window" => KeyBehaviorAction.Window(ParseChoice(value, location,
-                "Minimize", "ToggleMaximize", "LeftHalf", "RightHalf", "TopHalf", "BottomHalf",
-                "ToggleTopMost", "OpacityUp", "OpacityDown", "ToggleCaption", "ActivateBottomSameClass")),
+            "window" => KeyBehaviorAction.Window(ParseChoice(value, location, "Minimize", "ToggleMaximize", "LeftHalf", "RightHalf", "TopHalf", "BottomHalf", "ToggleTopMost", "OpacityUp", "OpacityDown", "ToggleCaption", "ActivateBottomSameClass")),
+            "clipboard" => KeyBehaviorAction.Clipboard(ParseChoice(value, location, "History")),
+            "macro" => KeyBehaviorAction.Macro(value),
             _ => throw new InvalidDataException($"{location}.kind '{kindText}' is unsupported.")
         };
     }
@@ -174,9 +141,7 @@ internal static class KeyBehaviorProfileJson
     private static KeyBehaviorAction ParseMouseMove(string value, string location)
     {
         var parts = value.Split(',', StringSplitOptions.TrimEntries);
-        if (parts.Length != 2 ||
-            !int.TryParse(parts[0], NumberStyles.Integer, CultureInfo.InvariantCulture, out var x) ||
-            !int.TryParse(parts[1], NumberStyles.Integer, CultureInfo.InvariantCulture, out var y))
+        if (parts.Length != 2 || !int.TryParse(parts[0], NumberStyles.Integer, CultureInfo.InvariantCulture, out var x) || !int.TryParse(parts[1], NumberStyles.Integer, CultureInfo.InvariantCulture, out var y))
             throw new InvalidDataException($"{location} mouse_move value must be 'deltaX,deltaY'.");
         return KeyBehaviorAction.MouseMove(x, y);
     }
@@ -184,20 +149,18 @@ internal static class KeyBehaviorProfileJson
     private static string ParseChoice(string value, string location, params string[] allowed)
     {
         foreach (var choice in allowed)
-            if (string.Equals(value, choice, StringComparison.OrdinalIgnoreCase))
-                return choice;
+            if (string.Equals(value, choice, StringComparison.OrdinalIgnoreCase)) return choice;
         throw new InvalidDataException($"{location} contains unsupported value '{value}'. Allowed: {string.Join(", ", allowed)}.");
     }
 
-    private static KeyBehaviorModifier ParseModifier(string value, string location)
-        => value.ToLowerInvariant() switch
-        {
-            "ctrl" or "control" => KeyBehaviorModifier.Control,
-            "shift" => KeyBehaviorModifier.Shift,
-            "alt" => KeyBehaviorModifier.Alt,
-            "gui" or "win" or "super" => KeyBehaviorModifier.Gui,
-            _ => throw new InvalidDataException($"{location} contains unknown modifier '{value}'.")
-        };
+    private static KeyBehaviorModifier ParseModifier(string value, string location) => value.ToLowerInvariant() switch
+    {
+        "ctrl" or "control" => KeyBehaviorModifier.Control,
+        "shift" => KeyBehaviorModifier.Shift,
+        "alt" => KeyBehaviorModifier.Alt,
+        "gui" or "win" or "super" => KeyBehaviorModifier.Gui,
+        _ => throw new InvalidDataException($"{location} contains unknown modifier '{value}'.")
+    };
 
     private static void WriteAction(KeyBehaviorAction action, Utf8JsonWriter writer)
     {
@@ -218,6 +181,8 @@ internal static class KeyBehaviorProfileJson
         KeyBehaviorActionKind.Scroll => "scroll",
         KeyBehaviorActionKind.Media => "media",
         KeyBehaviorActionKind.Window => "window",
+        KeyBehaviorActionKind.Clipboard => "clipboard",
+        KeyBehaviorActionKind.Macro => "macro",
         _ => throw new ArgumentOutOfRangeException(nameof(kind))
     };
 }
