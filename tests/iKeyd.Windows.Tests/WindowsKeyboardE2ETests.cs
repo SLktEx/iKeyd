@@ -9,6 +9,7 @@ using Xunit;
 
 namespace iKeyd.Windows.Tests;
 
+[Collection(WindowsGlobalInputE2ECollection.Name)]
 public sealed class WindowsKeyboardE2ETests
 {
     private const byte VkNonConvert = 0x1D;

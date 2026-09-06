@@ -3,6 +3,7 @@ using Xunit;
 
 namespace iKeyd.Windows.Tests;
 
+[Collection(WindowsGlobalInputE2ECollection.Name)]
 public sealed class WindowsScenarioRunnerTests
 {
     private static string ScenarioDirectory => Path.Combine(AppContext.BaseDirectory, "Scenarios");
