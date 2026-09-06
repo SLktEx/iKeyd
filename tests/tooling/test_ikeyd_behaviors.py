@@ -15,14 +15,16 @@ spec.loader.exec_module(module)
 
 
 class IKeydBehaviorDslTests(unittest.TestCase):
-    def test_fixture_compiles_layer_tap_mod_tap_and_block_behavior(self):
+    def test_fixture_compiles_layer_tap_mod_tap_block_and_desktop_actions(self):
         path = ROOT / "tests" / "tooling" / "fixtures" / "behaviors.ikeyd"
         profile = module.compile_dsl(path.read_text(encoding="utf-8"), path)
 
-        self.assertEqual(
-            {"kind": "key", "value": "Left"},
-            profile["layers"]["NAV"]["H"],
-        )
+        self.assertEqual({"kind": "key", "value": "Left"}, profile["layers"]["NAV"]["H"])
+        self.assertEqual({"kind": "mouse_move", "value": "-30,10"}, profile["layers"]["NAV"]["U"])
+        self.assertEqual({"kind": "mouse_click", "value": "Left"}, profile["layers"]["NAV"]["I"])
+        self.assertEqual({"kind": "scroll", "value": "Up"}, profile["layers"]["NAV"]["O"])
+        self.assertEqual({"kind": "media", "value": "PlayPause"}, profile["layers"]["NAV"]["P"])
+        self.assertEqual({"kind": "window", "value": "LeftHalf"}, profile["layers"]["NAV"]["At"])
         self.assertEqual(
             {
                 "timeoutMs": 180,
@@ -39,6 +41,10 @@ class IKeydBehaviorDslTests(unittest.TestCase):
         self.assertNotIn("tap", profile["behaviors"]["Muhenkan"])
         self.assertEqual(200, profile["behaviors"]["Henkan"]["timeoutMs"])
         self.assertEqual("tap", profile["behaviors"]["Henkan"]["interrupt"])
+        self.assertEqual(
+            {"kind": "window", "value": "ToggleMaximize"},
+            profile["behaviors"]["Henkan"]["tap"],
+        )
 
     def test_pos_reference_uses_selected_jis109_keyboard(self):
         profile = module.compile_dsl(
@@ -51,9 +57,13 @@ layer NAV {
     POS.Ro = key(Escape)
 }
 behavior POS.Muhenkan = layer(NAV)
-keymap S { 
+keymap S {
+    Q = q
 }
-""".strip().replace("keymap S { \n}", "keymap S {\n    Q = q\n}\nkeymap K {\n    Q = q\n}"),
+keymap K {
+    Q = q
+}
+""".strip(),
             Path("profile.ikeyd"),
         )
         self.assertIn("Ro", profile["layers"]["NAV"])
@@ -115,6 +125,46 @@ keymap K {
 }
 """.strip()
         with self.assertRaisesRegex(module.DslError, r"interrupt must be 'hold' or 'tap'"):
+            module.compile_dsl(text, Path("profile.ikeyd"))
+
+    def test_invalid_desktop_action_reports_source_line(self):
+        text = """
+profile demo {
+    chord_window = 40ms
+}
+keyboard JIS109
+layer DESKTOP {
+    H = media(ExplodeSpeakers)
+}
+behavior POS.Space = layer(DESKTOP)
+keymap S {
+    Q = q
+}
+keymap K {
+    Q = q
+}
+""".strip()
+        with self.assertRaisesRegex(module.DslError, r"profile\.ikeyd:6: unknown media command 'ExplodeSpeakers'"):
+            module.compile_dsl(text, Path("profile.ikeyd"))
+
+    def test_mouse_move_requires_two_integer_deltas(self):
+        text = """
+profile demo {
+    chord_window = 40ms
+}
+keyboard JIS109
+layer DESKTOP {
+    H = mouse_move(left, 10)
+}
+behavior POS.Space = layer(DESKTOP)
+keymap S {
+    Q = q
+}
+keymap K {
+    Q = q
+}
+""".strip()
+        with self.assertRaisesRegex(module.DslError, r"mouse_move\(\.\.\.\) expects two integer deltas"):
             module.compile_dsl(text, Path("profile.ikeyd"))
 
 
