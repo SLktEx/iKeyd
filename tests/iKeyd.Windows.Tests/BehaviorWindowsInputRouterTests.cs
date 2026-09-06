@@ -48,11 +48,7 @@ public sealed class BehaviorWindowsInputRouterTests
     {
         var keyboard = new RecordingKeyboardOutput();
         var fallback = new RecordingHandler();
-        using var router = CreateRouter(
-            keyboard,
-            fallback,
-            sourceKey: "Space",
-            tapKey: "Enter");
+        using var router = CreateRouter(keyboard, fallback, sourceKey: "Space", tapKey: "Enter");
 
         router.OnKeyboardEvent(Physical(WindowsKeyMap.Space, KeyEventKind.Down, 0));
         router.OnKeyboardEvent(Physical('C', KeyEventKind.Down, 50));
@@ -87,6 +83,41 @@ public sealed class BehaviorWindowsInputRouterTests
     }
 
     [Fact]
+    public void Custom_behavior_local_state_can_activate_layer_before_interrupting_key()
+    {
+        var keyboard = new RecordingKeyboardOutput();
+        var fallback = new RecordingHandler();
+        using var router = CreateCustomRouter(keyboard, fallback);
+
+        router.OnKeyboardEvent(Physical('A', KeyEventKind.Down, 0));
+        var bDown = router.OnKeyboardEvent(Physical('B', KeyEventKind.Down, 30));
+        var bUp = router.OnKeyboardEvent(Physical('B', KeyEventKind.Up, 40));
+        router.OnKeyboardEvent(Physical('A', KeyEventKind.Up, 50));
+
+        Assert.Equal(KeyboardDisposition.Suppress, bDown);
+        Assert.Equal(KeyboardDisposition.Suppress, bUp);
+        Assert.Equal(["custom-num-b"], keyboard.Text);
+        Assert.Empty(fallback.Events);
+    }
+
+    [Fact]
+    public void Custom_behavior_tap_path_sends_bound_parameter_key()
+    {
+        var keyboard = new RecordingKeyboardOutput();
+        var fallback = new RecordingHandler();
+        using var router = CreateCustomRouter(keyboard, fallback);
+
+        router.OnKeyboardEvent(Physical('A', KeyEventKind.Down, 0));
+        router.OnKeyboardEvent(Physical('A', KeyEventKind.Up, 20));
+
+        Assert.Equal(
+            [new RecordedKey(WindowsKeyMap.Keyboard('X'), KeyEventKind.Down),
+             new RecordedKey(WindowsKeyMap.Keyboard('X'), KeyEventKind.Up)],
+            keyboard.Keys);
+        Assert.Empty(fallback.Events);
+    }
+
+    [Fact]
     public void Injected_events_bypass_behavior_routing()
     {
         var keyboard = new RecordingKeyboardOutput();
@@ -117,17 +148,11 @@ public sealed class BehaviorWindowsInputRouterTests
                     "S",
                     [],
                     [],
-                    [new BehaviorMappingProfile(
-                        sourceKey,
-                        new BehaviorInvocationProfile("LT", ["NUM", tapKey]))]),
+                    [new BehaviorMappingProfile(sourceKey, new BehaviorInvocationProfile("LT", ["NUM", tapKey]))]),
                 new AutomationKeymapProfile("K", [], []),
-                new AutomationKeymapProfile(
-                    "NUM",
-                    [new SingleMapping<string>("B", "num-b")],
-                    [])
+                new AutomationKeymapProfile("NUM", [new SingleMapping<string>("B", "num-b")], [])
             ]);
-        var send = new LegacySendOutput(keyboard);
-        return new BehaviorWindowsInputRouter(profile, () => "S", send, keyboard, fallback);
+        return new BehaviorWindowsInputRouter(profile, () => "S", new LegacySendOutput(keyboard), keyboard, fallback);
     }
 
     private static BehaviorWindowsInputRouter CreateMtRouter(
@@ -141,17 +166,52 @@ public sealed class BehaviorWindowsInputRouterTests
                     "S",
                     [],
                     [],
-                    [new BehaviorMappingProfile(
-                        "A",
-                        new BehaviorInvocationProfile("MT", ["Ctrl", "X"]))]),
+                    [new BehaviorMappingProfile("A", new BehaviorInvocationProfile("MT", ["Ctrl", "X"]))]),
                 new AutomationKeymapProfile("K", [], [])
             ]);
-        return new BehaviorWindowsInputRouter(
-            profile,
-            () => "S",
-            new LegacySendOutput(keyboard),
-            keyboard,
-            fallback);
+        return new BehaviorWindowsInputRouter(profile, () => "S", new LegacySendOutput(keyboard), keyboard, fallback);
+    }
+
+    private static BehaviorWindowsInputRouter CreateCustomRouter(
+        RecordingKeyboardOutput keyboard,
+        RecordingHandler fallback)
+    {
+        var definition = new UserBehaviorDefinitionProfile(
+            "SMART_LT",
+            ["tap_key", "layer_name"],
+            [new UserBehaviorLocalProfile("interrupted")],
+            [
+                new UserBehaviorHandlerProfile(
+                    "interrupt",
+                    ["other"],
+                    [
+                        new UserBehaviorStatementProfile("set_bool", target: "interrupted", value: "true"),
+                        new UserBehaviorStatementProfile("layer_on", value: "layer_name")
+                    ]),
+                new UserBehaviorHandlerProfile(
+                    "release",
+                    [],
+                    [
+                        new UserBehaviorStatementProfile(
+                            "if_bool",
+                            condition: "interrupted",
+                            thenStatements: [new UserBehaviorStatementProfile("layer_off", value: "layer_name")],
+                            elseStatements: [new UserBehaviorStatementProfile("send", value: "tap_key")])
+                    ])
+            ]);
+        var profile = new AutomationProfile(
+            40,
+            [
+                new AutomationKeymapProfile(
+                    "S",
+                    [],
+                    [],
+                    [new BehaviorMappingProfile("A", new BehaviorInvocationProfile("SMART_LT", ["X", "NUM"]))]),
+                new AutomationKeymapProfile("K", [], []),
+                new AutomationKeymapProfile("NUM", [new SingleMapping<string>("B", "custom-num-b")], [])
+            ],
+            behaviorDefinitions: [definition]);
+        return new BehaviorWindowsInputRouter(profile, () => "S", new LegacySendOutput(keyboard), keyboard, fallback);
     }
 
     private static KeyboardEvent Physical(ushort virtualKey, KeyEventKind kind, long timestampMs)
@@ -163,16 +223,12 @@ public sealed class BehaviorWindowsInputRouterTests
     {
         public List<RecordedKey> Keys { get; } = [];
         public List<string> Text { get; } = [];
-
-        public void SendKey(KeyboardKey key, KeyEventKind kind)
-            => Keys.Add(new RecordedKey(key, kind));
-
+        public void SendKey(KeyboardKey key, KeyEventKind kind) => Keys.Add(new RecordedKey(key, kind));
         public void SendKeyPress(KeyboardKey key)
         {
             SendKey(key, KeyEventKind.Down);
             SendKey(key, KeyEventKind.Up);
         }
-
         public void SendText(string text) => Text.Add(text);
         public bool IsToggleOn(ushort virtualKey) => false;
     }
@@ -180,7 +236,6 @@ public sealed class BehaviorWindowsInputRouterTests
     private sealed class RecordingHandler : IKeyboardEventHandler
     {
         public List<KeyboardEvent> Events { get; } = [];
-
         public KeyboardDisposition OnKeyboardEvent(KeyboardEvent keyboardEvent)
         {
             Events.Add(keyboardEvent);
