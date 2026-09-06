@@ -9,6 +9,7 @@ public sealed record CompatibilityScenario
     public required ScenarioInitialState InitialState { get; init; }
     public required List<ScenarioInputEvent> Input { get; init; }
     public required ScenarioExpected Expected { get; init; }
+    public ScenarioExpected? AhkSourceExpected { get; init; }
     public List<string> Tags { get; init; } = [];
     public List<string> InventoryIds { get; init; } = [];
     public List<string> RequiredEnvironment { get; init; } = [];
