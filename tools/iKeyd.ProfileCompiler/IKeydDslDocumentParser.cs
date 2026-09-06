@@ -8,15 +8,20 @@ internal static class IKeydDslDocumentParser
     public static IKeydDslDocument Parse(string text, string sourcePath = "<memory>")
     {
         var state = IKeydStateDslParser.Extract(text, sourcePath);
-        var mouse = IKeydMouseDslParser.Extract(state.SourceWithoutState, sourcePath);
+        var stateBehaviorSyntax = IKeydSharedStateBehaviorSyntax.Rewrite(
+            state.SourceWithoutState,
+            state.Profile,
+            sourcePath);
+        var mouse = IKeydMouseDslParser.Extract(stateBehaviorSyntax.Source, sourcePath);
         var targets = IKeydTargetExtensionParser.Extract(mouse.SourceWithoutMouse, sourcePath);
         var parsed = IKeydDslParser.Parse(targets.SourceWithoutTargetBlocks, sourcePath);
+        var behaviorDefinitions = stateBehaviorSyntax.Apply(parsed.BehaviorDefinitions.Values);
         var profile = new AutomationProfile(
             parsed.ChordWindowMs,
             parsed.Keymaps.Values,
             parsed.StartupMode,
             parsed.Hotkeys,
-            parsed.BehaviorDefinitions.Values,
+            behaviorDefinitions,
             parsed.Clipboard,
             state.Profile);
         ValidateCompileTimeBehaviorInvocations(profile, sourcePath);
