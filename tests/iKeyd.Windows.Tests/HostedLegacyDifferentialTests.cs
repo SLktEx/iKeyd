@@ -105,8 +105,8 @@ public sealed class HostedLegacyDifferentialTests
 
         Assert.Equal("S", adapted.InitialState.Mode);
         Assert.Equal("off", adapted.InitialState.Ime);
-        Assert.Equal(500, adapted.Input[0].AtMs);
-        Assert.Equal(510, adapted.Input[1].AtMs);
+        Assert.Equal(1000, adapted.Input[0].AtMs);
+        Assert.Equal(1010, adapted.Input[1].AtMs);
         Assert.Equal("K", scenario.InitialState.Mode);
         Assert.Equal("on", scenario.InitialState.Ime);
         Assert.Equal(0, scenario.Input[0].AtMs);
