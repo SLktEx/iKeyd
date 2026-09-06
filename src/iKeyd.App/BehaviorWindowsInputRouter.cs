@@ -145,31 +145,62 @@ internal sealed class BehaviorWindowsInputRouter : IKeyboardEventHandler, IInput
             return KeyboardDisposition.Suppress;
         }
 
-        var targetKeymap = ResolveTargetKeymapName();
-        if (targetKeymap is not null &&
-            _behaviorRuntimes.TryGetValue(targetKeymap, out var targetRuntime) &&
-            targetRuntime.IsBound(keyId))
+        if (TryHandleLayeredKeyDown(keyboardEvent, keyId))
+            return KeyboardDisposition.Suppress;
+
+        return _fallback.OnKeyboardEvent(keyboardEvent);
+    }
+
+    private bool TryHandleLayeredKeyDown(KeyboardEvent keyboardEvent, KeyId keyId)
+    {
+        // Layers are transparent overlays. Search the newest momentary activation
+        // first, then persistent selections, then the base behavior map. Base
+        // ordinary mappings intentionally remain in the legacy fallback so this
+        // bridge does not bypass the existing chord/simultaneous-key engine.
+        for (var index = _activeLayers.Count - 1; index >= 0; index--)
         {
-            var started = targetRuntime.BeginKeyDown(keyId, keyboardEvent.TimestampMs);
+            if (TryHandleKeymapKeyDown(_activeLayers[index], keyboardEvent, keyId, includeSingles: true))
+                return true;
+        }
+
+        for (var index = _persistentLayers.Count - 1; index >= 0; index--)
+        {
+            if (TryHandleKeymapKeyDown(_persistentLayers[index], keyboardEvent, keyId, includeSingles: true))
+                return true;
+        }
+
+        var baseKeymap = _baseKeymapName();
+        return baseKeymap is not null &&
+               TryHandleKeymapKeyDown(baseKeymap, keyboardEvent, keyId, includeSingles: false);
+    }
+
+    private bool TryHandleKeymapKeyDown(
+        string keymapName,
+        KeyboardEvent keyboardEvent,
+        KeyId keyId,
+        bool includeSingles)
+    {
+        if (_behaviorRuntimes.TryGetValue(keymapName, out var runtime) && runtime.IsBound(keyId))
+        {
+            var started = runtime.BeginKeyDown(keyId, keyboardEvent.TimestampMs);
             ApplyActions(started.Actions);
             if (started.Suppress)
             {
                 _activeBehaviorKeys.Add(keyId);
-                return KeyboardDisposition.Suppress;
+                return true;
             }
         }
 
-        var activeLayer = ActiveLayer;
-        if (activeLayer is not null &&
-            _keymaps.TryGetValue(activeLayer, out var layerKeymap) &&
-            layerKeymap.TryGetSingle(keyId, out var output))
+        if (includeSingles &&
+            _keymaps.TryGetValue(keymapName, out var keymap) &&
+            keymap.TryGetSingle(keyId, out var output))
         {
             _send.Send(output);
             _layerMappedKeys.Add(keyboardEvent.Key);
-            return KeyboardDisposition.Suppress;
+            return true;
         }
 
-        return _fallback.OnKeyboardEvent(keyboardEvent);
+        return false;
     }
 
     private KeyboardDisposition HandleKeyUp(KeyboardEvent keyboardEvent, KeyId keyId)
@@ -191,14 +222,6 @@ internal sealed class BehaviorWindowsInputRouter : IKeyboardEventHandler, IInput
             ? KeyboardDisposition.Suppress
             : _fallback.OnKeyboardEvent(keyboardEvent);
     }
-
-    private string? ResolveTargetKeymapName()
-        => ActiveLayer ?? _baseKeymapName();
-
-    private string? ActiveLayer
-        => _activeLayers.Count != 0
-            ? _activeLayers[^1]
-            : _persistentLayers.Count == 0 ? null : _persistentLayers[^1];
 
     private void ApplyActions(IReadOnlyList<BehaviorAction> actions)
     {
