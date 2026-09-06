@@ -32,7 +32,7 @@ internal static class LegacyFunctionSendMap
             1 => values.MH,
             2 => values.HM,
             3 => values.MS,
-            _ => throw new UnreachableException()
+            _ => throw new InvalidOperationException("Unexpected withFuncKey slot.")
         };
         return true;
     }
@@ -60,7 +60,7 @@ internal static class LegacyFunctionSendMap
             1 => values.MH,
             2 => values.HM,
             3 => values.MS,
-            _ => throw new UnreachableException()
+            _ => throw new InvalidOperationException("Unexpected withFuncKey slot.")
         };
         return true;
     }
