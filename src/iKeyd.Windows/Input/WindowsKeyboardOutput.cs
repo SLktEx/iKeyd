@@ -107,8 +107,12 @@ public sealed class WindowsKeyboardOutput : IKeyboardOutput
         return KeyboardInput(0, codeUnit, flags);
     }
 
-    private static void FillUnicodeInputs(string text, Span<NativeInput> inputs)
+    internal static void FillUnicodeInputs(string text, Span<NativeInput> inputs)
     {
+        ArgumentNullException.ThrowIfNull(text);
+        if (inputs.Length != checked(text.Length * 2))
+            throw new ArgumentException("Unicode input buffer must contain exactly two events per UTF-16 code unit.", nameof(inputs));
+
         var index = 0;
         foreach (var codeUnit in text)
         {
@@ -166,10 +170,6 @@ public sealed class WindowsKeyboardOutput : IKeyboardOutput
         public InputUnion Data;
     }
 
-    // INPUT contains a union of MOUSEINPUT, KEYBDINPUT and HARDWAREINPUT.
-    // Including all members is important: on x64 MOUSEINPUT is 32 bytes, so the
-    // union is 32 bytes and INPUT itself is 40 bytes. Defining only KEYBDINPUT
-    // makes sizeof(INPUT) too small and SendInput rejects the buffer.
     [StructLayout(LayoutKind.Explicit)]
     internal struct InputUnion
     {
