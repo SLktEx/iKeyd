@@ -23,4 +23,17 @@ public sealed class WindowsKeyMapTests
         Assert.True(key.Value.IsCompact);
         Assert.Equal(expected, key.Value.Code);
     }
+
+    [Theory]
+    [InlineData(WindowsKeyMap.Kana)]
+    [InlineData(WindowsKeyMap.Alt)]
+    [InlineData(WindowsKeyMap.Convert)]
+    [InlineData(WindowsKeyMap.NonConvert)]
+    [InlineData(WindowsKeyMap.Space)]
+    public void Layer_and_modifier_virtual_keys_are_not_character_key_ids(ushort virtualKey)
+    {
+        var key = WindowsKeyMap.TryResolveKeyId(virtualKey);
+
+        Assert.Null(key);
+    }
 }

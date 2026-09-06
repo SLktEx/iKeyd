@@ -1,0 +1,21 @@
+{
+  "id": "runtime-function-am-u-alt-home",
+  "description": "A then M plus U emits Alt+Home through Send,!%mkey%.",
+  "initialState": { "mode": "S", "ime": "off", "layers": ["A", "M"] },
+  "input": [
+    { "atMs": 10, "kind": "keyDown", "key": "U" },
+    { "atMs": 11, "kind": "keyUp", "key": "U" }
+  ],
+  "expected": {
+    "events": [
+      { "kind": "keyDown", "key": "VK_A4" },
+      { "kind": "keyDown", "key": "Home" },
+      { "kind": "keyUp", "key": "Home" },
+      { "kind": "keyUp", "key": "VK_A4" }
+    ]
+  },
+  "tags": ["legacy", "runtime-long-tail", "function-layer", "send-event-diff", "hosted-windows"],
+  "inventoryIds": ["legacy-send-d63695ba92"],
+  "requiredEnvironment": ["hosted-windows"],
+  "oracleTargets": ["compiled-exe", "ahk-source", "ikeyd-runtime"]
+}
