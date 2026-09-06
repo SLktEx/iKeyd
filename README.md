@@ -65,6 +65,7 @@ ikeyd build profile.ikeyd
 - **Position-based combos** — bind combos to stable physical positions with `BASE[row,col]` or `POS[row,col]`.
 - **Tap/hold behavior** — `LT(layer, tap_key)` and `MT(modifier, tap_key)` share the generic Behavior runtime.
 - **Momentary layers/modifiers** — `MO(layer)` and `MOD(modifier)` own resources for the physical hold duration with deterministic cleanup.
+- **Shared runtime state** — declared bool/string state can be set, toggled, and read by bounded conditions and custom behaviors.
 - **Unicode/text output** — first-class one-scalar Unicode and arbitrary text semantics with explicit repeat policy.
 - **IME-aware input** — preserve the Japanese-input behavior required by the existing workflow.
 - **Keyboard mouse** — continuous keyboard-driven pointer movement, clicks, scrolling, and related controls.
@@ -122,6 +123,7 @@ The normal package contains the executable with its compiled default profile. Th
 
 - [iKeyd DSL](docs/ikeyd-dsl.md) — current human-authored language and normal build path.
 - [`config/hotkeySKG.ikeyd`](config/hotkeySKG.ikeyd) — canonical compatibility/reference profile.
+- [Shared runtime state](docs/runtime-state.md) — typed process-local state, mutation, conditions, reset, and hot-path rules.
 - [Unicode/text output](docs/unicode-text-output.md) — direct Unicode/text semantics and repeat behavior.
 - [Target extensions](docs/target-extensions.md) — explicit backend requirements/options/native extensions.
 - [JSON compatibility format](docs/json-configuration.md) — compatibility/debug override format, not canonical authoring input.
