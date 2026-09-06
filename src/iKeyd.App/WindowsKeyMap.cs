@@ -82,6 +82,10 @@ internal static class WindowsKeyMap
     // Physical scan code 0x29 is preferred when available.
     public const ushort ZenkakuHankaku = 0xF3;
 
+    /// <summary>
+    /// Resolve a complete physical event. This is the JIS109/configured-behavior
+    /// path: scan code + extended bit win over the logical VK whenever available.
+    /// </summary>
     public static KeyId? TryResolveKeyId(KeyboardKey key)
     {
         // Pause/PrintScreen have unusual scan-code sequences; their VKs are the
@@ -94,9 +98,14 @@ internal static class WindowsKeyMap
         if (key.ScanCode != 0 && TryResolveScanCode(key.ScanCode, key.IsExtended, out var scanCode))
             return new KeyId(scanCode);
 
-        return TryResolveKeyId(key.VirtualKey);
+        return TryResolvePhysicalVirtualKeyId(key.VirtualKey);
     }
 
+    /// <summary>
+    /// Legacy S/K character-key lookup. Layer/modifier keys deliberately do not
+    /// resolve here: hotkeySKG handles Space/Kana/Henkan/Muhenkan/Alt before the
+    /// character keymap. Full physical lookup uses the KeyboardKey overload.
+    /// </summary>
     public static KeyId? TryResolveKeyId(ushort virtualKey)
     {
         if (virtualKey is >= 0x41 and <= 0x5A)
@@ -120,6 +129,20 @@ internal static class WindowsKeyMap
             OemLeftBracket => KeyCode.LeftBracket,
             OemRightBracket => KeyCode.RightBracket,
             Oem102 => KeyCode.Ro,
+            _ => KeyCode.None
+        };
+
+        return code == KeyCode.None ? (KeyId?)null : new KeyId(code);
+    }
+
+    private static KeyId? TryResolvePhysicalVirtualKeyId(ushort virtualKey)
+    {
+        var legacy = TryResolveKeyId(virtualKey);
+        if (legacy is not null)
+            return legacy;
+
+        var code = virtualKey switch
+        {
             ZenkakuHankaku => KeyCode.ZenkakuHankaku,
             Escape => KeyCode.Escape,
             Backspace => KeyCode.Backspace,
@@ -172,7 +195,7 @@ internal static class WindowsKeyMap
             _ => KeyCode.None
         };
 
-        return code == KeyCode.None ? null : new KeyId(code);
+        return code == KeyCode.None ? (KeyId?)null : new KeyId(code);
     }
 
     public static KeyboardKey Keyboard(ushort virtualKey)
@@ -190,8 +213,8 @@ internal static class WindowsKeyMap
         if (TryResolveVirtualScanCode(normalized, out key))
             return true;
 
+        // Keep exact legacy Send aliases before the compact KeyCode aliases below.
         ushort virtualKey;
-
         if (normalized.Length > 1 && (normalized[0] is 'F' or 'f') &&
             int.TryParse(normalized[1..], out var functionNumber) &&
             functionNumber is >= 1 and <= 12)
@@ -224,46 +247,134 @@ internal static class WindowsKeyMap
         else if (normalized.Equals("MEDIA_NEXT", StringComparison.OrdinalIgnoreCase)) virtualKey = MediaNext;
         else if (normalized.Equals("MEDIA_PREV", StringComparison.OrdinalIgnoreCase)) virtualKey = MediaPrevious;
         else if (normalized.Equals("MEDIA_PLAY_PAUSE", StringComparison.OrdinalIgnoreCase)) virtualKey = MediaPlayPause;
-        else if (normalized.Equals("KANA", StringComparison.OrdinalIgnoreCase) || normalized.Equals("KATAKANAHIRAGANA", StringComparison.OrdinalIgnoreCase)) virtualKey = Kana;
-        else if (normalized.Equals("HENKAN", StringComparison.OrdinalIgnoreCase) || normalized.Equals("CONVERT", StringComparison.OrdinalIgnoreCase)) virtualKey = Convert;
-        else if (normalized.Equals("MUHENKAN", StringComparison.OrdinalIgnoreCase) || normalized.Equals("NONCONVERT", StringComparison.OrdinalIgnoreCase)) virtualKey = NonConvert;
-        else if (normalized.Equals("ZENKAKUHANKAKU", StringComparison.OrdinalIgnoreCase) || normalized.Equals("HANKAKUZENKAKU", StringComparison.OrdinalIgnoreCase)) virtualKey = ZenkakuHankaku;
-        else if (normalized.Equals("RO", StringComparison.OrdinalIgnoreCase)) virtualKey = Oem102;
-        else if (normalized.Equals("YEN", StringComparison.OrdinalIgnoreCase)) virtualKey = OemYen;
         else virtualKey = 0;
 
-        if (virtualKey == 0)
+        if (virtualKey != 0)
         {
-            key = default;
-            return false;
+            key = Keyboard(virtualKey);
+            return true;
         }
 
-        key = Keyboard(virtualKey);
-        return true;
+        if (KeyId.TryParseCompact(normalized.ToString(), out var code) && TryGetKeyboardKey(code, out key))
+            return true;
+
+        key = default;
+        return false;
+    }
+
+    /// <summary>
+    /// Translate a compact physical identity back to the Windows key used for
+    /// configured behavior output. JIS-only identities carry a scan code when it
+    /// is useful for disambiguation.
+    /// </summary>
+    public static bool TryGetKeyboardKey(KeyCode code, out KeyboardKey key)
+    {
+        if (code is >= KeyCode.A and <= KeyCode.Z)
+        {
+            key = Keyboard((ushort)('A' + (int)code - (int)KeyCode.A));
+            return true;
+        }
+        if (code is >= KeyCode.Digit0 and <= KeyCode.Digit9)
+        {
+            key = Keyboard((ushort)('0' + (int)code - (int)KeyCode.Digit0));
+            return true;
+        }
+        if (code is >= KeyCode.F1 and <= KeyCode.F12)
+        {
+            key = Keyboard((ushort)(F1 + (int)code - (int)KeyCode.F1));
+            return true;
+        }
+
+        key = code switch
+        {
+            KeyCode.SColon => Keyboard(OemSemicolon),
+            KeyCode.Colon => Keyboard(OemPlus),
+            KeyCode.Comma => Keyboard(OemComma),
+            KeyCode.Dot => Keyboard(OemPeriod),
+            KeyCode.Slash => Keyboard(OemSlash),
+            KeyCode.At => Keyboard(OemAt),
+            KeyCode.Minus => Keyboard(OemMinus),
+            KeyCode.Caret => Keyboard(OemCaret),
+            KeyCode.Yen => new KeyboardKey(OemYen, 0x7D),
+            KeyCode.LeftBracket => Keyboard(OemLeftBracket),
+            KeyCode.RightBracket => Keyboard(OemRightBracket),
+            KeyCode.Ro => new KeyboardKey(Oem102, 0x73),
+            KeyCode.ZenkakuHankaku => new KeyboardKey(ZenkakuHankaku, 0x29),
+            KeyCode.Escape => Keyboard(Escape),
+            KeyCode.Backspace => Keyboard(Backspace),
+            KeyCode.Tab => Keyboard(Tab),
+            KeyCode.CapsLock => Keyboard(CapsLock),
+            KeyCode.Enter => new KeyboardKey(Enter, 0x1C),
+            KeyCode.Space => new KeyboardKey(Space, 0x39),
+            KeyCode.LeftShift => new KeyboardKey(LeftShift, 0x2A),
+            KeyCode.RightShift => new KeyboardKey(RightShift, 0x36),
+            KeyCode.LeftControl => new KeyboardKey(LeftControl, 0x1D),
+            KeyCode.RightControl => new KeyboardKey(RightControl, 0x1D, true),
+            KeyCode.LeftAlt => new KeyboardKey(LeftAlt, 0x38),
+            KeyCode.RightAlt => new KeyboardKey(RightAlt, 0x38, true),
+            KeyCode.LeftGui => Keyboard(LeftWin),
+            KeyCode.RightGui => Keyboard(RightWin),
+            KeyCode.Menu => Keyboard(Apps),
+            KeyCode.PrintScreen => Keyboard(PrintScreen),
+            KeyCode.ScrollLock => Keyboard(ScrollLock),
+            KeyCode.Pause => Keyboard(Pause),
+            KeyCode.Insert => Keyboard(Insert),
+            KeyCode.Home => Keyboard(Home),
+            KeyCode.PageUp => Keyboard(PageUp),
+            KeyCode.Delete => Keyboard(Delete),
+            KeyCode.End => Keyboard(End),
+            KeyCode.PageDown => Keyboard(PageDown),
+            KeyCode.Left => Keyboard(Left),
+            KeyCode.Up => Keyboard(Up),
+            KeyCode.Down => Keyboard(Down),
+            KeyCode.Right => Keyboard(Right),
+            KeyCode.KatakanaHiragana => new KeyboardKey(Kana, 0x70),
+            KeyCode.Henkan => new KeyboardKey(Convert, 0x79),
+            KeyCode.Muhenkan => new KeyboardKey(NonConvert, 0x7B),
+            KeyCode.NumLock => Keyboard(NumLock),
+            KeyCode.NumpadSlash => Keyboard(NumpadSlash),
+            KeyCode.NumpadAsterisk => Keyboard(NumpadAsterisk),
+            KeyCode.NumpadMinus => Keyboard(NumpadMinus),
+            KeyCode.Numpad7 => Keyboard(Numpad7),
+            KeyCode.Numpad8 => Keyboard(Numpad8),
+            KeyCode.Numpad9 => Keyboard(Numpad9),
+            KeyCode.NumpadPlus => Keyboard(NumpadPlus),
+            KeyCode.Numpad4 => Keyboard(Numpad4),
+            KeyCode.Numpad5 => Keyboard(Numpad5),
+            KeyCode.Numpad6 => Keyboard(Numpad6),
+            KeyCode.Numpad1 => Keyboard(Numpad1),
+            KeyCode.Numpad2 => Keyboard(Numpad2),
+            KeyCode.Numpad3 => Keyboard(Numpad3),
+            KeyCode.NumpadEnter => new KeyboardKey(Enter, 0x1C, true),
+            KeyCode.Numpad0 => Keyboard(Numpad0),
+            KeyCode.NumpadDot => Keyboard(NumpadDot),
+            KeyCode.NumpadComma => Keyboard(NumpadComma),
+            _ => default
+        };
+        return code is >= KeyCode.SColon and <= KeyCode.NumpadComma;
     }
 
     public static bool TryResolveCharacter(char character, out KeyboardKey key)
     {
-        var upper = char.ToUpperInvariant(character);
-        ushort virtualKey = upper switch
+        ushort virtualKey;
+        switch (character)
         {
-            >= 'A' and <= 'Z' => upper,
-            >= '0' and <= '9' => upper,
-            ';' or ':' => OemSemicolon,
-            ',' => OemComma,
-            '.' => OemPeriod,
-            '/' => OemSlash,
-            '@' => OemAt,
-            '-' => OemMinus,
-            '^' => OemCaret,
-            '\\' => Oem102,
-            _ => 0
-        };
-
-        if (virtualKey == 0)
-        {
-            key = default;
-            return false;
+            case >= 'a' and <= 'z': virtualKey = char.ToUpperInvariant(character); break;
+            case >= 'A' and <= 'Z': virtualKey = character; break;
+            case >= '0' and <= '9': virtualKey = character; break;
+            case ' ': virtualKey = Space; break;
+            case ';': virtualKey = OemSemicolon; break;
+            case ':': virtualKey = OemPlus; break;
+            case ',': virtualKey = OemComma; break;
+            case '.': virtualKey = OemPeriod; break;
+            case '/': virtualKey = OemSlash; break;
+            case '@': virtualKey = OemAt; break;
+            case '-': virtualKey = OemMinus; break;
+            case '^': virtualKey = OemCaret; break;
+            case '\\': virtualKey = Oem102; break;
+            default:
+                key = default;
+                return false;
         }
 
         key = Keyboard(virtualKey);
@@ -373,8 +484,6 @@ internal static class WindowsKeyMap
             (0x53, true) => KeyCode.Delete,
             (0x57, false) => KeyCode.F11,
             (0x58, false) => KeyCode.F12,
-            // HID International keys used by JIS keyboards. Windows documents
-            // these scan codes as Japanese-keyboard entries.
             (0x70, false) => KeyCode.KatakanaHiragana,
             (0x73, false) => KeyCode.Ro,
             (0x79, false) => KeyCode.Henkan,
@@ -389,19 +498,23 @@ internal static class WindowsKeyMap
         return code != KeyCode.None;
     }
 
-    private static bool TryResolveVirtualScanCode(ReadOnlySpan<char> token, out KeyboardKey key)
+    private static bool TryResolveVirtualScanCode(ReadOnlySpan<char> name, out KeyboardKey key)
     {
-        key = default;
-        if (token.Length < 7 || !token.StartsWith("vk", StringComparison.OrdinalIgnoreCase))
-            return false;
-
-        var scanMarker = token.IndexOf("sc", StringComparison.OrdinalIgnoreCase);
-        if (scanMarker <= 2 || scanMarker + 2 >= token.Length)
-            return false;
-
-        if (!ushort.TryParse(token[2..scanMarker], NumberStyles.AllowHexSpecifier, CultureInfo.InvariantCulture, out var virtualKey) ||
-            !ushort.TryParse(token[(scanMarker + 2)..], NumberStyles.AllowHexSpecifier, CultureInfo.InvariantCulture, out var scanCode))
+        var normalized = name.Trim();
+        if (normalized.Length < 4 ||
+            normalized[0] is not ('v' or 'V') ||
+            normalized[1] is not ('k' or 'K'))
         {
+            key = default;
+            return false;
+        }
+
+        var scanMarker = normalized.IndexOf("sc", StringComparison.OrdinalIgnoreCase);
+        if (scanMarker < 3 || scanMarker + 2 >= normalized.Length ||
+            !ushort.TryParse(normalized[2..scanMarker], NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var virtualKey) ||
+            !ushort.TryParse(normalized[(scanMarker + 2)..], NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var scanCode))
+        {
+            key = default;
             return false;
         }
 
@@ -410,5 +523,6 @@ internal static class WindowsKeyMap
     }
 
     private static bool IsExtended(ushort virtualKey)
-        => virtualKey is Left or Right or Up or Down or Home or End or PageUp or PageDown or Insert or Delete or LeftWin or RightWin or Apps or RightControl or RightAlt or NumpadSlash;
+        => virtualKey is Left or Right or Up or Down or Home or End or PageUp or PageDown or Insert or Delete or
+            LeftWin or RightWin or Apps or RightControl or RightAlt or NumpadSlash;
 }
