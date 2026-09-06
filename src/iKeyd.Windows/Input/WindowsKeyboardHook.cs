@@ -193,12 +193,15 @@ public sealed class WindowsKeyboardHook : IKeyboardInputSource, IDisposable
         try
         {
             var native = Marshal.PtrToStructure<KbdLlHookStruct>(lParam);
+            var timestampMs = WindowsKeyboardEventNormalizer.ExpandNativeTimestamp(
+                native.Time,
+                Environment.TickCount64);
             var keyboardEvent = WindowsKeyboardEventNormalizer.Normalize(
                 native.VirtualKey,
                 native.ScanCode,
                 native.Flags,
                 native.ExtraInfo,
-                Environment.TickCount64);
+                timestampMs);
 
             if (keyboardEvent.Origin == KeyEventOrigin.OwnInjected)
                 return NativeMethods.CallNextHookEx(_hookHandle, code, wParam, lParam);
