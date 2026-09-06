@@ -19,6 +19,7 @@ internal sealed class BehaviorWindowsInputRouter : IKeyboardEventHandler, IInput
     private readonly LegacySendOutput _send;
     private readonly IKeyboardOutput _keyboard;
     private readonly IKeyboardEventHandler _fallback;
+    private readonly Action<BehaviorAction>? _postHostAction;
     private readonly Dictionary<string, BehaviorRuntime> _behaviorRuntimes;
     private readonly Dictionary<string, Keymap<string>> _keymaps;
     private readonly List<string> _activeLayers = [];
@@ -31,13 +32,15 @@ internal sealed class BehaviorWindowsInputRouter : IKeyboardEventHandler, IInput
         Func<string?> baseKeymapName,
         LegacySendOutput send,
         IKeyboardOutput keyboard,
-        IKeyboardEventHandler fallback)
+        IKeyboardEventHandler fallback,
+        Action<BehaviorAction>? postHostAction = null)
     {
         _profile = profile ?? throw new ArgumentNullException(nameof(profile));
         _baseKeymapName = baseKeymapName ?? throw new ArgumentNullException(nameof(baseKeymapName));
         _send = send ?? throw new ArgumentNullException(nameof(send));
         _keyboard = keyboard ?? throw new ArgumentNullException(nameof(keyboard));
         _fallback = fallback ?? throw new ArgumentNullException(nameof(fallback));
+        _postHostAction = postHostAction;
 
         _keymaps = new Dictionary<string, Keymap<string>>(StringComparer.OrdinalIgnoreCase);
         _behaviorRuntimes = new Dictionary<string, BehaviorRuntime>(StringComparer.OrdinalIgnoreCase);
@@ -115,7 +118,7 @@ internal sealed class BehaviorWindowsInputRouter : IKeyboardEventHandler, IInput
         // Auto-repeat belongs to the behavior instance that consumed the original
         // down even if that behavior has since activated a different layer. Route
         // the repeated down back to that owner so repeatable output actions can
-        // react without replaying stateful layer/modifier transitions.
+        // react without replaying stateful layer/modifier/host transitions.
         if (_activeBehaviorKeys.Contains(keyId))
         {
             foreach (var activeRuntime in _behaviorRuntimes.Values)
@@ -220,6 +223,16 @@ internal sealed class BehaviorWindowsInputRouter : IKeyboardEventHandler, IInput
 
                 case BehaviorActionKind.ModifierUp:
                     _keyboard.SendKey(ResolveModifier(action.Name), KeyEventKind.Up);
+                    break;
+
+                case BehaviorActionKind.Exec:
+                case BehaviorActionKind.Shell:
+                case BehaviorActionKind.Query:
+                    if (_postHostAction is null)
+                        throw new InvalidOperationException($"Behavior action '{action.Kind}' requires a host-action sink.");
+                    // The supplied sink is a capability boundary: it must only post
+                    // bounded work and return promptly to the low-level hook path.
+                    _postHostAction(action);
                     break;
 
                 default:
