@@ -152,8 +152,8 @@ public sealed class ConditionalBehaviorTests
             [
                 SystemQueryKeys.ForegroundProcess,
                 SystemQueryKeys.ForegroundTitle,
-                SystemQueryKeys.Hostname,
-                SystemQueryKeys.KeyboardNumLock
+                SystemQueryKeys.KeyboardNumLock,
+                SystemQueryKeys.Hostname
             ],
             profile.SystemQueries);
     }
@@ -203,13 +203,13 @@ public sealed class ConditionalBehaviorTests
     }
 
     [Theory]
-    [InlineData("bogus", "invalid operator")]
-    [InlineData("equals", "unknown system query")]
+    [InlineData("bogus", "Unknown condition operator")]
+    [InlineData("equals", "Unsupported system query")]
     public void Canonical_dsl_rejects_invalid_when_payloads_with_source_context(
         string conditionOperator,
         string expectedMessage)
     {
-        var query = expectedMessage.Contains("unknown", StringComparison.OrdinalIgnoreCase)
+        var query = expectedMessage.Contains("system query", StringComparison.OrdinalIgnoreCase)
             ? "foreground.not_real"
             : SystemQueryKeys.ForegroundProcess;
         var source = $$"""
