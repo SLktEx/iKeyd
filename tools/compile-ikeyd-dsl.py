@@ -147,6 +147,16 @@ def find_layout(layouts: dict[str, list[list[str]]], name: str) -> tuple[str, li
     return None
 
 
+def resolve_pos_layout(layouts: dict[str, list[list[str]]]) -> str | None:
+    if find_layout(layouts, "POS") is not None:
+        return "POS"
+    if find_layout(layouts, "JIS109") is not None:
+        return "JIS109"
+    if find_layout(layouts, "BASE") is not None:
+        return "BASE"
+    return None
+
+
 def resolve_key_ref(path: Path, lineno: int, value: str, layouts: dict[str, list[list[str]]]) -> str:
     value = value.strip()
     direct = re.fullmatch(IDENT, value)
@@ -157,8 +167,10 @@ def resolve_key_ref(path: Path, lineno: int, value: str, layouts: dict[str, list
     if named:
         layout_name, requested_key = named.group(1), named.group(2)
         resolved_layout_name = layout_name
-        if layout_name.casefold() == "pos" and find_layout(layouts, "POS") is None and find_layout(layouts, "BASE") is not None:
-            resolved_layout_name = "BASE"
+        if layout_name.casefold() == "pos":
+            pos_layout = resolve_pos_layout(layouts)
+            if pos_layout is not None:
+                resolved_layout_name = pos_layout
         resolved = find_layout(layouts, resolved_layout_name)
         if resolved is None:
             raise DslError(path, lineno, f"unknown layout '{layout_name}' in key reference '{value}'")
@@ -179,8 +191,10 @@ def resolve_key_ref(path: Path, lineno: int, value: str, layouts: dict[str, list
         raise DslError(path, lineno, f"key positions are 1-based: '{value}'")
 
     resolved_layout_name = layout_name
-    if layout_name.casefold() == "pos" and find_layout(layouts, "POS") is None and find_layout(layouts, "BASE") is not None:
-        resolved_layout_name = "BASE"
+    if layout_name.casefold() == "pos":
+        pos_layout = resolve_pos_layout(layouts)
+        if pos_layout is not None:
+            resolved_layout_name = pos_layout
 
     resolved = find_layout(layouts, resolved_layout_name)
     if resolved is None:
