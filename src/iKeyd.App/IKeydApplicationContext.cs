@@ -13,6 +13,7 @@ internal sealed class IKeydApplicationContext : ApplicationContext
     private readonly WindowsKeyboardBackend _keyboard;
     private readonly IKeydRuntimeHandler _runtime;
     private readonly BehaviorWindowsInputRouter _keyboardHandler;
+    private readonly LegacySuspendToggleHandler _suspendHandler;
     private readonly WindowsClipboardService _clipboardService;
     private readonly WindowsClipboardController _clipboard;
     private readonly NotifyIcon _notifyIcon;
@@ -57,6 +58,7 @@ internal sealed class IKeydApplicationContext : ApplicationContext
             send,
             _keyboard,
             _runtime);
+        _suspendHandler = new LegacySuspendToggleHandler(_keyboard.State, _keyboardHandler);
 
         _macroExecutor = new MacroExecutor(send, _runtime);
         _legacyMacroSlots = new LegacyMacroSlotController(
@@ -99,7 +101,7 @@ internal sealed class IKeydApplicationContext : ApplicationContext
         _notifyIcon.DoubleClick += (_, _) => ShowClipboardHistory();
 
         UpdateModeChecks();
-        _keyboard.Start(_keyboardHandler);
+        _keyboard.Start(_suspendHandler);
     }
 
     protected override void ExitThreadCore()
