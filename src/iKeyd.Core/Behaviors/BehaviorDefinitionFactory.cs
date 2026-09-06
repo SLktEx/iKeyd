@@ -30,6 +30,10 @@ public static class BehaviorDefinitionFactory
             return CreateLayerTap(invocation);
         if (string.Equals(invocation.Name, "MT", StringComparison.OrdinalIgnoreCase))
             return CreateModTap(invocation);
+        if (string.Equals(invocation.Name, "MO", StringComparison.OrdinalIgnoreCase))
+            return CreateMomentaryLayer(invocation);
+        if (string.Equals(invocation.Name, "MOD", StringComparison.OrdinalIgnoreCase))
+            return CreateModifierHold(invocation);
         if (userDefinitions.TryGetValue(invocation.Name, out var userDefinition))
             return new ScriptedBehaviorDefinition(userDefinition, invocation);
 
@@ -73,6 +77,42 @@ public static class BehaviorDefinitionFactory
         };
         return StandardBehaviors.MT(modifier, tapKey, options);
     }
+
+    private static BehaviorDefinition CreateMomentaryLayer(BehaviorInvocationProfile invocation)
+    {
+        RequireNoOptions(invocation);
+        RequireCount(invocation, 1, "MO(layer)");
+        return StandardBehaviors.MO(invocation.Arguments[0]);
+    }
+
+    private static BehaviorDefinition CreateModifierHold(BehaviorInvocationProfile invocation)
+    {
+        RequireNoOptions(invocation);
+        RequireCount(invocation, 1, "MOD(modifier)");
+        return StandardBehaviors.MOD(NormalizeModifier(invocation.Arguments[0]));
+    }
+
+    private static void RequireNoOptions(BehaviorInvocationProfile invocation)
+    {
+        if (invocation.Options.Count != 0)
+            throw new InvalidDataException($"{invocation.Name} does not support per-instance options.");
+    }
+
+    private static void RequireCount(BehaviorInvocationProfile invocation, int expected, string signature)
+    {
+        if (invocation.Arguments.Count != expected)
+            throw new InvalidDataException($"{invocation.Name} requires {expected} argument(s): {signature}.");
+    }
+
+    private static string NormalizeModifier(string value)
+        => value.ToUpperInvariant() switch
+        {
+            "CTRL" or "CONTROL" => "Control",
+            "SHIFT" => "Shift",
+            "ALT" => "Alt",
+            "GUI" or "WIN" or "SUPER" => "Gui",
+            _ => throw new InvalidDataException($"Unknown modifier '{value}'.")
+        };
 
     private static void ValidateKnownOptions(
         BehaviorInvocationProfile invocation,
