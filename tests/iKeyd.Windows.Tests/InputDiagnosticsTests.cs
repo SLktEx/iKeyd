@@ -4,6 +4,7 @@ using iKeyd.Core.Desktop;
 using iKeyd.Core.Input;
 using iKeyd.Profiles.HotkeySkg.Layers;
 using iKeyd.Profiles.HotkeySkg.Modes;
+using iKeyd.Windows.Input;
 using Xunit;
 
 namespace iKeyd.Windows.Tests;
