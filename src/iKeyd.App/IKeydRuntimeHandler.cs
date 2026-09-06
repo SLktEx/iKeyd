@@ -1,4 +1,5 @@
 using iKeyd.Core.Chords;
+using iKeyd.Core.Clipboard;
 using iKeyd.Core.Desktop;
 using iKeyd.Core.Input;
 using iKeyd.Core.Keymaps;
@@ -17,6 +18,7 @@ internal sealed class IKeydRuntimeHandler : IKeyboardEventHandler, IMacroActionD
     private readonly KeyboardState _keyboardState;
     private readonly LegacySendOutput _send;
     private readonly IDesktopBackend _desktop;
+    private readonly IClipboardHistoryActions? _clipboard;
     private readonly DesktopActionService _desktopActions;
     private readonly WindowGroupController _windowGroups;
     private readonly ChordEngine<string> _sEngine;
@@ -35,13 +37,15 @@ internal sealed class IKeydRuntimeHandler : IKeyboardEventHandler, IMacroActionD
         IInputMethod inputMethod,
         KeyboardState keyboardState,
         LegacySendOutput send,
-        IDesktopBackend desktop)
+        IDesktopBackend desktop,
+        IClipboardHistoryActions? clipboard = null)
     {
         _configuration = configuration ?? throw new ArgumentNullException(nameof(configuration));
         _inputMethod = inputMethod ?? throw new ArgumentNullException(nameof(inputMethod));
         _keyboardState = keyboardState ?? throw new ArgumentNullException(nameof(keyboardState));
         _send = send ?? throw new ArgumentNullException(nameof(send));
         _desktop = desktop ?? throw new ArgumentNullException(nameof(desktop));
+        _clipboard = clipboard;
         _desktopActions = new DesktopActionService(desktop);
         _windowGroups = new WindowGroupController(desktop);
         _sEngine = new ChordEngine<string>(configuration.SKeymap, configuration.ChordWindowMs);
@@ -298,6 +302,14 @@ internal sealed class IKeydRuntimeHandler : IKeyboardEventHandler, IMacroActionD
                 if (state.IsExact(LayerKey.H, LayerKey.M)) { _send.SendChord(WindowsKeyMap.Alt, WindowsKeyMap.Shift, WindowsKeyMap.Escape); return true; }
                 if (state.IsExact(LayerKey.M, LayerKey.S)) { _windowGroups.ResetAndAdvance(); return true; }
                 break;
+
+            case KeyCode.V:
+                if (_clipboard is null)
+                    break;
+                if (state.IsExact(LayerKey.M)) { _clipboard.ShowPickerAndPaste(); return true; }
+                if (state.IsExact(LayerKey.M, LayerKey.H)) { _clipboard.CaptureLatest(); return true; }
+                if (state.IsExact(LayerKey.H, LayerKey.M)) { _clipboard.PasteCaptured(); return true; }
+                break;
         }
 
         return false;
@@ -364,6 +376,13 @@ internal sealed class IKeydRuntimeHandler : IKeyboardEventHandler, IMacroActionD
             if (state == "MH") { _send.SendChord(WindowsKeyMap.Alt, WindowsKeyMap.Escape); return true; }
             if (state == "HM") { _send.SendChord(WindowsKeyMap.Alt, WindowsKeyMap.Shift, WindowsKeyMap.Escape); return true; }
             if (state == "MS") { _windowGroups.ResetAndAdvance(); return true; }
+        }
+
+        if (name == "V" && _clipboard is not null)
+        {
+            if (state == "M") { _clipboard.ShowPickerAndPaste(); return true; }
+            if (state == "MH") { _clipboard.CaptureLatest(); return true; }
+            if (state == "HM") { _clipboard.PasteCaptured(); return true; }
         }
 
         return false;
