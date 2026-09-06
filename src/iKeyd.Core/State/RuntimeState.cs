@@ -1,3 +1,5 @@
+using iKeyd.Core.Automation;
+
 namespace iKeyd.Core.State;
 
 public enum RuntimeStateType
@@ -42,6 +44,16 @@ public sealed record RuntimeStateFieldProfile
             RuntimeStateType.String,
             false,
             initialValue ?? throw new ArgumentNullException(nameof(initialValue)));
+
+    public string NormalizeScalar(string value)
+    {
+        ArgumentNullException.ThrowIfNull(value);
+        if (Type == RuntimeStateType.String)
+            return value;
+        if (!bool.TryParse(value, out var parsed))
+            throw new ArgumentException($"Runtime state field '{Name}' is bool and requires true or false.", nameof(value));
+        return parsed ? "true" : "false";
+    }
 }
 
 public sealed class RuntimeStateProfile
@@ -77,13 +89,22 @@ public sealed class RuntimeStateProfile
             field = null!;
             return false;
         }
-        return _byName.TryGetValue(name.Trim(), out field!);
+        return _byName.TryGetValue(NormalizeName(name), out field!);
     }
 
     public RuntimeStateFieldProfile GetField(string name)
         => TryGetField(name, out var field)
             ? field
             : throw new KeyNotFoundException($"Runtime state does not define field '{name}'.");
+
+    public static string NormalizeName(string name)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(name);
+        var value = name.Trim();
+        return value.StartsWith("state.", StringComparison.OrdinalIgnoreCase)
+            ? value[6..]
+            : value;
+    }
 }
 
 public interface IRuntimeStateSnapshot
@@ -116,6 +137,39 @@ public sealed class EmptyRuntimeStateStore : IRuntimeStateStore
         => throw new KeyNotFoundException($"Runtime state does not define field '{fieldName}'.");
 
     public void Reset() { }
+}
+
+public sealed record RuntimeStateCondition : IBehaviorCondition
+{
+    public RuntimeStateCondition(
+        RuntimeStateFieldProfile field,
+        SystemQueryConditionOperator @operator,
+        string expected)
+    {
+        Field = field ?? throw new ArgumentNullException(nameof(field));
+        Operator = @operator;
+        Expected = field.NormalizeScalar(expected);
+    }
+
+    public RuntimeStateFieldProfile Field { get; }
+    public SystemQueryConditionOperator Operator { get; }
+    public string Expected { get; }
+
+    public bool Evaluate(ISystemQuerySnapshot systemQueries, IRuntimeStateSnapshot runtimeState)
+    {
+        ArgumentNullException.ThrowIfNull(systemQueries);
+        ArgumentNullException.ThrowIfNull(runtimeState);
+        if (!runtimeState.TryGetScalar(Field.Name, out var actual))
+            return false;
+
+        var equals = string.Equals(actual, Expected, StringComparison.OrdinalIgnoreCase);
+        return Operator == SystemQueryConditionOperator.Equals ? equals : !equals;
+    }
+
+    public void CollectSystemQueries(ISet<string> queries)
+    {
+        ArgumentNullException.ThrowIfNull(queries);
+    }
 }
 
 /// <summary>
@@ -178,19 +232,14 @@ public sealed class RuntimeStateStore : IRuntimeStateStore
     {
         ArgumentNullException.ThrowIfNull(value);
         var descriptor = GetDescriptor(fieldName);
+        var normalized = descriptor.Field.NormalizeScalar(value);
         if (descriptor.Field.Type == RuntimeStateType.Bool)
         {
-            if (!bool.TryParse(value, out var parsed))
-            {
-                throw new ArgumentException(
-                    $"Runtime state field '{descriptor.Field.Name}' is bool and requires true or false.",
-                    nameof(value));
-            }
-            Volatile.Write(ref _boolValues[descriptor.Slot], parsed ? 1 : 0);
+            Volatile.Write(ref _boolValues[descriptor.Slot], normalized == "true" ? 1 : 0);
             return;
         }
 
-        Volatile.Write(ref _stringValues[descriptor.Slot], value);
+        Volatile.Write(ref _stringValues[descriptor.Slot], normalized);
     }
 
     public void Toggle(string fieldName)
@@ -234,7 +283,7 @@ public sealed class RuntimeStateStore : IRuntimeStateStore
             descriptor = null!;
             return false;
         }
-        return _descriptors.TryGetValue(fieldName.Trim(), out descriptor!);
+        return _descriptors.TryGetValue(RuntimeStateProfile.NormalizeName(fieldName), out descriptor!);
     }
 
     private Descriptor GetDescriptor(string fieldName)
