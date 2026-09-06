@@ -1,0 +1,19 @@
+{
+  "id": "runtime-process-f-hm-insert",
+  "description": "H then M plus F emits Insert through the legacy processF branch.",
+  "initialState": { "mode": "S", "ime": "off", "layers": ["H", "M"] },
+  "input": [
+    { "atMs": 10, "kind": "keyDown", "key": "F" },
+    { "atMs": 11, "kind": "keyUp", "key": "F" }
+  ],
+  "expected": {
+    "events": [
+      { "kind": "keyDown", "key": "Insert" },
+      { "kind": "keyUp", "key": "Insert" }
+    ]
+  },
+  "tags": ["legacy", "runtime-long-tail", "process", "send-event-diff", "hosted-windows"],
+  "inventoryIds": ["legacy-function-cc28bb2f7b", "legacy-send-717ef8d333"],
+  "requiredEnvironment": ["hosted-windows"],
+  "oracleTargets": ["compiled-exe", "ahk-source", "ikeyd-runtime"]
+}

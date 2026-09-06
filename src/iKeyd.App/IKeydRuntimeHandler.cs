@@ -274,6 +274,12 @@ internal sealed class IKeydRuntimeHandler : IKeyboardEventHandler, IMacroActionD
                 if (state.IsExact(LayerKey.M, LayerKey.S)) { _desktopActions.ToggleCaptionActive(); return true; }
                 break;
 
+            case KeyCode.F:
+                if (state.IsExact(LayerKey.M)) { _send.Send("{vkF3sc029}"); return true; }
+                if (state.IsExact(LayerKey.M, LayerKey.H)) { _send.SendKey(WindowsKeyMap.CapsLock); return true; }
+                if (state.IsExact(LayerKey.H, LayerKey.M)) { _send.SendKey(WindowsKeyMap.Insert); return true; }
+                break;
+
             case KeyCode.G:
                 if (state.IsExact(LayerKey.M, LayerKey.H)) { _send.SendChord(WindowsKeyMap.Control, WindowsKeyMap.Tab); return true; }
                 if (state.IsExact(LayerKey.H, LayerKey.M)) { _send.SendChord(WindowsKeyMap.Control, WindowsKeyMap.Shift, WindowsKeyMap.Tab); return true; }
@@ -323,6 +329,13 @@ internal sealed class IKeydRuntimeHandler : IKeyboardEventHandler, IMacroActionD
             if (state == "MH") { _desktopActions.AdjustOpacityActive(-30); return true; }
             if (state == "HM") { _desktopActions.AdjustOpacityActive(30); return true; }
             if (state == "MS") { _desktopActions.ToggleCaptionActive(); return true; }
+        }
+
+        if (name == "F")
+        {
+            if (state == "M") { _send.Send("{vkF3sc029}"); return true; }
+            if (state == "MH") { _send.SendKey(WindowsKeyMap.CapsLock); return true; }
+            if (state == "HM") { _send.SendKey(WindowsKeyMap.Insert); return true; }
         }
 
         if (name == "G")
