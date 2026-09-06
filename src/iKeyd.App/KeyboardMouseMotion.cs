@@ -1,4 +1,5 @@
 using iKeyd.Core.Chords;
+using iKeyd.Core.Configuration;
 using iKeyd.Core.Desktop;
 using iKeyd.Windows.Input;
 
@@ -12,27 +13,31 @@ namespace iKeyd.App;
 /// </summary>
 internal sealed class KeyboardMouseMotion : IDisposable
 {
-    internal const int TickIntervalMs = 8;
-    internal const int MaxIntegratedTickMs = 32;
-    internal const double NormalSpeedPixelsPerSecond = 2200.0;
-    internal const double PrecisionSpeedPixelsPerSecond = 800.0;
-    internal const double FineSpeedPixelsPerSecond = 240.0;
-    internal const double FastSpeedPixelsPerSecond = 4400.0;
-
     private readonly object _gate = new();
     private readonly IDesktopBackend _desktop;
     private readonly KeyboardState _keyboardState;
+    private readonly MouseMotionProfile _profile;
     private readonly HashSet<ushort> _directions = [];
-    private readonly VirtualPointerMotionEngine _motion = new();
+    private readonly VirtualPointerMotionEngine _motion;
     private readonly Timer _timer;
 
     private long _lastTickAt;
     private bool _disposed;
 
-    public KeyboardMouseMotion(IDesktopBackend desktop, KeyboardState keyboardState)
+    public KeyboardMouseMotion(
+        IDesktopBackend desktop,
+        KeyboardState keyboardState,
+        MouseMotionProfile profile)
     {
         _desktop = desktop ?? throw new ArgumentNullException(nameof(desktop));
         _keyboardState = keyboardState ?? throw new ArgumentNullException(nameof(keyboardState));
+        _profile = profile ?? throw new ArgumentNullException(nameof(profile));
+        _motion = new VirtualPointerMotionEngine(new VirtualPointerMotionOptions
+        {
+            PressTimeConstantSeconds = profile.PressMs / 1000.0,
+            ReleaseTimeConstantSeconds = profile.ReleaseMs / 1000.0,
+            ResponseCurve = ResolveCurve(profile.Curve)
+        });
         _timer = new Timer(OnTick, null, Timeout.Infinite, Timeout.Infinite);
     }
 
@@ -49,10 +54,12 @@ internal sealed class KeyboardMouseMotion : IDisposable
             if (!_directions.Add(virtualKey))
                 return true;
 
-            if (_directions.Count == 1)
+            if (_directions.Count == 1 && _profile.TapNudgePixels != 0)
             {
                 var (nudgeX, nudgeY) = DirectionUnit(key.Code);
-                _desktop.MovePointerBy(nudgeX, nudgeY);
+                _desktop.MovePointerBy(
+                    nudgeX * _profile.TapNudgePixels,
+                    nudgeY * _profile.TapNudgePixels);
             }
 
             var (x, y) = UpdateTargetCore();
@@ -96,16 +103,24 @@ internal sealed class KeyboardMouseMotion : IDisposable
         _timer.Dispose();
     }
 
-    internal static double SpeedForModifiers(bool precision, bool fine, bool fast)
+    internal static double SpeedForModifiers(
+        MouseMotionProfile profile,
+        bool precision,
+        bool fine,
+        bool fast)
     {
+        ArgumentNullException.ThrowIfNull(profile);
         if (precision)
-            return PrecisionSpeedPixelsPerSecond;
+            return profile.PrecisionSpeed;
         if (fine)
-            return FineSpeedPixelsPerSecond;
+            return profile.FineSpeed;
         if (fast)
-            return FastSpeedPixelsPerSecond;
-        return NormalSpeedPixelsPerSecond;
+            return profile.FastSpeed;
+        return profile.NormalSpeed;
     }
+
+    internal static double SpeedForModifiers(bool precision, bool fine, bool fast)
+        => SpeedForModifiers(MouseMotionProfile.Default, precision, fine, fast);
 
     private void OnTick(object? state)
     {
@@ -122,7 +137,7 @@ internal sealed class KeyboardMouseMotion : IDisposable
                     return;
 
                 _lastTickAt = now;
-                var integratedMs = Math.Min(elapsed, MaxIntegratedTickMs);
+                var integratedMs = Math.Min(elapsed, _profile.MaxCatchupMs);
                 var delta = _motion.Step(
                     integratedMs / 1000.0,
                     GetSpeedPixelsPerSecond());
@@ -165,11 +180,12 @@ internal sealed class KeyboardMouseMotion : IDisposable
             return;
 
         _lastTickAt = Environment.TickCount64;
-        _timer.Change(TickIntervalMs, TickIntervalMs);
+        _timer.Change(_profile.UpdateIntervalMs, _profile.UpdateIntervalMs);
     }
 
     private double GetSpeedPixelsPerSecond()
         => SpeedForModifiers(
+            _profile,
             _keyboardState.IsVirtualKeyPressed((ushort)'D'),
             _keyboardState.IsVirtualKeyPressed((ushort)'E'),
             _keyboardState.IsVirtualKeyPressed((ushort)'C'));
@@ -180,6 +196,14 @@ internal sealed class KeyboardMouseMotion : IDisposable
         _lastTickAt = 0;
         _motion.Reset();
     }
+
+    private static PointerResponseCurve ResolveCurve(string curve)
+        => curve.ToLowerInvariant() switch
+        {
+            "linear" => PointerResponseCurve.Linear,
+            "smoothstep" => PointerResponseCurve.SmoothStep,
+            _ => throw new ArgumentOutOfRangeException(nameof(curve), curve, "Unsupported pointer response curve.")
+        };
 
     private static bool IsDirection(KeyCode key)
         => key is KeyCode.I or KeyCode.J or KeyCode.K or KeyCode.L;
