@@ -1,6 +1,7 @@
 using System.Text;
 using iKeyd.Core.Chords;
 using iKeyd.Core.Input;
+using iKeyd.Windows.Input;
 
 namespace iKeyd.App;
 
@@ -21,6 +22,8 @@ internal readonly record struct InputDiagnosticState(
     byte LayerCount,
     bool LayerConsumed,
     int HeldLayerCount,
+    int HeldPhysicalCount,
+    KeyboardModifierMask PhysicalModifiers,
     int SuppressedKeyCount,
     ChordEngineState SChordState,
     ChordEngineState KChordState,
@@ -132,7 +135,7 @@ internal sealed class InputDiagnosticsBuffer
     public string ExportText()
     {
         var entries = Snapshot();
-        var text = new StringBuilder(entries.Length * 160 + 256);
+        var text = new StringBuilder(entries.Length * 190 + 256);
         text.AppendLine("iKeyd input diagnostics");
         text.AppendLine("Privacy: no literal keymap output text is stored; payloads are length + fingerprint only.");
         text.AppendLine("seq\tts\tkind\tkey\tevent\tdisposition\tbefore\tafter\tpayload\tdetail");
@@ -187,6 +190,8 @@ internal sealed class InputDiagnosticsBuffer
             .Append('/').Append(state.LayerCount)
             .Append(state.LayerConsumed ? "/consumed" : "/clean")
             .Append(",heldLayer=").Append(state.HeldLayerCount)
+            .Append(",heldPhysical=").Append(state.HeldPhysicalCount)
+            .Append(",mods=").Append((int)state.PhysicalModifiers)
             .Append(",suppressed=").Append(state.SuppressedKeyCount)
             .Append(",chord=").Append(state.SChordState).Append('/').Append(state.KChordState)
             .Append(",timer=").Append(state.TimerMode?.ToString() ?? "-")
