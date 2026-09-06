@@ -6,25 +6,46 @@ namespace iKeyd.Core.Tests;
 public sealed class CanonicalDslBuildTests
 {
     [Fact]
-    public void Canonical_hotkeySKG_dsl_generates_the_same_static_profile_as_legacy_json()
+    public void Canonical_hotkeySKG_dsl_matches_legacy_json_semantics_without_a_json_build_hop()
     {
         var dslPath = Path.Combine(AppContext.BaseDirectory, "Fixtures", "hotkeySKG.ikeyd");
         var jsonPath = Path.Combine(AppContext.BaseDirectory, "Fixtures", "hotkeySKG.behavior.json");
 
-        var typedProfile = IKeydDslParser.Parse(File.ReadAllText(dslPath), dslPath);
-        var generatedFromDsl = TypedProfileCompiler.Compile(typedProfile);
+        var document = IKeydDslDocumentParser.Parse(File.ReadAllText(dslPath), dslPath);
+        var generatedFromDsl = TypedProfileCompiler.Compile(document.Profile);
         var generatedFromJson = ProfileCompiler.Compile(File.ReadAllText(jsonPath));
+        var legacyMouse = MouseMotionProfileJson.Parse(File.ReadAllText(jsonPath));
 
         Assert.Equal(generatedFromJson, generatedFromDsl);
+        Assert.Equal(legacyMouse, document.Mouse);
     }
 
     [Fact]
-    public void Typed_dsl_frontend_lowers_positions_behaviors_custom_logic_and_clipboard_without_json()
+    public void Typed_dsl_frontend_lowers_positions_behaviors_custom_logic_clipboard_and_mouse_without_json()
     {
         const string source = """
         profile demo {
             chord_window = 40ms
             startup_mode = S
+        }
+
+        mouse {
+            engine = virtual_stick
+            update = 4ms
+            response {
+                press = 30ms
+                release = 3ms
+                curve = linear
+            }
+            speed {
+                normal = 1500px/s
+                precision = 400
+                fine = 90
+                fast = 3200px/s
+            }
+            socd = neutral
+            tap_nudge = 3px
+            max_catchup = 20ms
         }
 
         layout BASE {
@@ -72,7 +93,8 @@ public sealed class CanonicalDslBuildTests
         }
         """;
 
-        var profile = IKeydDslParser.Parse(source, "demo.ikeyd");
+        var document = IKeydDslDocumentParser.Parse(source, "demo.ikeyd");
+        var profile = document.Profile;
         var s = profile.GetKeymap("S");
 
         Assert.Equal(40, profile.ChordWindowMs);
@@ -99,9 +121,23 @@ public sealed class CanonicalDslBuildTests
         Assert.True(profile.Clipboard.Images);
         Assert.Equal("chacha20-poly1305", profile.Clipboard.Cipher);
 
+        Assert.Equal(4, document.Mouse.UpdateIntervalMs);
+        Assert.Equal(30, document.Mouse.PressMs);
+        Assert.Equal(3, document.Mouse.ReleaseMs);
+        Assert.Equal("linear", document.Mouse.Curve);
+        Assert.Equal(1500, document.Mouse.NormalSpeed);
+        Assert.Equal(400, document.Mouse.PrecisionSpeed);
+        Assert.Equal(90, document.Mouse.FineSpeed);
+        Assert.Equal(3200, document.Mouse.FastSpeed);
+        Assert.Equal(3, document.Mouse.TapNudgePixels);
+        Assert.Equal(20, document.Mouse.MaxCatchupMs);
+
         var generated = TypedProfileCompiler.Compile(profile);
+        var generatedMouse = TypedMouseProfileCompiler.Compile(document.Mouse);
         Assert.Contains("internal static class GeneratedProfile", generated);
         Assert.Contains("new BehaviorInvocationProfile(\"SMART_LT\"", generated);
+        Assert.Contains("internal static class GeneratedMouseProfile", generatedMouse);
+        Assert.Contains("        1500,", generatedMouse);
     }
 
     [Fact]
@@ -122,7 +158,7 @@ public sealed class CanonicalDslBuildTests
         }
         """;
 
-        var error = Assert.Throws<InvalidDataException>(() => IKeydDslParser.Parse(source, "bad.ikeyd"));
+        var error = Assert.Throws<InvalidDataException>(() => IKeydDslDocumentParser.Parse(source, "bad.ikeyd"));
 
         Assert.Contains("bad.ikeyd:8", error.Message);
         Assert.Contains("column 3 is out of range", error.Message);
