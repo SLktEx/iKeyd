@@ -1,6 +1,6 @@
 {
   "id": "runtime-mouse-move-left-10-sm-e-j",
-  "description": "Holding E in Space-then-M mouse mode changes J movement to 10 pixels left.",
+  "description": "Legacy oracle: holding E in Space-then-M mouse mode changed J movement to a 10 pixel step. Superseded by the continuous fine speed band in #134.",
   "initialState": { "mode": "S", "ime": "off", "layers": ["S", "M"] },
   "input": [
     { "atMs": 10, "kind": "keyDown", "key": "E" },
@@ -9,5 +9,5 @@
     { "atMs": 30, "kind": "keyUp", "key": "E" }
   ],
   "expected": { "actions": [ { "kind": "mouse", "value": "move-by:-10,0" } ] },
-  "tags": ["legacy", "runtime-long-tail", "mouse", "input-state", "deterministic"]
+  "tags": ["legacy", "runtime-long-tail", "mouse", "input-state", "deterministic", "superseded-pointer-motion"]
 }
