@@ -1,0 +1,22 @@
+{
+  "id": "runtime-h-colon-default-key-semantics",
+  "description": "H+physical sc028 applies Ctrl to legacy defaultKey_Colon=':' instead of blindly reusing the physical VK.",
+  "initialState": { "mode": "S", "ime": "off", "modifiers": [] },
+  "input": [
+    { "atMs": 0, "kind": "keyDown", "key": "CONVERT" },
+    { "atMs": 30, "kind": "keyDown", "key": "COLON" },
+    { "atMs": 50, "kind": "keyUp", "key": "COLON" },
+    { "atMs": 80, "kind": "keyUp", "key": "CONVERT" }
+  ],
+  "expected": { "text": "", "events": [
+    { "kind": "keyDown", "key": "CTRL" },
+    { "kind": "keyDown", "key": "SHIFT" },
+    { "kind": "keyDown", "key": "SCOLON" },
+    { "kind": "keyUp", "key": "SCOLON" },
+    { "kind": "keyUp", "key": "CTRL" },
+    { "kind": "keyUp", "key": "SHIFT" }
+  ]},
+  "tags": ["hosted-legacy", "hosted-legacy-runtime", "jis-symbol", "default-key-semantics", "long-tail"],
+  "requiredEnvironment": ["hosted-windows"],
+  "oracleTargets": ["compiled-exe", "ahk-source"]
+}
