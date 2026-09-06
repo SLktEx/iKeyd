@@ -9,6 +9,7 @@ public sealed record CompatibilityScenario
     public required ScenarioInitialState InitialState { get; init; }
     public required List<ScenarioInputEvent> Input { get; init; }
     public required ScenarioExpected Expected { get; init; }
+    public ScenarioExpected? AhkSourceExpected { get; init; }
     public List<string> Tags { get; init; } = [];
 }
 
@@ -129,30 +130,36 @@ public static class CompatibilityScenarioCatalog
 public static class CompatibilityScenarioDiff
 {
     public static IReadOnlyList<string> Compare(CompatibilityScenario scenario, ScenarioRunResult actual)
+        => CompareExpected(scenario.Id, scenario.Expected, actual);
+
+    public static IReadOnlyList<string> CompareExpected(
+        string scenarioId,
+        ScenarioExpected expected,
+        ScenarioRunResult actual)
     {
         var differences = new List<string>();
 
-        if (!string.Equals(scenario.Id, actual.ScenarioId, StringComparison.OrdinalIgnoreCase))
-            differences.Add($"scenario id: expected '{scenario.Id}', actual '{actual.ScenarioId}'");
+        if (!string.Equals(scenarioId, actual.ScenarioId, StringComparison.OrdinalIgnoreCase))
+            differences.Add($"scenario id: expected '{scenarioId}', actual '{actual.ScenarioId}'");
 
-        if (!string.Equals(scenario.Expected.Text, actual.Text, StringComparison.Ordinal))
-            differences.Add($"text: expected '{scenario.Expected.Text ?? "<null>"}', actual '{actual.Text ?? "<null>"}'");
+        if (!string.Equals(expected.Text, actual.Text, StringComparison.Ordinal))
+            differences.Add($"text: expected '{expected.Text ?? "<null>"}', actual '{actual.Text ?? "<null>"}'");
 
-        if (scenario.Expected.Events.Count != actual.Events.Count)
+        if (expected.Events.Count != actual.Events.Count)
         {
-            differences.Add($"event count: expected {scenario.Expected.Events.Count}, actual {actual.Events.Count}");
+            differences.Add($"event count: expected {expected.Events.Count}, actual {actual.Events.Count}");
             return differences;
         }
 
-        for (var i = 0; i < scenario.Expected.Events.Count; i++)
+        for (var i = 0; i < expected.Events.Count; i++)
         {
-            var expected = scenario.Expected.Events[i];
+            var expectedEvent = expected.Events[i];
             var observed = actual.Events[i];
-            if (!string.Equals(expected.Kind, observed.Kind, StringComparison.OrdinalIgnoreCase) ||
-                !string.Equals(expected.Key, observed.Key, StringComparison.OrdinalIgnoreCase))
+            if (!string.Equals(expectedEvent.Kind, observed.Kind, StringComparison.OrdinalIgnoreCase) ||
+                !string.Equals(expectedEvent.Key, observed.Key, StringComparison.OrdinalIgnoreCase))
             {
                 differences.Add(
-                    $"event[{i}]: expected {expected.Kind}:{expected.Key}, actual {observed.Kind}:{observed.Key}");
+                    $"event[{i}]: expected {expectedEvent.Kind}:{expectedEvent.Key}, actual {observed.Kind}:{observed.Key}");
             }
         }
 
