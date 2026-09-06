@@ -9,7 +9,7 @@ public enum PointerResponseCurve
 public sealed record VirtualPointerMotionOptions
 {
     public double PressTimeConstantSeconds { get; init; } = 0.045;
-    public double ReleaseTimeConstantSeconds { get; init; } = 0.020;
+    public double ReleaseTimeConstantSeconds { get; init; } = 0.002;
     public PointerResponseCurve ResponseCurve { get; init; } = PointerResponseCurve.SmoothStep;
     public double IdleEpsilon { get; init; } = 0.0001;
 }
