@@ -99,10 +99,10 @@ public sealed class HostedLegacyDifferentialTests
 
         var stableEvents = new List<ObservedKeyEvent>
         {
-            new() { Kind = "keyDown", Key = "Control" },
+            new() { Kind = "keyDown", Key = "VK_A2" },
             new() { Kind = "keyDown", Key = "Escape" },
             new() { Kind = "keyUp", Key = "Escape" },
-            new() { Kind = "keyUp", Key = "Control" }
+            new() { Kind = "keyUp", Key = "VK_A2" }
         };
         var scenario = new CompatibilityScenario
         {
