@@ -56,6 +56,13 @@ public static class StandardBehaviors
     public static BehaviorDefinition TO(string layer)
         => Press(BehaviorAction.LayerSet(layer));
 
+    /// <summary>
+    /// While held, acts as a normal momentary layer. A clean tap arms the layer
+    /// for exactly the next supported physical key lifecycle.
+    /// </summary>
+    public static BehaviorDefinition OSL(string layer)
+        => new OneShotLayerBehaviorDefinition(layer);
+
     public static BehaviorDefinition Unicode(string scalar)
         => Press(BehaviorAction.SendUnicode(scalar));
 
@@ -264,6 +271,55 @@ internal sealed class MomentaryLayerBehaviorInstance(KeyId sourceKey, string lay
     internal override void Cancel(List<BehaviorAction> actions) => Release(actions);
 
     private void Release(List<BehaviorAction> actions)
+    {
+        if (!_active)
+            return;
+
+        _active = false;
+        actions.Add(BehaviorAction.LayerOff(layer));
+    }
+}
+
+internal sealed class OneShotLayerBehaviorDefinition : BehaviorDefinition
+{
+    private readonly string _layer;
+
+    public OneShotLayerBehaviorDefinition(string layer)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(layer);
+        _layer = layer.Trim();
+    }
+
+    internal override BehaviorInstance CreateInstance(KeyId sourceKey, long timestampMs)
+        => new OneShotLayerBehaviorInstance(sourceKey, _layer);
+}
+
+internal sealed class OneShotLayerBehaviorInstance(KeyId sourceKey, string layer) : BehaviorInstance(sourceKey)
+{
+    private bool _active;
+    private bool _interrupted;
+
+    internal override void OnPress(long timestampMs, List<BehaviorAction> actions)
+    {
+        _active = true;
+        actions.Add(BehaviorAction.LayerOn(layer));
+    }
+
+    internal override void OnInterrupt(KeyId otherKey, long timestampMs, List<BehaviorAction> actions)
+        => _interrupted = true;
+
+    internal override void OnRelease(long timestampMs, List<BehaviorAction> actions)
+    {
+        if (!_active)
+            return;
+
+        _active = false;
+        actions.Add(BehaviorAction.LayerOff(layer));
+        if (!_interrupted)
+            actions.Add(BehaviorAction.LayerOneShot(layer));
+    }
+
+    internal override void Cancel(List<BehaviorAction> actions)
     {
         if (!_active)
             return;

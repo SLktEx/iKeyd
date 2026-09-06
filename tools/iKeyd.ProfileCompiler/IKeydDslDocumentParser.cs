@@ -70,7 +70,7 @@ internal static class IKeydDslDocumentParser
             foreach (var mapping in keymap.BehaviorMappings)
             {
                 var helper = mapping.Invocation.Name.ToUpperInvariant();
-                if (helper is not ("LT" or "MO" or "TG" or "TO") ||
+                if (helper is not ("LT" or "MO" or "TG" or "TO" or "OSL") ||
                     mapping.Invocation.Arguments.Count < 1)
                 {
                     continue;
@@ -93,6 +93,7 @@ internal static class IKeydDslDocumentParser
            name.Equals("MOD", StringComparison.OrdinalIgnoreCase) ||
            name.Equals("TG", StringComparison.OrdinalIgnoreCase) ||
            name.Equals("TO", StringComparison.OrdinalIgnoreCase) ||
+           name.Equals("OSL", StringComparison.OrdinalIgnoreCase) ||
            name.Equals("UNICODE", StringComparison.OrdinalIgnoreCase) ||
            name.Equals("TEXT", StringComparison.OrdinalIgnoreCase) ||
            name.Equals("EXEC", StringComparison.OrdinalIgnoreCase) ||
