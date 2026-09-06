@@ -368,9 +368,6 @@ internal sealed class IKeydRuntimeHandler : IKeyboardEventHandler, IMacroActionD
         return false;
     }
 
-    // Macro actions use legacy state strings and are not on the physical keyboard
-    // hot path. Keep this overload for compatibility without making layered input
-    // stringify LayerState on every event.
     private bool DispatchFunctionKey(KeyId key, string state)
     {
         if (TrySwitchLegacyModeKey(key.Code))
@@ -476,8 +473,6 @@ internal sealed class IKeydRuntimeHandler : IKeyboardEventHandler, IMacroActionD
                 ObserveDetached(macroSlots.EditRepeatAsync());
         }
 
-        // processY/processH are defined for every function state; states other
-        // than M/MH/HM are intentional no-ops rather than pass-through keys.
         return true;
     }
 
@@ -496,9 +491,6 @@ internal sealed class IKeydRuntimeHandler : IKeyboardEventHandler, IMacroActionD
         }
         catch
         {
-            // The concrete slot controller reports execution/editor failures through
-            // its application-level error handler. Never let a detached action tear
-            // down the low-level keyboard-hook path.
         }
     }
 
@@ -617,7 +609,7 @@ internal sealed class IKeydRuntimeHandler : IKeyboardEventHandler, IMacroActionD
             case LayerAction.Enter: _send.SendKey(WindowsKeyMap.Enter); break;
             case LayerAction.CtrlSpace: _send.SendChord(WindowsKeyMap.Control, WindowsKeyMap.Space); break;
             case LayerAction.CtrlEnter: _send.SendChord(WindowsKeyMap.Control, WindowsKeyMap.Enter); break;
-            case LayerAction.AltEnter: _send.SendChord(WindowsKeyMap.Alt, WindowsKeyMap.Space); break;
+            case LayerAction.AltEnter: _send.SendChord(WindowsKeyMap.Alt, WindowsKeyMap.Enter); break;
             case LayerAction.AltSpace: _send.SendChord(WindowsKeyMap.Alt, WindowsKeyMap.Space); break;
             case LayerAction.CtrlEsc: _send.SendChord(WindowsKeyMap.Control, WindowsKeyMap.Escape); break;
             case LayerAction.Muhenkan: _send.SendKey(WindowsKeyMap.NonConvert); break;
