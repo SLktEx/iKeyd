@@ -19,6 +19,7 @@ public sealed class CompiledProfileTests
         Assert.Equal(runtime.StartupMode, generated.StartupMode);
         Assert.Equal(runtime.Profile.Hotkeys, generated.Profile.Hotkeys);
         Assert.Equal(runtime.Profile.Keymaps.Count, generated.Profile.Keymaps.Count);
+        Assert.Equal(runtime.Mouse, GeneratedMouseProfile.Create());
 
         foreach (var expectedPair in runtime.Profile.Keymaps)
         {

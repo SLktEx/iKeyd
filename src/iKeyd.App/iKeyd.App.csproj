@@ -10,7 +10,9 @@
     <ApplicationIcon>Assets\ikeyd.ico</ApplicationIcon>
     <ProfileSource>$(MSBuildProjectDirectory)\..\..\config\hotkeySKG.behavior.json</ProfileSource>
     <GeneratedProfileSource>$(MSBuildProjectDirectory)\obj\$(Configuration)\$(TargetFramework)\GeneratedProfile.g.cs</GeneratedProfileSource>
+    <GeneratedMouseProfileSource>$(MSBuildProjectDirectory)\obj\$(Configuration)\$(TargetFramework)\GeneratedMouseProfile.g.cs</GeneratedMouseProfileSource>
     <ProfileCompilerAssembly>$(MSBuildProjectDirectory)\..\..\tools\iKeyd.ProfileCompiler\bin\$(Configuration)\net8.0\iKeyd.ProfileCompiler.dll</ProfileCompilerAssembly>
+    <MouseProfileCompilerAssembly>$(MSBuildProjectDirectory)\..\..\tools\iKeyd.MouseProfileCompiler\bin\$(Configuration)\net8.0\iKeyd.MouseProfileCompiler.dll</MouseProfileCompilerAssembly>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../iKeyd.Core/iKeyd.Core.csproj" />
@@ -20,10 +22,15 @@
                       ReferenceOutputAssembly="false"
                       SetConfiguration="Configuration=$(Configuration)"
                       GlobalPropertiesToRemove="RuntimeIdentifier;SelfContained;PublishSingleFile" />
+    <ProjectReference Include="../../tools/iKeyd.MouseProfileCompiler/iKeyd.MouseProfileCompiler.csproj"
+                      ReferenceOutputAssembly="false"
+                      SetConfiguration="Configuration=$(Configuration)"
+                      GlobalPropertiesToRemove="RuntimeIdentifier;SelfContained;PublishSingleFile" />
   </ItemGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="iKeyd.Windows.Tests" />
     <Compile Include="$(GeneratedProfileSource)" Visible="false" />
+    <Compile Include="$(GeneratedMouseProfileSource)" Visible="false" />
   </ItemGroup>
   <Target Name="GenerateCompiledProfile"
           BeforeTargets="CoreCompile"
@@ -31,5 +38,12 @@
           Inputs="$(ProfileSource);$(ProfileCompilerAssembly)"
           Outputs="$(GeneratedProfileSource)">
     <Exec Command="dotnet &quot;$(ProfileCompilerAssembly)&quot; &quot;$(ProfileSource)&quot; &quot;$(GeneratedProfileSource)&quot;" />
+  </Target>
+  <Target Name="GenerateCompiledMouseProfile"
+          BeforeTargets="CoreCompile"
+          DependsOnTargets="ResolveProjectReferences"
+          Inputs="$(ProfileSource);$(MouseProfileCompilerAssembly)"
+          Outputs="$(GeneratedMouseProfileSource)">
+    <Exec Command="dotnet &quot;$(MouseProfileCompilerAssembly)&quot; &quot;$(ProfileSource)&quot; &quot;$(GeneratedMouseProfileSource)&quot;" />
   </Target>
 </Project>
