@@ -11,5 +11,6 @@
   <ItemGroup>
     <InternalsVisibleTo Include="iKeyd.Core.Tests" />
     <InternalsVisibleTo Include="iKeyd.DslCompiler" />
+    <InternalsVisibleTo Include="ikeyd" />
   </ItemGroup>
 </Project>
