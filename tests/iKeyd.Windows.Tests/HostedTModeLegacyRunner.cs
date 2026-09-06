@@ -19,7 +19,8 @@ public sealed class HostedTModeLegacyRunner : ICompatibilityScenarioRunner
     private const byte Vk4 = 0x34;
     private const byte NonConvertScanCode = 0x7B;
     private const uint KeyEventKeyUp = 0x0002;
-    private const long ScenarioDelayMs = 500;
+    private const long ScenarioDelayMs = 1000;
+    private static readonly TimeSpan HookStartupDelay = TimeSpan.FromMilliseconds(900);
 
     private readonly LegacyExecutableScenarioRunner _inner = new();
 
@@ -87,6 +88,9 @@ public sealed class HostedTModeLegacyRunner : ICompatibilityScenarioRunner
         // explicitly with the legacy M+digit control chords below, so present an
         // S/off bootstrap state to the inner process harness while preserving the
         // original scenario for the iKeyd side of the differential comparison.
+        // Keep scenario input well after the mode-selection hook startup window;
+        // otherwise M+4/M+3 can be injected before AHK has installed its hooks and
+        // the test observes raw characters such as "fu" instead of K chords.
         return scenario with
         {
             InitialState = scenario.InitialState with { Mode = "S", Ime = "off" },
@@ -139,8 +143,10 @@ public sealed class HostedTModeLegacyRunner : ICompatibilityScenarioRunner
             {
                 if (processes.Any(process => !process.HasExited))
                 {
-                    // Give the AHK runtime enough time to install its hooks.
-                    await Task.Delay(TimeSpan.FromMilliseconds(650), cancellationToken);
+                    // The process can become visible before the AHK low-level hooks
+                    // are installed. Wait past the normal 750 ms startup guard used
+                    // by the inner runner before injecting M+digit mode selection.
+                    await Task.Delay(HookStartupDelay, cancellationToken);
 
                     var digits = ResolveModeSelectionDigits(requestedKeymap);
                     for (var index = 0; index < digits.Count; index++)
