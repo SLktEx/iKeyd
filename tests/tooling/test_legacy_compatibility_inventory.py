@@ -35,6 +35,7 @@ IME_IfRomaKana(){
 #IfWinActive ahk_class ConsoleWindowClass
 ^v::Send,!{Space}ep
 #IfWinActive
+^Esc::Suspend,Toggle
 q::onKeyDown("_Q")
 q up::onKeyUp("_Q")
 onKeyDown(keyName){
@@ -80,6 +81,7 @@ class InventoryTests(unittest.TestCase):
         self.assertIn("mouse-operation", kinds)
         self.assertIn("ui-operation", kinds)
         self.assertIn("label", kinds)
+        self.assertIn("lifecycle-operation", kinds)
 
     def test_control_flow_is_not_misclassified_as_function(self):
         _, features = self.scan()
@@ -144,7 +146,7 @@ class InventoryTests(unittest.TestCase):
         function = next(f for f in features if f.kind == "function")
         self.assertEqual("unknown", function.classification)
 
-    def test_repo_rules_distinguish_regression_coverage_from_shared_scenarios(self):
+    def test_repo_rules_reconcile_implemented_long_tail_without_hiding_process_specific_work(self):
         _, features = self.scan()
         rules = json.loads((ROOT / "tests" / "compatibility" / "coverage-rules.json").read_text(encoding="utf-8"))
         module.apply_coverage(features, rules)
@@ -155,13 +157,26 @@ class InventoryTests(unittest.TestCase):
         macro_ui = next(f for f in features if f.kind == "ui-operation")
         window = next(f for f in features if f.kind == "window-operation")
         clipboard_label = next(f for f in features if f.kind == "label" and f.text.lower().startswith("onclipboardchange"))
+        global_hotkey = next(f for f in features if f.kind == "hotkey" and f.details.get("trigger") == "q")
+        console_hotkey = next(f for f in features if f.kind == "hotkey" and f.details.get("trigger") == "^v")
+        suspend = next(f for f in features if f.kind == "lifecycle-operation")
 
+        self.assertEqual("implemented", macro.coverage["implementation"])
         self.assertEqual("regression", macro.coverage["scenario"])
+        self.assertEqual("implemented", clipboard.coverage["implementation"])
         self.assertEqual("regression", clipboard.coverage["scenario"])
+        self.assertEqual("implemented", macro_function.coverage["implementation"])
         self.assertEqual("regression", macro_function.coverage["scenario"])
         self.assertEqual("real-windows:#59", macro_ui.coverage["scenario"])
-        self.assertEqual("deferred:#57", window.coverage["scenario"])
+        self.assertEqual("implemented", window.coverage["implementation"])
+        self.assertEqual("regression", window.coverage["scenario"])
         self.assertEqual("real-windows:#59", clipboard_label.coverage["scenario"])
+        self.assertEqual("implemented", global_hotkey.coverage["implementation"])
+        self.assertEqual("regression", global_hotkey.coverage["scenario"])
+        self.assertEqual("deferred:#57", console_hotkey.coverage["implementation"])
+        self.assertEqual("deferred:#57", console_hotkey.coverage["scenario"])
+        self.assertEqual("implemented", suspend.coverage["implementation"])
+        self.assertEqual("regression", suspend.coverage["scenario"])
 
         self.assertEqual("real-windows-verification-required", macro.classification)
         self.assertEqual("real-windows-verification-required", clipboard.classification)
@@ -169,6 +184,9 @@ class InventoryTests(unittest.TestCase):
         self.assertEqual("real-windows-verification-required", macro_ui.classification)
         self.assertEqual("real-windows-verification-required", window.classification)
         self.assertEqual("real-windows-verification-required", clipboard_label.classification)
+        self.assertEqual("partially-verified", global_hotkey.classification)
+        self.assertEqual("real-windows-verification-required", console_hotkey.classification)
+        self.assertEqual("partially-verified", suspend.classification)
 
     def test_required_real_windows_is_distinct_from_unverified(self):
         coverage = {

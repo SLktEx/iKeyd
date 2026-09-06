@@ -1,147 +1,107 @@
+using System.Globalization;
+using System.Text.RegularExpressions;
+
 namespace iKeyd.Core.Macros;
 
 public sealed class MacroExpressionEvaluator
 {
+    private static readonly Regex ParenthesizedAddSubtract = new(@"\(([\d\+\-]+)\)", RegexOptions.CultureInvariant);
+    private static readonly Regex Power = new(@"(\d+)(\^)(\d+)", RegexOptions.CultureInvariant);
+    private static readonly Regex MultiplyDivideModulo = new(@"(\d+)([\*/%])(\d+)", RegexOptions.CultureInvariant);
+    private static readonly Regex AddSubtract = new(@"(\d+)([\+\-])(\d+)", RegexOptions.CultureInvariant);
+
     public long Evaluate(string expression)
     {
         ArgumentNullException.ThrowIfNull(expression);
-        var parser = new ExpressionParser(expression);
-        var value = parser.ParseExpression();
-        parser.ExpectEnd();
+        var reduced = ReduceLikeLegacy(expression);
+        if (!long.TryParse(reduced, NumberStyles.Integer, CultureInfo.InvariantCulture, out var value))
+            throw new FormatException($"Legacy macro expression did not reduce to an integer: '{reduced}'.");
         return value;
     }
 
-    private sealed class ExpressionParser(string source)
+    private static string ReduceLikeLegacy(string expression)
     {
-        private int _position;
-
-        public long ParseExpression() => ParseAddSubtract();
-
-        public void ExpectEnd()
+        var current = expression;
+        while (true)
         {
-            SkipWhitespace();
-            if (_position != source.Length)
-                throw Error($"Unexpected character '{source[_position]}'");
-        }
-
-        private long ParseAddSubtract()
-        {
-            var value = ParseMultiplyDivideModulo();
-            while (true)
+            var parentheses = ParenthesizedAddSubtract.Match(current);
+            if (parentheses.Success)
             {
-                if (TryConsume('+'))
-                    value = checked(value + ParseMultiplyDivideModulo());
-                else if (TryConsume('-'))
-                    value = checked(value - ParseMultiplyDivideModulo());
-                else
-                    return value;
-            }
-        }
-
-        private long ParseMultiplyDivideModulo()
-        {
-            var value = ParsePower();
-            while (true)
-            {
-                if (TryConsume('*'))
-                    value = checked(value * ParsePower());
-                else if (TryConsume('/'))
-                {
-                    var divisor = ParsePower();
-                    if (divisor == 0)
-                        throw Error("Division by zero");
-                    value = checked(value / divisor);
-                }
-                else if (TryConsume('%'))
-                {
-                    var divisor = ParsePower();
-                    if (divisor == 0)
-                        throw Error("Modulo by zero");
-                    value = value % divisor;
-                }
-                else
-                    return value;
-            }
-        }
-
-        // Legacy hotkeySKG reduces the left-most exponent first, so exponentiation is left-associative here.
-        private long ParsePower()
-        {
-            var value = ParseUnary();
-            while (TryConsume('^'))
-                value = Pow(value, ParseUnary());
-            return value;
-        }
-
-        private long ParseUnary()
-        {
-            if (TryConsume('+'))
-                return ParseUnary();
-            if (TryConsume('-'))
-                return checked(-ParseUnary());
-            return ParsePrimary();
-        }
-
-        private long ParsePrimary()
-        {
-            if (TryConsume('('))
-            {
-                var parenthesizedValue = ParseExpression();
-                if (!TryConsume(')'))
-                    throw Error("Missing closing parenthesis");
-                return parenthesizedValue;
+                var replacement = ReduceLikeLegacy(parentheses.Groups[1].Value);
+                current = ReplaceMatch(current, parentheses, replacement);
+                continue;
             }
 
-            SkipWhitespace();
-            var start = _position;
-            while (_position < source.Length && char.IsAsciiDigit(source[_position]))
-                _position++;
-            if (start == _position)
-                throw Error("Expected an integer");
-
-            if (!long.TryParse(source.AsSpan(start, _position - start), out var parsedValue))
-                throw Error("Integer is outside Int64 range");
-            return parsedValue;
-        }
-
-        private bool TryConsume(char expected)
-        {
-            SkipWhitespace();
-            if (_position >= source.Length || source[_position] != expected)
-                return false;
-            _position++;
-            return true;
-        }
-
-        private void SkipWhitespace()
-        {
-            while (_position < source.Length && char.IsWhiteSpace(source[_position]))
-                _position++;
-        }
-
-        private FormatException Error(string message)
-            => new($"{message} at expression position {_position}.");
-
-        private long Pow(long value, long exponent)
-        {
-            if (exponent < 0)
-                throw Error("Negative exponents are not supported");
-
-            var result = 1L;
-            var factor = value;
-            var remaining = exponent;
-            checked
+            if (TryReduceBinary(current, Power, out var powered))
             {
-                while (remaining > 0)
-                {
-                    if ((remaining & 1) != 0)
-                        result *= factor;
-                    remaining >>= 1;
-                    if (remaining != 0)
-                        factor *= factor;
-                }
+                current = powered;
+                continue;
             }
-            return result;
+
+            if (TryReduceBinary(current, MultiplyDivideModulo, out var multiplied))
+            {
+                current = multiplied;
+                continue;
+            }
+
+            if (TryReduceBinary(current, AddSubtract, out var added))
+            {
+                current = added;
+                continue;
+            }
+
+            return current;
         }
+    }
+
+    private static bool TryReduceBinary(string source, Regex regex, out string reduced)
+    {
+        var match = regex.Match(source);
+        if (!match.Success)
+        {
+            reduced = source;
+            return false;
+        }
+
+        var left = long.Parse(match.Groups[1].Value, CultureInfo.InvariantCulture);
+        var op = match.Groups[2].Value[0];
+        var right = long.Parse(match.Groups[3].Value, CultureInfo.InvariantCulture);
+        var value = op switch
+        {
+            '+' => checked(left + right),
+            '-' => checked(left - right),
+            '*' => checked(left * right),
+            '/' when right == 0 => throw new FormatException("Division by zero in legacy macro expression."),
+            '/' => left / right,
+            '%' when right == 0 => throw new FormatException("Modulo by zero in legacy macro expression."),
+            '%' => left % right,
+            '^' => Pow(left, right),
+            _ => throw new InvalidOperationException($"Unsupported legacy macro operator '{op}'.")
+        };
+
+        reduced = ReplaceMatch(source, match, value.ToString(CultureInfo.InvariantCulture));
+        return true;
+    }
+
+    private static string ReplaceMatch(string source, Match match, string replacement)
+        => string.Concat(source.AsSpan(0, match.Index), replacement, source.AsSpan(match.Index + match.Length));
+
+    private static long Pow(long value, long exponent)
+    {
+        var result = 1L;
+        var factor = value;
+        var remaining = exponent;
+        checked
+        {
+            while (remaining > 0)
+            {
+                if ((remaining & 1) != 0)
+                    result *= factor;
+                remaining >>= 1;
+                if (remaining != 0)
+                    factor *= factor;
+            }
+        }
+        return result;
     }
 }
