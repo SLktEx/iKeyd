@@ -108,7 +108,17 @@ public sealed class RealInputRegressionTests
                     Dispatch(fixture, virtualKey, KeyEventKind.Up, digit * 10L + 1));
             }
 
-            Assert.Equal(Enumerable.Range(0, 10).Select(value => value.ToString()), fixture.Output.Text);
+            Assert.Equal(KeyboardDisposition.PassThrough, Dispatch(fixture, WindowsKeyMap.Tab, KeyEventKind.Down, 1000));
+
+            var expected = Enumerable.Range(0, 10)
+                .SelectMany(digit => new[]
+                {
+                    new RecordedKeyboardEvent(WindowsKeyMap.Keyboard((ushort)('0' + digit)), KeyEventKind.Down),
+                    new RecordedKeyboardEvent(WindowsKeyMap.Keyboard((ushort)('0' + digit)), KeyEventKind.Up)
+                })
+                .ToArray();
+            Assert.Equal(expected, fixture.Output.Events);
+            Assert.Empty(fixture.Output.Text);
         }
     }
 
@@ -128,6 +138,7 @@ public sealed class RealInputRegressionTests
                     Dispatch(sFixture, virtualKey, KeyEventKind.Up, functionNumber * 10L + 1));
             }
 
+            Assert.Equal(KeyboardDisposition.PassThrough, Dispatch(sFixture, WindowsKeyMap.Tab, KeyEventKind.Down, 1000));
             Assert.Equal(24, sFixture.Output.Events.Count);
             for (var functionNumber = 1; functionNumber <= 12; functionNumber++)
             {
