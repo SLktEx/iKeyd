@@ -209,10 +209,30 @@ internal static class ProfileCompiler
                 arguments.Add(argument.GetString()!);
             }
 
+            var options = new List<KeyValuePair<string, string>>();
+            if (item.Value.TryGetProperty("options", out var optionsElement))
+            {
+                if (optionsElement.ValueKind != JsonValueKind.Object)
+                    throw new InvalidDataException($"behaviors.{mode}.{item.Name}.options must be an object.");
+
+                foreach (var option in optionsElement.EnumerateObject())
+                {
+                    options.Add(new KeyValuePair<string, string>(
+                        option.Name,
+                        ReadBehaviorOptionValue(
+                            option.Value,
+                            $"behaviors.{mode}.{item.Name}.options.{option.Name}")));
+                }
+            }
+
             builder.AppendLine($"                        new BehaviorMappingProfile({key.Expression}, new BehaviorInvocationProfile({Literal(behaviorName)}, new string[]");
             builder.AppendLine("                        {");
             foreach (var argument in arguments)
                 builder.AppendLine($"                            {Literal(argument)},");
+            builder.AppendLine("                        }, new KeyValuePair<string, string>[]");
+            builder.AppendLine("                        {");
+            foreach (var option in options)
+                builder.AppendLine($"                            new KeyValuePair<string, string>({Literal(option.Key)}, {Literal(option.Value)}),");
             builder.AppendLine("                        })),");
         }
     }
@@ -298,6 +318,16 @@ internal static class ProfileCompiler
         value = default;
         return false;
     }
+
+    private static string ReadBehaviorOptionValue(JsonElement value, string location)
+        => value.ValueKind switch
+        {
+            JsonValueKind.String => value.GetString() ?? string.Empty,
+            JsonValueKind.Number => value.GetRawText(),
+            JsonValueKind.True => "true",
+            JsonValueKind.False => "false",
+            _ => throw new InvalidDataException($"{location} must be a string, number, or boolean.")
+        };
 
     private static KeyInfo ParseKey(string key, string location)
     {
