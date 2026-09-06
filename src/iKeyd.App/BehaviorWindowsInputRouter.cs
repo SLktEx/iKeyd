@@ -26,6 +26,7 @@ internal sealed class BehaviorWindowsInputRouter : IKeyboardEventHandler, IInput
     private readonly Dictionary<string, BehaviorRuntime> _behaviorRuntimes;
     private readonly Dictionary<string, Keymap<string>> _keymaps;
     private readonly List<string> _activeLayers = [];
+    private readonly List<string> _persistentLayers = [];
     private readonly HashSet<KeyId> _activeBehaviorKeys = [];
     private readonly HashSet<KeyboardKey> _layerMappedKeys = [];
     private bool _disposed;
@@ -68,7 +69,7 @@ internal sealed class BehaviorWindowsInputRouter : IKeyboardEventHandler, IInput
             }
         }
 
-        ValidateLayerTapTargets();
+        ValidateLayerTargets();
     }
 
     public KeyboardDisposition OnKeyboardEvent(KeyboardEvent keyboardEvent)
@@ -122,6 +123,7 @@ internal sealed class BehaviorWindowsInputRouter : IKeyboardEventHandler, IInput
         _activeBehaviorKeys.Clear();
         _layerMappedKeys.Clear();
         _activeLayers.Clear();
+        _persistentLayers.Clear();
         _runtimeState.Reset();
     }
 
@@ -194,7 +196,9 @@ internal sealed class BehaviorWindowsInputRouter : IKeyboardEventHandler, IInput
         => ActiveLayer ?? _baseKeymapName();
 
     private string? ActiveLayer
-        => _activeLayers.Count == 0 ? null : _activeLayers[^1];
+        => _activeLayers.Count != 0
+            ? _activeLayers[^1]
+            : _persistentLayers.Count == 0 ? null : _persistentLayers[^1];
 
     private void ApplyActions(IReadOnlyList<BehaviorAction> actions)
     {
@@ -216,14 +220,21 @@ internal sealed class BehaviorWindowsInputRouter : IKeyboardEventHandler, IInput
                     break;
 
                 case BehaviorActionKind.LayerOn:
-                    if (action.Name is null || !_keymaps.ContainsKey(action.Name))
-                        throw new InvalidOperationException($"Behavior tried to activate unknown layer '{action.Name}'.");
-                    _activeLayers.Add(action.Name);
+                    _activeLayers.Add(RequireKnownLayer(action.Name));
                     break;
 
                 case BehaviorActionKind.LayerOff:
                     if (action.Name is not null)
                         RemoveLastLayer(action.Name);
+                    break;
+
+                case BehaviorActionKind.LayerToggle:
+                    TogglePersistentLayer(RequireKnownLayer(action.Name));
+                    break;
+
+                case BehaviorActionKind.LayerSet:
+                    _persistentLayers.Clear();
+                    _persistentLayers.Add(RequireKnownLayer(action.Name));
                     break;
 
                 case BehaviorActionKind.ModifierDown:
@@ -260,6 +271,26 @@ internal sealed class BehaviorWindowsInputRouter : IKeyboardEventHandler, IInput
         }
     }
 
+    private string RequireKnownLayer(string? layer)
+    {
+        if (layer is null || !_keymaps.ContainsKey(layer))
+            throw new InvalidOperationException($"Behavior tried to activate unknown layer '{layer}'.");
+        return layer;
+    }
+
+    private void TogglePersistentLayer(string layer)
+    {
+        for (var index = _persistentLayers.Count - 1; index >= 0; index--)
+        {
+            if (!string.Equals(_persistentLayers[index], layer, StringComparison.OrdinalIgnoreCase))
+                continue;
+            _persistentLayers.RemoveAt(index);
+            return;
+        }
+
+        _persistentLayers.Add(layer);
+    }
+
     private void RemoveLastLayer(string layer)
     {
         for (var index = _activeLayers.Count - 1; index >= 0; index--)
@@ -271,13 +302,14 @@ internal sealed class BehaviorWindowsInputRouter : IKeyboardEventHandler, IInput
         }
     }
 
-    private void ValidateLayerTapTargets()
+    private void ValidateLayerTargets()
     {
         foreach (var keymap in _profile.Keymaps.Values)
         {
             foreach (var mapping in keymap.BehaviorMappings)
             {
-                if (!string.Equals(mapping.Invocation.Name, "LT", StringComparison.OrdinalIgnoreCase) ||
+                var helper = mapping.Invocation.Name.ToUpperInvariant();
+                if (helper is not ("LT" or "MO" or "TG" or "TO") ||
                     mapping.Invocation.Arguments.Count < 1)
                 {
                     continue;
@@ -285,7 +317,10 @@ internal sealed class BehaviorWindowsInputRouter : IKeyboardEventHandler, IInput
 
                 var layer = mapping.Invocation.Arguments[0];
                 if (!_profile.Keymaps.ContainsKey(layer))
-                    throw new InvalidDataException($"LT on '{keymap.Name}.{mapping.Key}' references unknown layer '{layer}'.");
+                {
+                    throw new InvalidDataException(
+                        $"{helper} on '{keymap.Name}.{mapping.Key}' references unknown layer '{layer}'.");
+                }
             }
         }
     }
