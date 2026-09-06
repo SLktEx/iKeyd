@@ -12,7 +12,9 @@ public enum KeyBehaviorActionKind
     MouseClick,
     Scroll,
     Media,
-    Window
+    Window,
+    Clipboard,
+    Macro
 }
 
 public enum KeyBehaviorModifier
@@ -40,6 +42,8 @@ public readonly record struct KeyBehaviorAction(KeyBehaviorActionKind Kind, stri
     public static KeyBehaviorAction Scroll(string direction) => new(KeyBehaviorActionKind.Scroll, RequireValue(direction, nameof(direction)));
     public static KeyBehaviorAction Media(string command) => new(KeyBehaviorActionKind.Media, RequireValue(command, nameof(command)));
     public static KeyBehaviorAction Window(string command) => new(KeyBehaviorActionKind.Window, RequireValue(command, nameof(command)));
+    public static KeyBehaviorAction Clipboard(string command) => new(KeyBehaviorActionKind.Clipboard, RequireValue(command, nameof(command)));
+    public static KeyBehaviorAction Macro(string template) => new(KeyBehaviorActionKind.Macro, template ?? throw new ArgumentNullException(nameof(template)));
 
     public KeyBehaviorModifier GetModifier()
         => Kind == KeyBehaviorActionKind.Modifier && Enum.TryParse<KeyBehaviorModifier>(Value, ignoreCase: true, out var modifier)
