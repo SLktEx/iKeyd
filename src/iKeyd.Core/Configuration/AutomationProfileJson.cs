@@ -95,7 +95,8 @@ public static class AutomationProfileJson
             }
         }
 
-        return new AutomationProfile(chordWindowMs, keymaps, startupMode, hotkeys);
+        var keyBehaviors = KeyBehaviorProfileJson.Parse(root);
+        return new AutomationProfile(chordWindowMs, keymaps, startupMode, hotkeys, keyBehaviors);
     }
 
     public static void Save(AutomationProfile profile, string path)
@@ -181,6 +182,8 @@ public static class AutomationProfileJson
             }
             writer.WriteEndArray();
         }
+
+        KeyBehaviorProfileJson.Write(profile.KeyBehaviors, writer);
 
         writer.WriteEndObject();
         writer.Flush();
