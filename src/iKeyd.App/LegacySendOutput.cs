@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Runtime.InteropServices;
 using System.Text;
 using iKeyd.Core.Desktop;
 using iKeyd.Core.Input;
@@ -84,9 +85,6 @@ internal sealed class LegacySendOutput : IMacroOutput
 
             if (legacySendText[index] == '{')
             {
-                // AHK represents a literal closing brace as `{}}`. The first `}` is
-                // the token payload, not the terminator, so the generic first-brace
-                // search cannot parse this form correctly.
                 if (index + 2 < legacySendText.Length &&
                     legacySendText[index + 1] == '}' &&
                     legacySendText[index + 2] == '}')
@@ -113,7 +111,7 @@ internal sealed class LegacySendOutput : IMacroOutput
 
             var character = legacySendText[index];
             if (!TrySendModifiedCharacter(character, modifiers))
-                throw UnsupportedSyntax(legacySendText[modifierStart..(index + 1)], "modifier target cannot be mapped to a JIS keyboard key");
+                throw UnsupportedSyntax(legacySendText[modifierStart..(index + 1)], "modifier target cannot be mapped to a keyboard key");
             index++;
         }
 
@@ -124,68 +122,89 @@ internal sealed class LegacySendOutput : IMacroOutput
         => _keyboard.SendKeyPress(WindowsKeyMap.Keyboard(virtualKey));
 
     public void SendChord(IReadOnlyList<ushort> modifiers, ushort virtualKey)
-        => SendKeyWithModifiers(WindowsKeyMap.Keyboard(virtualKey), modifiers);
+    {
+        if (TryResolveDefaultCharacter(virtualKey, out var character) &&
+            TryResolveCharacterForActiveLayout(character, out var characterKey, out var characterModifiers))
+        {
+            SendCharacterWithModifiers(characterKey, modifiers, characterModifiers);
+            return;
+        }
+
+        SendKeyWithModifiers(WindowsKeyMap.Keyboard(virtualKey), modifiers);
+    }
 
     public void SendChord(ushort modifier, ushort virtualKey)
-    {
-        var key = WindowsKeyMap.Keyboard(virtualKey);
-        _keyboard.SendKey(WindowsKeyMap.Keyboard(modifier), KeyEventKind.Down);
-        try
-        {
-            _keyboard.SendKeyPress(key);
-        }
-        finally
-        {
-            _keyboard.SendKey(WindowsKeyMap.Keyboard(modifier), KeyEventKind.Up);
-        }
-    }
+        => SendChord([modifier], virtualKey);
 
     public void SendChord(ushort modifier1, ushort modifier2, ushort virtualKey)
-    {
-        var key = WindowsKeyMap.Keyboard(virtualKey);
-        _keyboard.SendKey(WindowsKeyMap.Keyboard(modifier1), KeyEventKind.Down);
-        _keyboard.SendKey(WindowsKeyMap.Keyboard(modifier2), KeyEventKind.Down);
-        try
-        {
-            _keyboard.SendKeyPress(key);
-        }
-        finally
-        {
-            _keyboard.SendKey(WindowsKeyMap.Keyboard(modifier2), KeyEventKind.Up);
-            _keyboard.SendKey(WindowsKeyMap.Keyboard(modifier1), KeyEventKind.Up);
-        }
-    }
+        => SendChord([modifier1, modifier2], virtualKey);
 
     private void SendKeyWithModifiers(KeyboardKey key, IReadOnlyList<ushort> modifiers)
     {
-        foreach (var modifier in modifiers)
-            _keyboard.SendKey(WindowsKeyMap.Keyboard(modifier), KeyEventKind.Down);
-
+        var pressed = PressTemporaryModifiers(modifiers);
         try
         {
             _keyboard.SendKeyPress(key);
         }
         finally
         {
-            for (var index = modifiers.Count - 1; index >= 0; index--)
-                _keyboard.SendKey(WindowsKeyMap.Keyboard(modifiers[index]), KeyEventKind.Up);
+            ReleaseTemporaryModifiers(pressed);
         }
     }
 
     private void SendKeyStateWithModifiers(KeyboardKey key, KeyEventKind kind, IReadOnlyList<ushort> modifiers)
     {
-        foreach (var modifier in modifiers)
-            _keyboard.SendKey(WindowsKeyMap.Keyboard(modifier), KeyEventKind.Down);
-
+        var pressed = PressTemporaryModifiers(modifiers);
         try
         {
             _keyboard.SendKey(key, kind);
         }
         finally
         {
-            for (var index = modifiers.Count - 1; index >= 0; index--)
-                _keyboard.SendKey(WindowsKeyMap.Keyboard(modifiers[index]), KeyEventKind.Up);
+            ReleaseTemporaryModifiers(pressed);
         }
+    }
+
+    private void SendCharacterWithModifiers(
+        KeyboardKey key,
+        IReadOnlyList<ushort> explicitModifiers,
+        IReadOnlyList<ushort> characterModifiers)
+    {
+        var explicitPressed = PressTemporaryModifiers(explicitModifiers);
+        var characterPressed = PressTemporaryModifiers(characterModifiers, explicitPressed);
+        try
+        {
+            _keyboard.SendKeyPress(key);
+        }
+        finally
+        {
+            // AHK v1 releases explicit prefix modifiers before modifiers that are
+            // implicitly required to type the character. `^:` is observed as
+            // Ctrl down, Shift down, key, Ctrl up, Shift up.
+            ReleaseTemporaryModifiers(explicitPressed);
+            ReleaseTemporaryModifiers(characterPressed);
+        }
+    }
+
+    private List<ushort> PressTemporaryModifiers(
+        IReadOnlyList<ushort> modifiers,
+        IReadOnlyCollection<ushort>? alreadyPressed = null)
+    {
+        var pressed = new List<ushort>(modifiers.Count);
+        foreach (var modifier in modifiers)
+        {
+            if (pressed.Contains(modifier) || alreadyPressed?.Contains(modifier) == true)
+                continue;
+            _keyboard.SendKey(WindowsKeyMap.Keyboard(modifier), KeyEventKind.Down);
+            pressed.Add(modifier);
+        }
+        return pressed;
+    }
+
+    private void ReleaseTemporaryModifiers(IReadOnlyList<ushort> modifiers)
+    {
+        for (var index = modifiers.Count - 1; index >= 0; index--)
+            _keyboard.SendKey(WindowsKeyMap.Keyboard(modifiers[index]), KeyEventKind.Up);
     }
 
     private bool TrySendSpecialToken(ReadOnlySpan<char> token, IReadOnlyList<ushort> modifiers)
@@ -222,7 +241,7 @@ internal sealed class LegacySendOutput : IMacroOutput
             if (modifiers.Count == 0)
                 _keyboard.SendText(trimmed.ToString());
             else if (!TrySendModifiedCharacter(trimmed[0], modifiers))
-                throw UnsupportedSyntax($"{{{trimmed.ToString()}}}", "escaped literal cannot be mapped to a JIS keyboard key");
+                throw UnsupportedSyntax($"{{{trimmed.ToString()}}}", "escaped literal cannot be mapped to a keyboard key");
             return true;
         }
 
@@ -283,26 +302,86 @@ internal sealed class LegacySendOutput : IMacroOutput
 
     private bool TrySendModifiedCharacter(char character, IReadOnlyList<ushort> explicitModifiers)
     {
-        if (WindowsKeyMap.TryResolveCharacter(character, out var directKey) && !RequiresJisShift(character))
+        if (TryResolveCharacterForActiveLayout(character, out var key, out var characterModifiers))
         {
-            SendKeyWithModifiers(directKey, explicitModifiers);
+            SendCharacterWithModifiers(key, explicitModifiers, characterModifiers);
             return true;
         }
 
-        if (!TryResolveJisCharacter(character, out var key, out var shiftRequired))
-            return false;
+        return false;
+    }
 
-        if (!shiftRequired || explicitModifiers.Contains(WindowsKeyMap.Shift))
+    private bool TryResolveCharacterForActiveLayout(
+        char character,
+        out KeyboardKey key,
+        out IReadOnlyList<ushort> modifiers)
+    {
+        if (OperatingSystem.IsWindows())
         {
-            SendKeyWithModifiers(key, explicitModifiers);
+            var layout = GetTargetKeyboardLayout();
+            var encoded = NativeMethods.VkKeyScanExW(character, layout);
+            if (encoded != -1)
+            {
+                var virtualKey = (ushort)(encoded & 0xff);
+                var shiftState = (encoded >> 8) & 0xff;
+                key = WindowsKeyMap.Keyboard(virtualKey);
+                var list = new List<ushort>(3);
+                if ((shiftState & 1) != 0) list.Add(WindowsKeyMap.Shift);
+                if ((shiftState & 2) != 0) list.Add(WindowsKeyMap.Control);
+                if ((shiftState & 4) != 0) list.Add(WindowsKeyMap.Alt);
+                modifiers = list;
+                return true;
+            }
+        }
+
+        if (TryResolveJisCharacter(character, out key, out var shiftRequired))
+        {
+            modifiers = shiftRequired ? [WindowsKeyMap.Shift] : [];
             return true;
         }
 
-        var modifiers = new List<ushort>(explicitModifiers.Count + 1);
-        modifiers.AddRange(explicitModifiers);
-        modifiers.Add(WindowsKeyMap.Shift);
-        SendKeyWithModifiers(key, modifiers);
-        return true;
+        modifiers = [];
+        return false;
+    }
+
+    private nint GetTargetKeyboardLayout()
+    {
+        var window = _desktop?.GetActiveWindow().Value ?? NativeMethods.GetForegroundWindow();
+        if (window != 0)
+        {
+            var threadId = NativeMethods.GetWindowThreadProcessId(window, out _);
+            if (threadId != 0)
+                return NativeMethods.GetKeyboardLayout(threadId);
+        }
+
+        return NativeMethods.GetKeyboardLayout(0);
+    }
+
+    private static bool TryResolveDefaultCharacter(ushort virtualKey, out char character)
+    {
+        if (virtualKey is >= 'A' and <= 'Z')
+        {
+            character = char.ToLowerInvariant((char)virtualKey);
+            return true;
+        }
+        if (virtualKey is >= '0' and <= '9')
+        {
+            character = (char)virtualKey;
+            return true;
+        }
+
+        character = virtualKey switch
+        {
+            WindowsKeyMap.OemSemicolon => ';',
+            WindowsKeyMap.OemPlus => ':',
+            WindowsKeyMap.OemComma => ',',
+            WindowsKeyMap.OemPeriod => '.',
+            WindowsKeyMap.OemSlash => '/',
+            WindowsKeyMap.OemAt => '@',
+            WindowsKeyMap.OemMinus => '-',
+            _ => '\0'
+        };
+        return character != '\0';
     }
 
     private static bool TryResolveJisCharacter(char character, out KeyboardKey key, out bool shiftRequired)
@@ -351,9 +430,6 @@ internal sealed class LegacySendOutput : IMacroOutput
         return true;
     }
 
-    private static bool RequiresJisShift(char character)
-        => character is '!' or '"' or '#' or '$' or '%' or '&' or '\'' or '(' or ')' or '=' or '<' or '>' or '{' or '}' or '|' or '~' or '_';
-
     private static DesktopMouseButton ParseMouseButton(string value)
         => value.ToUpperInvariant() switch
         {
@@ -401,5 +477,20 @@ internal sealed class LegacySendOutput : IMacroOutput
             _ => 0
         };
         return virtualKey != 0;
+    }
+
+    private static class NativeMethods
+    {
+        [DllImport("user32.dll")]
+        public static extern nint GetForegroundWindow();
+
+        [DllImport("user32.dll")]
+        public static extern uint GetWindowThreadProcessId(nint window, out uint processId);
+
+        [DllImport("user32.dll")]
+        public static extern nint GetKeyboardLayout(uint threadId);
+
+        [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+        public static extern short VkKeyScanExW(char character, nint keyboardLayout);
     }
 }
