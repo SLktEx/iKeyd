@@ -77,19 +77,26 @@ Query names are case-insensitive at validation and normalized to the canonical s
 
 The low-level keyboard path never calls `Process.Start`, foreground-window APIs, IME APIs, or other system-query APIs directly.
 
-The path is:
+The current path is:
 
 ```text
+platform query provider
+  -> periodic cache refresh outside the keyboard callback
+  -> immutable current snapshot
+                                  
 physical key
   -> generic BehaviorRuntime
-  -> Exec / Shell / Query BehaviorAction
+  -> cached WHEN evaluation / Query BehaviorAction
   -> BehaviorWindowsInputRouter
-  -> non-blocking host-action post
-       -> bounded command queue worker
-       -> query worker
+       -> key/text output
+       -> non-blocking host-action post
+            -> bounded command queue worker
+            -> cached QUERY text emission
 ```
 
-`Exec`, `Shell`, and `Query` are one-shot actions with `RepeatPolicy.Never`. Windows physical auto-repeat therefore cannot repeatedly launch a process or replay a query merely because the source key is held.
+Only query keys actually referenced by the compiled profile are refreshed. The default Windows refresh interval is 100 ms.
+
+`Exec`, `Shell`, `Query`, and `WHEN` are one-shot behaviors. Windows physical auto-repeat therefore cannot repeatedly launch a process or replay host-state actions merely because the source key is held.
 
 The command queue uses `TryWrite` on a bounded channel. When full, enqueue returns `false`; keyboard input does not wait for queue space.
 
@@ -115,11 +122,15 @@ Command execution produces a typed result containing:
 
 The resident app currently records failed command results through diagnostics/trace output. The typed result contract is retained so future UI, state, macros, or tooling can consume it without redesigning process execution.
 
-## Query semantics and #116
+## Query cache semantics
 
-`QUERY` currently runs outside the keyboard callback and emits the resulting scalar as direct text. Missing foreground data resolves to an empty scalar where the Windows provider cannot identify a foreground process/title.
+`QUERY` and conditional `WHEN` use the same immutable snapshot.
 
-#116 extends this query registry with a cached immutable snapshot for `when(...)` conditions. Condition evaluation must read that snapshot only; it must not turn each key event back into a Win32/process/IME query.
+A cache refresh builds a new dictionary off the keyboard path and publishes the whole snapshot atomically. Keyboard-path reads only perform a lookup against the current snapshot; they do not call the underlying provider.
+
+If refreshing one key fails temporarily, its previous cached value is retained when one exists. If no value has ever been available, a condition that depends on it evaluates false. Direct `QUERY` produces no text when the requested cached value is unavailable.
+
+See [`conditional-actions.md`](conditional-actions.md) for `WHEN` authoring and nested conditional semantics.
 
 ## Portability
 
