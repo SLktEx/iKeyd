@@ -4,25 +4,12 @@ namespace iKeyd.Core.Configuration;
 
 public static class MouseMotionProfileJson
 {
-    public static AutomationProfile Apply(AutomationProfile profile, string json)
+    public static MouseMotionProfile Parse(string json)
     {
-        ArgumentNullException.ThrowIfNull(profile);
         if (string.IsNullOrWhiteSpace(json))
             throw new ArgumentException("Profile JSON must not be empty.", nameof(json));
-
         using var document = JsonDocument.Parse(json);
-        var mouse = Parse(document.RootElement);
-        if (mouse == MouseMotionProfile.Default)
-            return profile;
-
-        return new AutomationProfile(
-            profile.ChordWindowMs,
-            profile.Keymaps.Values,
-            profile.StartupMode,
-            profile.Hotkeys,
-            profile.BehaviorDefinitions.Values,
-            profile.Clipboard,
-            mouse);
+        return Parse(document.RootElement);
     }
 
     public static MouseMotionProfile Parse(JsonElement root)
@@ -68,18 +55,8 @@ public static class MouseMotionProfileJson
         try
         {
             return new MouseMotionProfile(
-                engine,
-                updateMs,
-                pressMs,
-                releaseMs,
-                curve,
-                normal,
-                precision,
-                fine,
-                fast,
-                socd,
-                tapNudgePixels,
-                maxCatchupMs);
+                engine, updateMs, pressMs, releaseMs, curve,
+                normal, precision, fine, fast, socd, tapNudgePixels, maxCatchupMs);
         }
         catch (ArgumentException exception)
         {
@@ -89,8 +66,7 @@ public static class MouseMotionProfileJson
 
     private static int ReadOptionalInt32(JsonElement element, string name, int fallback, string location)
     {
-        if (!element.TryGetProperty(name, out var value))
-            return fallback;
+        if (!element.TryGetProperty(name, out var value)) return fallback;
         if (value.ValueKind != JsonValueKind.Number || !value.TryGetInt32(out var result))
             throw new InvalidDataException($"{location}.{name} must be an integer.");
         return result;
@@ -98,8 +74,7 @@ public static class MouseMotionProfileJson
 
     private static double ReadOptionalDouble(JsonElement element, string name, double fallback, string location)
     {
-        if (!element.TryGetProperty(name, out var value))
-            return fallback;
+        if (!element.TryGetProperty(name, out var value)) return fallback;
         if (value.ValueKind != JsonValueKind.Number || !value.TryGetDouble(out var result) || !double.IsFinite(result))
             throw new InvalidDataException($"{location}.{name} must be a finite number.");
         return result;
@@ -107,8 +82,7 @@ public static class MouseMotionProfileJson
 
     private static string ReadOptionalString(JsonElement element, string name, string fallback, string location)
     {
-        if (!element.TryGetProperty(name, out var value))
-            return fallback;
+        if (!element.TryGetProperty(name, out var value)) return fallback;
         if (value.ValueKind != JsonValueKind.String)
             throw new InvalidDataException($"{location}.{name} must be a string.");
         return value.GetString() ?? string.Empty;
