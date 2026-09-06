@@ -12,7 +12,7 @@
 </p>
 
 <p align="center">
-  <a href="site/">Landing page source</a>
+  <a href="https://slktex.github.io/iKeyd/">Website</a>
   · <a href="docs/ikeyd-dsl.md">iKeyd DSL</a>
   · <a href="https://github.com/SLktEx/iKeyd/actions/workflows/windows-package.yml">Windows package</a>
   · <a href="docs/implementation-details.md">Implementation details</a>

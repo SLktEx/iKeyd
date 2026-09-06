@@ -91,8 +91,124 @@ public sealed class RealInputRegressionTests
         Assert.Equal(KeyboardDisposition.PassThrough, Dispatch(fixture, 'Q', KeyEventKind.Down, 20));
     }
 
+    [Fact]
+    public void Complete_number_row_is_consumed_and_preserved_when_S_and_K_routes_are_active()
+    {
+        foreach (var mode in new[] { InputMode.S, InputMode.K })
+        {
+            using var fixture = CreateRuntime(mode, kanaInputActive: true);
+            for (var digit = 0; digit <= 9; digit++)
+            {
+                var virtualKey = (ushort)('0' + digit);
+                Assert.Equal(
+                    KeyboardDisposition.Suppress,
+                    Dispatch(fixture, virtualKey, KeyEventKind.Down, digit * 10L));
+                Assert.Equal(
+                    KeyboardDisposition.Suppress,
+                    Dispatch(fixture, virtualKey, KeyEventKind.Up, digit * 10L + 1));
+            }
+
+            Assert.Equal(KeyboardDisposition.PassThrough, Dispatch(fixture, WindowsKeyMap.Tab, KeyEventKind.Down, 1000));
+
+            var expected = Enumerable.Range(0, 10)
+                .SelectMany(digit => new[]
+                {
+                    new RecordedKeyboardEvent(WindowsKeyMap.Keyboard((ushort)('0' + digit)), KeyEventKind.Down),
+                    new RecordedKeyboardEvent(WindowsKeyMap.Keyboard((ushort)('0' + digit)), KeyEventKind.Up)
+                })
+                .ToArray();
+            Assert.Equal(expected, fixture.Output.Events);
+            Assert.Empty(fixture.Output.Text);
+        }
+    }
+
+    [Fact]
+    public void S_function_row_is_emitted_and_K_function_row_is_transparent_on_active_IME_routes()
+    {
+        using (var sFixture = CreateRuntime(InputMode.S, kanaInputActive: true))
+        {
+            for (var functionNumber = 1; functionNumber <= 12; functionNumber++)
+            {
+                var virtualKey = (ushort)(WindowsKeyMap.F1 + functionNumber - 1);
+                Assert.Equal(
+                    KeyboardDisposition.Suppress,
+                    Dispatch(sFixture, virtualKey, KeyEventKind.Down, functionNumber * 10L));
+                Assert.Equal(
+                    KeyboardDisposition.Suppress,
+                    Dispatch(sFixture, virtualKey, KeyEventKind.Up, functionNumber * 10L + 1));
+            }
+
+            Assert.Equal(KeyboardDisposition.PassThrough, Dispatch(sFixture, WindowsKeyMap.Tab, KeyEventKind.Down, 1000));
+            Assert.Equal(24, sFixture.Output.Events.Count);
+            for (var functionNumber = 1; functionNumber <= 12; functionNumber++)
+            {
+                var virtualKey = (ushort)(WindowsKeyMap.F1 + functionNumber - 1);
+                var eventOffset = (functionNumber - 1) * 2;
+                Assert.Equal(new RecordedKeyboardEvent(WindowsKeyMap.Keyboard(virtualKey), KeyEventKind.Down), sFixture.Output.Events[eventOffset]);
+                Assert.Equal(new RecordedKeyboardEvent(WindowsKeyMap.Keyboard(virtualKey), KeyEventKind.Up), sFixture.Output.Events[eventOffset + 1]);
+            }
+        }
+
+        using (var kFixture = CreateRuntime(InputMode.K, kanaInputActive: true))
+        {
+            for (var functionNumber = 1; functionNumber <= 12; functionNumber++)
+            {
+                var virtualKey = (ushort)(WindowsKeyMap.F1 + functionNumber - 1);
+                Assert.Equal(
+                    KeyboardDisposition.PassThrough,
+                    Dispatch(kFixture, virtualKey, KeyEventKind.Down, functionNumber * 10L));
+                Assert.Equal(
+                    KeyboardDisposition.PassThrough,
+                    Dispatch(kFixture, virtualKey, KeyEventKind.Up, functionNumber * 10L + 1));
+            }
+
+            Assert.Empty(kFixture.Output.Events);
+            Assert.Empty(kFixture.Output.Text);
+        }
+    }
+
     [Theory]
-    [InlineData(false, false, false, 2200.0)]
+    [InlineData(InputMode.S)]
+    [InlineData(InputMode.K)]
+    public void Number_and_function_rows_stay_transparent_when_IME_route_is_inactive(InputMode mode)
+    {
+        using var fixture = CreateRuntime(mode, kanaInputActive: false);
+        var keys = new ushort[] { '0', '9', WindowsKeyMap.F1, WindowsKeyMap.F12 };
+
+        for (var index = 0; index < keys.Length; index++)
+        {
+            var virtualKey = keys[index];
+            Assert.Equal(KeyboardDisposition.PassThrough, Dispatch(fixture, virtualKey, KeyEventKind.Down, index * 10L));
+            Assert.Equal(KeyboardDisposition.PassThrough, Dispatch(fixture, virtualKey, KeyEventKind.Up, index * 10L + 1));
+        }
+
+        Assert.Empty(fixture.Output.Events);
+        Assert.Empty(fixture.Output.Text);
+    }
+
+    [Fact]
+    public void SM_wheel_uses_the_real_JIS_semicolon_and_colon_physical_positions()
+    {
+        using var fixture = CreateRuntime(InputMode.R);
+
+        Assert.Equal(KeyboardDisposition.Suppress, Dispatch(fixture, WindowsKeyMap.Space, KeyEventKind.Down, 0));
+        Assert.Equal(KeyboardDisposition.Suppress, Dispatch(fixture, WindowsKeyMap.NonConvert, KeyEventKind.Down, 10));
+
+        Assert.Equal(KeyboardDisposition.Suppress, Dispatch(fixture, (ushort)0xBB, KeyEventKind.Down, 20));
+        Assert.Equal(KeyboardDisposition.Suppress, Dispatch(fixture, (ushort)0xBB, KeyEventKind.Up, 21));
+        Assert.Equal(KeyboardDisposition.Suppress, Dispatch(fixture, (ushort)0xBA, KeyEventKind.Down, 30));
+        Assert.Equal(KeyboardDisposition.Suppress, Dispatch(fixture, (ushort)0xBA, KeyEventKind.Up, 31));
+
+        Assert.Equal(
+        [
+            new RecordedScroll(-120, false),
+            new RecordedScroll(-120, true)
+        ],
+        fixture.Desktop.Scrolls);
+    }
+
+    [Theory]
+    [InlineData(false, false, false, 1000.0)]
     [InlineData(true, false, false, 800.0)]
     [InlineData(false, true, false, 240.0)]
     [InlineData(false, false, true, 4400.0)]
@@ -106,19 +222,19 @@ public sealed class RealInputRegressionTests
         Assert.Equal(expected, KeyboardMouseMotion.SpeedForModifiers(precision, fine, fast));
     }
 
-    private static RuntimeFixture CreateRuntime(InputMode startupMode)
+    private static RuntimeFixture CreateRuntime(InputMode startupMode, bool kanaInputActive = false)
     {
         var configuration = IKeydConfiguration.Load(ProfilePath) with { StartupMode = startupMode };
         var keyboardState = new KeyboardState();
         var output = new RecordingKeyboardOutput();
-        var desktop = new NullDesktopBackend();
+        var desktop = new RecordingDesktopBackend();
         var runtime = new IKeydRuntimeHandler(
             configuration,
-            new InactiveInputMethod(),
+            new FixedInputMethod(kanaInputActive),
             keyboardState,
             new LegacySendOutput(output),
             desktop);
-        return new RuntimeFixture(runtime, keyboardState, output);
+        return new RuntimeFixture(runtime, keyboardState, output, desktop);
     }
 
     private static KeyboardDisposition Dispatch(
@@ -142,14 +258,15 @@ public sealed class RealInputRegressionTests
     private sealed record RuntimeFixture(
         IKeydRuntimeHandler Runtime,
         KeyboardState KeyboardState,
-        RecordingKeyboardOutput Output) : IDisposable
+        RecordingKeyboardOutput Output,
+        RecordingDesktopBackend Desktop) : IDisposable
     {
         public void Dispose() => Runtime.Dispose();
     }
 
-    private sealed class InactiveInputMethod : IInputMethod
+    private sealed class FixedInputMethod(bool kanaInputActive) : IInputMethod
     {
-        public bool IsKanaInputActive() => false;
+        public bool IsKanaInputActive() => kanaInputActive;
     }
 
     private sealed class RecordingKeyboardOutput : IKeyboardOutput
@@ -170,9 +287,11 @@ public sealed class RealInputRegressionTests
         public bool IsToggleOn(ushort virtualKey) => false;
     }
 
-    private sealed class NullDesktopBackend : IDesktopBackend
+    private sealed class RecordingDesktopBackend : IDesktopBackend
     {
         private readonly WindowHandle _window = new(1);
+        public List<RecordedScroll> Scrolls { get; } = [];
+
         public WindowHandle GetActiveWindow() => _window;
         public DesktopWindowState GetWindowState(WindowHandle window) => DesktopWindowState.Normal;
         public DesktopRect GetWindowBounds(WindowHandle window) => new(0, 0, 800, 600);
@@ -197,9 +316,11 @@ public sealed class RealInputRegressionTests
         public bool IsMouseButtonDown(DesktopMouseButton button) => false;
         public void SetMouseButton(DesktopMouseButton button, bool down) { }
         public void Click(DesktopMouseButton button) { }
-        public void ScrollVertical(int wheelDelta, bool controlModifier = false) { }
+        public void ScrollVertical(int wheelDelta, bool controlModifier = false)
+            => Scrolls.Add(new RecordedScroll(wheelDelta, controlModifier));
         public void SendMediaCommand(DesktopMediaCommand command) { }
     }
 
     private readonly record struct RecordedKeyboardEvent(KeyboardKey Key, KeyEventKind Kind);
+    private readonly record struct RecordedScroll(int Delta, bool ControlModifier);
 }
