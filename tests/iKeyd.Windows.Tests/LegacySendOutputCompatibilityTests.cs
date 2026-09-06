@@ -7,8 +7,12 @@ namespace iKeyd.Windows.Tests;
 
 public sealed class LegacySendOutputCompatibilityTests
 {
+    private const ushort LeftShift = 0xA0;
+    private const ushort LeftControl = 0xA2;
+    private const ushort LeftAlt = 0xA4;
+
     [Fact]
-    public void Combined_modifiers_preserve_down_press_reverse_up_order()
+    public void Combined_modifiers_match_compiled_legacy_left_vks_and_release_order()
     {
         var keyboard = new RecordingKeyboardOutput();
         var output = new LegacySendOutput(keyboard);
@@ -17,14 +21,41 @@ public sealed class LegacySendOutputCompatibilityTests
 
         Assert.Equal(
         [
-            Event(WindowsKeyMap.Control, KeyEventKind.Down),
-            Event(WindowsKeyMap.Shift, KeyEventKind.Down),
+            Event(LeftControl, KeyEventKind.Down),
+            Event(LeftShift, KeyEventKind.Down),
             Event(WindowsKeyMap.Tab, KeyEventKind.Down),
             Event(WindowsKeyMap.Tab, KeyEventKind.Up),
-            Event(WindowsKeyMap.Shift, KeyEventKind.Up),
-            Event(WindowsKeyMap.Control, KeyEventKind.Up)
+            Event(LeftControl, KeyEventKind.Up),
+            Event(LeftShift, KeyEventKind.Up)
         ],
         keyboard.Events);
+    }
+
+    [Fact]
+    public void AHK_backtick_escapes_reachable_default_key_punctuation()
+    {
+        var keyboard = new RecordingKeyboardOutput();
+        var output = new LegacySendOutput(keyboard);
+
+        output.Send("`;`,`.`[`]^`;");
+
+        Assert.Equal([";,.[]"], keyboard.Text);
+        Assert.Equal(
+        [
+            Event(LeftControl, KeyEventKind.Down),
+            Event(WindowsKeyMap.OemSemicolon, KeyEventKind.Down),
+            Event(WindowsKeyMap.OemSemicolon, KeyEventKind.Up),
+            Event(LeftControl, KeyEventKind.Up)
+        ],
+        keyboard.Events);
+    }
+
+    [Fact]
+    public void Trailing_AHK_backtick_is_diagnostic()
+    {
+        var output = new LegacySendOutput(new RecordingKeyboardOutput());
+        var error = Assert.Throws<InvalidDataException>(() => output.Send("abc`"));
+        Assert.Contains("trailing AHK escape", error.Message);
     }
 
     [Fact]
@@ -97,8 +128,9 @@ public sealed class LegacySendOutputCompatibilityTests
 
         output.Send("^$!_^{!}");
 
-        Assert.Contains(keyboard.Events, item => item.Key.VirtualKey == WindowsKeyMap.Control && item.Kind == KeyEventKind.Down);
-        Assert.Contains(keyboard.Events, item => item.Key.VirtualKey == WindowsKeyMap.Shift && item.Kind == KeyEventKind.Down);
+        Assert.Contains(keyboard.Events, item => item.Key.VirtualKey == LeftControl && item.Kind == KeyEventKind.Down);
+        Assert.Contains(keyboard.Events, item => item.Key.VirtualKey == LeftShift && item.Kind == KeyEventKind.Down);
+        Assert.Contains(keyboard.Events, item => item.Key.VirtualKey == LeftAlt && item.Kind == KeyEventKind.Down);
         Assert.Contains(keyboard.Events, item => item.Key.VirtualKey == (ushort)'4');
         Assert.Contains(keyboard.Events, item => item.Key.VirtualKey == 0xE2);
         Assert.Contains(keyboard.Events, item => item.Key.VirtualKey == (ushort)'1');
@@ -140,10 +172,10 @@ public sealed class LegacySendOutputCompatibilityTests
 
         Assert.Equal(
         [
-            Event(WindowsKeyMap.Alt, KeyEventKind.Down),
+            Event(LeftAlt, KeyEventKind.Down),
             Event(WindowsKeyMap.Space, KeyEventKind.Down),
             Event(WindowsKeyMap.Space, KeyEventKind.Up),
-            Event(WindowsKeyMap.Alt, KeyEventKind.Up)
+            Event(LeftAlt, KeyEventKind.Up)
         ],
         keyboard.Events);
         Assert.Equal(["ep"], keyboard.Text);
