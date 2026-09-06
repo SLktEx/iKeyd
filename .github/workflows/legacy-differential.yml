@@ -15,7 +15,7 @@ on:
       - src/iKeyd.App/WindowsKeyMap.cs
       - src/iKeyd.Profiles.HotkeySkg/**
       - src/iKeyd.Windows/Input/**
-      - tests/iKeyd.Compatibility.Tests/Scenarios/**
+      - tests/iKeyd.Compatibility.Tests/**
       - tests/iKeyd.Windows.Tests/**
   pull_request:
     paths:
@@ -29,7 +29,7 @@ on:
       - src/iKeyd.App/WindowsKeyMap.cs
       - src/iKeyd.Profiles.HotkeySkg/**
       - src/iKeyd.Windows/Input/**
-      - tests/iKeyd.Compatibility.Tests/Scenarios/**
+      - tests/iKeyd.Compatibility.Tests/**
       - tests/iKeyd.Windows.Tests/**
 
 permissions:
