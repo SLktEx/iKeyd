@@ -4,14 +4,20 @@ profile jis109Preset {
 
 keyboard JIS109
 
+// A compact logical subset can coexist with the full physical keyboard.
+layout BASE {
+    row Q W E
+}
+
 keymap S {
-    JIS109.Ro = ro
+    POS.Ro = ro
     JIS109.Yen = yen
-    combo JIS109.Muhenkan + JIS109.Ro = escape
+    combo POS.Muhenkan + POS.Ro = escape
+    combo BASE[1,1] + BASE[1,2] = logical
 }
 
 keymap K {
-    JIS109.Henkan = henkan
+    POS.Henkan = henkan
     JIS109.KatakanaHiragana = kana
-    combo JIS109.Henkan + JIS109.Yen = other
+    combo POS.Henkan + POS.Yen = other
 }
