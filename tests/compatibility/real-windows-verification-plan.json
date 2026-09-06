@@ -222,9 +222,10 @@
       "mode": "manual",
       "requiredEnvironment": ["real-windows", "interactive-desktop"],
       "instructions": [
-        "Record the pointer start position, verify SM movement amounts for default/D/E/C modifiers, then restore the pointer.",
-        "Verify left/right hold toggle, left/right/middle click, active-window corner moves, wheel and Ctrl+wheel behavior.",
-        "Verify volume up/mute/down and previous/play-pause/next media commands on the real Windows media path."
+        "Verify SM movement uses the v0.4 virtual-stick relative-pointer behavior with the same J/K/L/I key placement and D/E/C gain roles. Do not require the legacy fixed 100/30/10/quarter-screen displacement; that movement difference is intentional (#134).",
+        "Verify left/right/middle click, active-window corner moves, wheel and Ctrl+wheel behavior. For SM+H, verify iKeyd's functional right-button hold toggle; do not reproduce the pinned legacy 'if s tate = U' typo, which is an intentional difference.",
+        "Verify volume up/mute/down and previous/play-pause/next media commands on the real Windows media path.",
+        "Record both accepted mouse differences in the check notes. Treat any additional mouse/media difference as a failure."
       ],
       "inventoryIds": [
         "legacy-function-09bd9822fc",
