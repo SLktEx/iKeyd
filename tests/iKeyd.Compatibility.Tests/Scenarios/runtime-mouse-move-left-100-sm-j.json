@@ -1,11 +1,11 @@
 {
   "id": "runtime-mouse-move-left-100-sm-j",
-  "description": "Space then M plus J moves the pointer 100 pixels left with no speed modifier.",
+  "description": "Legacy oracle: Space then M plus J moved the pointer 100 pixels left with no speed modifier. Superseded by the continuous virtual-stick pointer engine in #134.",
   "initialState": { "mode": "S", "ime": "off", "layers": ["S", "M"] },
   "input": [
     { "atMs": 10, "kind": "keyDown", "key": "J" },
     { "atMs": 11, "kind": "keyUp", "key": "J" }
   ],
   "expected": { "actions": [ { "kind": "mouse", "value": "move-by:-100,0" } ] },
-  "tags": ["legacy", "runtime-long-tail", "mouse", "deterministic"]
+  "tags": ["legacy", "runtime-long-tail", "mouse", "deterministic", "superseded-pointer-motion"]
 }
