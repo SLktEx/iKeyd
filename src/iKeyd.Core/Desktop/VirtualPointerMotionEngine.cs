@@ -74,9 +74,9 @@ public sealed class VirtualPointerMotionEngine
         SnapIdleAxis(ref _axisX, _targetX);
         SnapIdleAxis(ref _axisY, _targetY);
 
-        var outputX = ApplyCurve(_axisX);
-        var outputY = ApplyCurve(_axisY);
-        Normalize(ref outputX, ref outputY);
+        var outputX = _axisX;
+        var outputY = _axisY;
+        ApplyResponseCurve(ref outputX, ref outputY);
 
         var exactX = _remainderX + outputX * pixelsPerSecond * elapsedSeconds;
         var exactY = _remainderY + outputY * pixelsPerSecond * elapsedSeconds;
@@ -127,14 +127,24 @@ public sealed class VirtualPointerMotionEngine
             axis = 0;
     }
 
-    private double ApplyCurve(double value)
+    private void ApplyResponseCurve(ref double x, ref double y)
     {
-        if (_options.ResponseCurve == PointerResponseCurve.Linear)
-            return value;
+        var magnitude = Math.Sqrt(x * x + y * y);
+        if (magnitude == 0)
+            return;
 
-        var magnitude = Math.Clamp(Math.Abs(value), 0, 1);
-        var curved = magnitude * magnitude * (3 - 2 * magnitude);
-        return Math.CopySign(curved, value);
+        var clampedMagnitude = Math.Clamp(magnitude, 0, 1);
+        var curvedMagnitude = _options.ResponseCurve switch
+        {
+            PointerResponseCurve.Linear => clampedMagnitude,
+            PointerResponseCurve.SmoothStep =>
+                clampedMagnitude * clampedMagnitude * (3 - 2 * clampedMagnitude),
+            _ => throw new ArgumentOutOfRangeException(nameof(_options.ResponseCurve))
+        };
+
+        var scale = curvedMagnitude / magnitude;
+        x *= scale;
+        y *= scale;
     }
 
     private static void Normalize(ref double x, ref double y)
