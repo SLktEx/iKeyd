@@ -28,8 +28,9 @@ jobs:
       - name: Verify tiny diff
         shell: powershell
         run: |
-          $files = @(git diff --name-only HEAD)
-          if (($files | Sort-Object) -join "`n" -ne (@('tests/compatibility/coverage-rules.json','tests/tooling/test_mouse_intentional_coverage.py') | Sort-Object) -join "`n") {
+          $files = @((git diff --name-only HEAD) + (git ls-files --others --exclude-standard)) | Where-Object { $_ } | Sort-Object -Unique
+          $expected = @('tests/compatibility/coverage-rules.json','tests/tooling/test_mouse_intentional_coverage.py') | Sort-Object
+          if (($files -join "`n") -ne ($expected -join "`n")) {
             throw "Unexpected changed files: $($files -join ', ')"
           }
           $stats = git diff --numstat HEAD -- tests/compatibility/coverage-rules.json
