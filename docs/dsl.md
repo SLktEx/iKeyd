@@ -40,7 +40,13 @@ BASE.Q
 BASE.SColon
 ```
 
-`POS[row,col]` and `POS.Name` alias `BASE` unless a dedicated `POS` layout is declared. This provides a physical-position spelling that stays useful when logical outputs change later.
+`POS` is the canonical spelling for the physical keyboard. Resolution order is:
+
+1. an explicitly declared `layout POS`
+2. the selected built-in physical keyboard such as `keyboard JIS109`
+3. `BASE` for legacy DSL files that do not declare a keyboard preset
+
+This means existing files keep their old `POS -> BASE` behavior, while a JIS109 profile can use `POS.Ro` or `POS.Muhenkan` without coupling physical combos to a small logical `BASE` layout.
 
 ### Built-in JIS109 keyboard
 
@@ -50,7 +56,7 @@ A standard Japanese 109-key physical keyboard does not need to be written out by
 keyboard JIS109
 ```
 
-The declaration registers the complete 109-key physical layout, including the function row, JIS-specific keys, left/right modifiers, navigation cluster, arrows and numeric keypad. Physical keys can then be referenced by name:
+The declaration registers the complete 109-key physical layout, including the function row, JIS-specific keys, left/right modifiers, navigation cluster, arrows and numeric keypad. Physical keys can then be referenced either through the preset name or through `POS`:
 
 ```text
 JIS109.Ro
@@ -60,9 +66,13 @@ JIS109.Muhenkan
 JIS109.KatakanaHiragana
 JIS109.ZenkakuHankaku
 JIS109.NumpadEnter
+
+POS.Ro
+POS.Muhenkan
+POS.NumpadEnter
 ```
 
-For example:
+For example, a compact logical layout can coexist with the full physical keyboard:
 
 ```text
 profile myProfile {
@@ -71,15 +81,24 @@ profile myProfile {
 
 keyboard JIS109
 
+layout BASE {
+    row Q W E R T Y U I O P
+    row A S D F G H J K L SColon
+    row Z X C V B N M Comma Dot Slash
+}
+
 keymap S {
-    JIS109.Ro = backslash
-    combo JIS109.Muhenkan + JIS109.Ro = Escape
+    POS.Ro = backslash
+    combo POS.Muhenkan + POS.Ro = Escape
+
+    // BASE still refers to the compact logical/typing geometry.
+    combo BASE[1,1] + BASE[1,2] = something
 }
 ```
 
 The `JIS109` preset contains exactly 109 unique physical keys. `NumpadComma` remains a supported compact iKeyd key for hardware that provides it, but it is not part of the standard 109-key preset.
 
-You can still declare custom `layout` blocks alongside a keyboard preset. This is useful when a logical typing layout only needs a compact three-row map while combos or special bindings refer to the full physical JIS keyboard.
+You can still declare custom `layout` blocks alongside a keyboard preset. A deliberately declared `layout POS` takes precedence over the preset when custom physical hardware needs its own geometry.
 
 ### JIS physical keys
 
@@ -163,7 +182,7 @@ A one-off combo can be written directly:
 ```text
 combo K + Q = fa
 combo POS[2,8] + BASE[1,1] = fa
-combo JIS109.Muhenkan + JIS109.Ro = Escape
+combo POS.Muhenkan + POS.Ro = Escape
 ```
 
 When many combos share one key, group them:
