@@ -20,7 +20,7 @@ public sealed record ModTapOptions
 
 /// <summary>
 /// Standard behavior library. These helpers create ordinary behavior definitions;
-/// the runtime has no LT/MT-specific dispatch path.
+/// the runtime has no LT/MT/MO/MOD-specific dispatch path.
 /// </summary>
 public static class StandardBehaviors
 {
@@ -35,6 +35,12 @@ public static class StandardBehaviors
         KeyId tapKey,
         ModTapOptions? options = null)
         => new ModTapBehaviorDefinition(modifier, tapKey, options ?? new ModTapOptions());
+
+    public static BehaviorDefinition MO(string layer)
+        => new MomentaryLayerBehaviorDefinition(layer);
+
+    public static BehaviorDefinition MOD(string modifier)
+        => new ModifierHoldBehaviorDefinition(modifier);
 }
 
 internal sealed class LayerTapBehaviorDefinition : BehaviorDefinition
@@ -200,4 +206,78 @@ internal sealed class ModTapBehaviorInstance : TapHoldBehaviorInstance
 
     protected override BehaviorAction HoldDownAction => BehaviorAction.ModifierDown(_modifier);
     protected override BehaviorAction HoldUpAction => BehaviorAction.ModifierUp(_modifier);
+}
+
+internal sealed class MomentaryLayerBehaviorDefinition : BehaviorDefinition
+{
+    private readonly string _layer;
+
+    public MomentaryLayerBehaviorDefinition(string layer)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(layer);
+        _layer = layer.Trim();
+    }
+
+    internal override BehaviorInstance CreateInstance(KeyId sourceKey, long timestampMs)
+        => new MomentaryLayerBehaviorInstance(sourceKey, _layer);
+}
+
+internal sealed class MomentaryLayerBehaviorInstance(KeyId sourceKey, string layer) : BehaviorInstance(sourceKey)
+{
+    private bool _active;
+
+    internal override void OnPress(long timestampMs, List<BehaviorAction> actions)
+    {
+        _active = true;
+        actions.Add(BehaviorAction.LayerOn(layer));
+    }
+
+    internal override void OnRelease(long timestampMs, List<BehaviorAction> actions) => Release(actions);
+    internal override void Cancel(List<BehaviorAction> actions) => Release(actions);
+
+    private void Release(List<BehaviorAction> actions)
+    {
+        if (!_active)
+            return;
+
+        _active = false;
+        actions.Add(BehaviorAction.LayerOff(layer));
+    }
+}
+
+internal sealed class ModifierHoldBehaviorDefinition : BehaviorDefinition
+{
+    private readonly string _modifier;
+
+    public ModifierHoldBehaviorDefinition(string modifier)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(modifier);
+        _modifier = modifier.Trim();
+    }
+
+    internal override BehaviorInstance CreateInstance(KeyId sourceKey, long timestampMs)
+        => new ModifierHoldBehaviorInstance(sourceKey, _modifier);
+}
+
+internal sealed class ModifierHoldBehaviorInstance(KeyId sourceKey, string modifier) : BehaviorInstance(sourceKey)
+{
+    private bool _active;
+
+    internal override void OnPress(long timestampMs, List<BehaviorAction> actions)
+    {
+        _active = true;
+        actions.Add(BehaviorAction.ModifierDown(modifier));
+    }
+
+    internal override void OnRelease(long timestampMs, List<BehaviorAction> actions) => Release(actions);
+    internal override void Cancel(List<BehaviorAction> actions) => Release(actions);
+
+    private void Release(List<BehaviorAction> actions)
+    {
+        if (!_active)
+            return;
+
+        _active = false;
+        actions.Add(BehaviorAction.ModifierUp(modifier));
+    }
 }
