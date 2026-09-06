@@ -129,7 +129,7 @@ profile demo {
     chord_window = 40ms
 }
 keymap BASE {
-    Q = LT(NUM, 170ms)
+    Q = LT(NUM, bad-arg)
 }
 """.strip()
 
