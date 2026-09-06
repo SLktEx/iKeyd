@@ -1,0 +1,283 @@
+{
+  "schemaVersion": 1,
+  "planId": "hotkeyskg-real-windows-v1",
+  "issue": 59,
+  "pinnedLegacySourceSha256": "fde46d179a2cfb8123a314d4ea6b8de714a65302867d4b3a654af07f9472bab7",
+  "pinnedLegacyExeSha256": "5492198ce403d796c8588b17419bce82a0e6de3961bb40896a875ee5dee359ea",
+  "baselineCompatibilityCommit": "8498999800dc1a64445e656402503300debd3621",
+  "baselineLegacyDifferentialRun": 34020980916,
+  "expectedRealWindowsInventoryCount": 162,
+  "checks": [
+    {
+      "id": "ime-routing",
+      "title": "Japanese IME routing and composition",
+      "mode": "automated+manual",
+      "requiredEnvironment": ["real-windows", "japanese-ime", "interactive-desktop"],
+      "instructions": [
+        "Run the automated legacy differential with the Japanese IME installed and verify the IME-on scenarios pass.",
+        "Verify S and K routing with IME OFF and ON, including Roma/Kana detection before and after mode changes.",
+        "Verify conversion/composition input and IME state transitions do not change legacy-observable output unexpectedly."
+      ],
+      "inventoryIds": [
+        "legacy-branch-1adfad2a59",
+        "legacy-function-27b3549c91",
+        "legacy-ime-operation-17b29cddd9",
+        "legacy-ime-operation-3363d771b6",
+        "legacy-ime-operation-5c91b91874",
+        "legacy-ime-operation-63476bfa32",
+        "legacy-ime-operation-63476bfa32-2",
+        "legacy-ime-operation-d60c53bbba",
+        "legacy-ime-operation-d60c53bbba-2"
+      ]
+    },
+    {
+      "id": "mode-function",
+      "title": "Mode selectors and processF keyboard state",
+      "mode": "automated+manual",
+      "requiredEnvironment": ["real-windows", "interactive-desktop"],
+      "instructions": [
+        "Verify M+1/2/3/4 select S/R/T/K and T preserves the previously selected S/K keymap exactly like legacy.",
+        "Verify M+F vkF3/sc029, MH+F CapsLock toggle and HM+F Insert, including CapsLock state restoration.",
+        "Repeat the mode transitions around focus changes to catch stuck layer/modifier state."
+      ],
+      "inventoryIds": [
+        "legacy-function-822ccf5ab7",
+        "legacy-function-87a6602a1c",
+        "legacy-function-88abb04530",
+        "legacy-function-c51748ba4d",
+        "legacy-function-cc28bb2f7b",
+        "legacy-input-state-operation-d2c7880049"
+      ]
+    },
+    {
+      "id": "contextual-apps",
+      "title": "Application/window-context hotkeys",
+      "mode": "manual",
+      "requiredEnvironment": ["real-windows", "interactive-desktop", "console-window", "gsview-or-compatible-target"],
+      "instructions": [
+        "In a classic ConsoleWindowClass target, compare Ctrl+V and Ctrl+X with the legacy executable, including modifier restoration.",
+        "In gsview_class, compare Alt+E and confirm WM_COMMAND 105 reaches the intended command.",
+        "Open the Macro #32770 dialog and verify H/Y routing is active only in the legacy dialog context and context reset works after focus changes."
+      ],
+      "inventoryIds": [
+        "legacy-branch-25b855fdd7",
+        "legacy-context-39806af386",
+        "legacy-context-7a8e9989d4",
+        "legacy-context-7e4af4425c",
+        "legacy-context-d361ddf70b",
+        "legacy-hotkey-14078971ed",
+        "legacy-hotkey-27c4eaa71a",
+        "legacy-hotkey-29838348ce",
+        "legacy-hotkey-91d0e45db3",
+        "legacy-hotkey-efc7610d8b",
+        "legacy-send-efa9fc1516",
+        "legacy-send-fbe0a5aead",
+        "legacy-window-operation-475ec57943"
+      ]
+    },
+    {
+      "id": "macro-slots",
+      "title": "Macro H/Y slots, editor, repeat, calc, wait, hk and cancel",
+      "mode": "manual",
+      "requiredEnvironment": ["real-windows", "interactive-desktop"],
+      "instructions": [
+        "Verify H and Y retain independent macro bodies while sharing the legacy repeat value.",
+        "Exercise macro increment, {calc}, {wait}, nested {hk}, repeat and Escape cancellation against the legacy executable.",
+        "Verify MH edits only macro text and HM edits repeat count; close/cancel paths must leave state consistent."
+      ],
+      "inventoryIds": [
+        "legacy-function-2942b1a570",
+        "legacy-function-4c376b2db8",
+        "legacy-function-ae40989494",
+        "legacy-function-fe5264a34e",
+        "legacy-input-state-operation-8cd2a1ef91",
+        "legacy-input-state-operation-c4c73ef0ee",
+        "legacy-input-state-operation-c4c73ef0ee-2",
+        "legacy-input-state-operation-ebfbd84d1b",
+        "legacy-label-3776895a76",
+        "legacy-macro-operation-03bf06da2f",
+        "legacy-macro-operation-254146ab34",
+        "legacy-macro-operation-278230e45d",
+        "legacy-macro-operation-31bf196bb3",
+        "legacy-macro-operation-3a39efc782",
+        "legacy-macro-operation-3cafa48df6",
+        "legacy-macro-operation-3db406d104",
+        "legacy-macro-operation-4a117b3e44",
+        "legacy-macro-operation-57897a89c8",
+        "legacy-macro-operation-5a7f0df6a7",
+        "legacy-macro-operation-633e1c7e62",
+        "legacy-macro-operation-656b0a543d",
+        "legacy-macro-operation-6c2286f7b5",
+        "legacy-macro-operation-6ef0814e84",
+        "legacy-macro-operation-751da958fe",
+        "legacy-macro-operation-7f5460c9b4",
+        "legacy-macro-operation-80e9eba110",
+        "legacy-macro-operation-935b05db90",
+        "legacy-macro-operation-9a5ad74e22",
+        "legacy-macro-operation-a872f4b3c3",
+        "legacy-macro-operation-ad61f8125f",
+        "legacy-macro-operation-b04caff0f2",
+        "legacy-macro-operation-c26a914329",
+        "legacy-macro-operation-cb184f37a0",
+        "legacy-macro-operation-e2733910e7",
+        "legacy-macro-operation-e2d43d589a",
+        "legacy-macro-operation-ee89d0fe14",
+        "legacy-macro-operation-fcf2a6c729",
+        "legacy-mouse-operation-83a91e041f",
+        "legacy-ui-operation-9afa32ffd1",
+        "legacy-ui-operation-c9bc0bfea5"
+      ]
+    },
+    {
+      "id": "clipboard-ui",
+      "title": "Clipboard history, picker and paste",
+      "mode": "manual",
+      "requiredEnvironment": ["real-windows", "interactive-desktop"],
+      "instructions": [
+        "Populate more than one clipboard-history entry and verify ordering/deduplication against the legacy behavior.",
+        "Verify M+V picker selection, MH+V capture-latest and HM+V paste-captured behavior in a real target application.",
+        "Exercise picker Enter, mouse/double-click selection, Escape/close and clipboard-change callback paths; restore the original clipboard afterward."
+      ],
+      "inventoryIds": [
+        "legacy-clipboard-operation-16f1449c1b",
+        "legacy-clipboard-operation-22118277fe",
+        "legacy-clipboard-operation-2631eb9a8d",
+        "legacy-clipboard-operation-36a564d48f",
+        "legacy-clipboard-operation-4ea300494d",
+        "legacy-clipboard-operation-5d1d38e13b",
+        "legacy-clipboard-operation-729c481700",
+        "legacy-clipboard-operation-7c9ff420ea",
+        "legacy-clipboard-operation-7d0e6d8200",
+        "legacy-clipboard-operation-8a36023fe0",
+        "legacy-clipboard-operation-91a842eea7",
+        "legacy-clipboard-operation-a6fdd7aa79",
+        "legacy-clipboard-operation-ad80fc9153",
+        "legacy-clipboard-operation-b9fe746401",
+        "legacy-clipboard-operation-c02ba78bc5",
+        "legacy-clipboard-operation-d4646346bd",
+        "legacy-clipboard-operation-f348bb1196",
+        "legacy-function-315e93c88d",
+        "legacy-function-63b2296650",
+        "legacy-label-1faeada594",
+        "legacy-label-47f8e5941e",
+        "legacy-label-610ca263a5",
+        "legacy-label-73a5747a66",
+        "legacy-label-7dbe6d48be",
+        "legacy-label-def537e71a",
+        "legacy-label-ef5a0c87a1",
+        "legacy-ui-operation-0193de4a17",
+        "legacy-ui-operation-2b4d3a8bf9",
+        "legacy-ui-operation-3d8486c45f",
+        "legacy-ui-operation-3d8486c45f-2",
+        "legacy-ui-operation-4b4dfc5b33",
+        "legacy-ui-operation-56255017a6",
+        "legacy-ui-operation-b403e6a073",
+        "legacy-ui-operation-cbc761af06"
+      ]
+    },
+    {
+      "id": "window-desktop",
+      "title": "Window placement, topmost, opacity, caption and window groups",
+      "mode": "manual",
+      "requiredEnvironment": ["real-windows", "interactive-desktop"],
+      "instructions": [
+        "Use disposable test windows to verify minimize/maximize/restore, left/right/top/bottom placement and caption toggle.",
+        "Verify topmost and opacity adjustments match legacy visible behavior and restore all window state afterward.",
+        "Verify processG/processB window-group add/next/reset and bottom-window-of-class activation with at least two same-class windows."
+      ],
+      "inventoryIds": [
+        "legacy-branch-26bcba09ac",
+        "legacy-branch-26bcba09ac-2",
+        "legacy-branch-665d29cbf8",
+        "legacy-branch-665d29cbf8-2",
+        "legacy-function-08bd9ba6a8",
+        "legacy-function-1af3169be4",
+        "legacy-function-85f36d675e",
+        "legacy-function-9917abb78c",
+        "legacy-function-d327480b5e",
+        "legacy-window-operation-0de25b8eec",
+        "legacy-window-operation-2a4feefb31",
+        "legacy-window-operation-45574cea8e",
+        "legacy-window-operation-64342a0c6b",
+        "legacy-window-operation-64d875c326",
+        "legacy-window-operation-64d875c326-2",
+        "legacy-window-operation-688970d281",
+        "legacy-window-operation-7dbce5c51a",
+        "legacy-window-operation-8d0dbc5e76",
+        "legacy-window-operation-a231ecd3a6",
+        "legacy-window-operation-a231ecd3a6-2",
+        "legacy-window-operation-a51aa6084d",
+        "legacy-window-operation-a51aa6084d-2",
+        "legacy-window-operation-abb36eed6d",
+        "legacy-window-operation-bea22b324d",
+        "legacy-window-operation-cbd69df218",
+        "legacy-window-operation-cbd69df218-2",
+        "legacy-window-operation-d0984d9943",
+        "legacy-window-operation-d83958e830"
+      ]
+    },
+    {
+      "id": "mouse-media",
+      "title": "Mouse movement, hold/click/scroll and media controls",
+      "mode": "manual",
+      "requiredEnvironment": ["real-windows", "interactive-desktop"],
+      "instructions": [
+        "Record the pointer start position, verify SM movement amounts for default/D/E/C modifiers, then restore the pointer.",
+        "Verify left/right hold toggle, left/right/middle click, active-window corner moves, wheel and Ctrl+wheel behavior.",
+        "Verify volume up/mute/down and previous/play-pause/next media commands on the real Windows media path."
+      ],
+      "inventoryIds": [
+        "legacy-function-09bd9822fc",
+        "legacy-function-6d92ff9b61",
+        "legacy-input-state-operation-459f2571ee",
+        "legacy-input-state-operation-a3f5217ace",
+        "legacy-input-state-operation-b344bfba73",
+        "legacy-input-state-operation-ce00daeb27",
+        "legacy-input-state-operation-fbe6596626",
+        "legacy-mouse-operation-0420bf2ff9",
+        "legacy-mouse-operation-14de3c53a7",
+        "legacy-mouse-operation-16aa7256ad",
+        "legacy-mouse-operation-1d121fa683",
+        "legacy-mouse-operation-20254f934d",
+        "legacy-mouse-operation-485297b3c3",
+        "legacy-mouse-operation-577e9f6675",
+        "legacy-mouse-operation-781014bbfb",
+        "legacy-mouse-operation-7fe316eacd",
+        "legacy-mouse-operation-9c146057df",
+        "legacy-mouse-operation-9f3f14c1e1",
+        "legacy-mouse-operation-c5c8ca7999",
+        "legacy-mouse-operation-dac810445a",
+        "legacy-mouse-operation-e4b8c69a95",
+        "legacy-mouse-operation-fa6b6cd979",
+        "legacy-send-1e1aeb34cd",
+        "legacy-send-310d9f2ed1",
+        "legacy-send-4b4effd7c8",
+        "legacy-send-871d185fb0",
+        "legacy-send-8c6cd49965",
+        "legacy-send-ce6f77e826",
+        "legacy-send-ee1a14ac1f",
+        "legacy-send-f5708426fb",
+        "legacy-window-operation-65f175518a",
+        "legacy-window-operation-65f175518a-2"
+      ]
+    }
+  ],
+  "supplementalChecks": [
+    {
+      "id": "physical-keyboard-path",
+      "title": "Physical keyboard/hook/SendInput path",
+      "instructions": [
+        "Use the physical keyboard (not only synthetic injection) for representative S/K chords, layer holds, key-up and repeat.",
+        "Confirm iKeyd-generated SendInput is not recaptured and no modifier remains stuck after rapid sequences/focus changes."
+      ]
+    },
+    {
+      "id": "load-stability",
+      "title": "Compatibility under CPU load",
+      "instructions": [
+        "Repeat representative fast chords and layer/modifier operations while the machine is under CPU load.",
+        "Record any missed chord, false chord, stuck key/modifier or focus-related difference and reduce it to a regression if found."
+      ]
+    }
+  ]
+}
