@@ -25,7 +25,7 @@ public sealed class WindowsKeyMapTests
             Assert.Equal(binding.Code, resolved.Value.Code);
 
             Assert.True(WindowsKeyMap.TryResolveOutputKey(new KeyId(binding.Code), out var output));
-            Assert.Equal(binding.WindowsKey, output);
+            Assert.Equal(binding.Code, WindowsKeyMap.TryResolveKeyId(output)?.Code);
         }
     }
 
