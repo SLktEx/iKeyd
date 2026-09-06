@@ -38,6 +38,9 @@ jobs:
       - name: Apply remaining compatibility deltas
         run: python -B tools/issue57_apply_remaining.py
 
+      - name: Harden hosted legacy mode bootstrap
+        run: python -B tools/harden_hosted_mode_bootstrap.py
+
       - name: Restore
         run: dotnet restore iKeyd.sln
 
