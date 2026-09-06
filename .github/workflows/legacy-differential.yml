@@ -147,6 +147,7 @@ jobs:
 
           python tools/analyze-send-syntax.py `
             --matrix $matrix `
+            --source $env:IKEYD_LEGACY_AHK `
             --json (Join-Path $outputDir 'send-syntax-inventory.json') `
             --markdown (Join-Path $outputDir 'send-syntax-inventory.md')
 

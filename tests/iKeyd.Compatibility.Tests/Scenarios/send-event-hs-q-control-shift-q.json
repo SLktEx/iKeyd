@@ -1,0 +1,23 @@
+{
+  "id": "send-event-hs-q-control-shift-q",
+  "description": "H then Space plus Q emits legacy left Control+Shift+Q through Send,^+%key%.",
+  "initialState": { "mode": "S", "ime": "off", "layers": ["H", "S"] },
+  "input": [
+    { "atMs": 10, "kind": "keyDown", "key": "Q" },
+    { "atMs": 20, "kind": "keyUp", "key": "Q" }
+  ],
+  "expected": {
+    "events": [
+      { "kind": "keyDown", "key": "VK_A2" },
+      { "kind": "keyDown", "key": "VK_A0" },
+      { "kind": "keyDown", "key": "Q" },
+      { "kind": "keyUp", "key": "Q" },
+      { "kind": "keyUp", "key": "VK_A2" },
+      { "kind": "keyUp", "key": "VK_A0" }
+    ]
+  },
+  "tags": ["legacy", "send", "send-event-diff", "hosted-windows"],
+  "inventoryIds": ["legacy-send-0f870c6c6b"],
+  "requiredEnvironment": ["hosted-windows"],
+  "oracleTargets": ["compiled-exe", "ahk-source", "ikeyd-runtime"]
+}

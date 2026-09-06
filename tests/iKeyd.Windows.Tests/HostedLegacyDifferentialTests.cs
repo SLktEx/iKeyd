@@ -6,6 +6,7 @@ namespace iKeyd.Windows.Tests;
 public sealed class HostedLegacyDifferentialTests
 {
     private const string HostedLegacyTag = "hosted-legacy";
+    private const string SendEventTag = "send-event-diff";
     private static string ScenarioDirectory => Path.Combine(AppContext.BaseDirectory, "Scenarios");
 
     [Fact]
@@ -19,12 +20,7 @@ public sealed class HostedLegacyDifferentialTests
         if (!legacyRunner.IsAvailable)
             return;
 
-        var scenarios = CompatibilityScenarioCatalog.LoadDirectory(ScenarioDirectory)
-            .Where(item => item.Tags.Any(tag =>
-                string.Equals(tag, HostedLegacyTag, StringComparison.OrdinalIgnoreCase)))
-            .OrderBy(item => item.Id, StringComparer.OrdinalIgnoreCase)
-            .ToArray();
-
+        var scenarios = LoadTagged(HostedLegacyTag);
         Assert.NotEmpty(scenarios);
 
         var failures = new List<string>();
@@ -49,9 +45,45 @@ public sealed class HostedLegacyDifferentialTests
             }
         }
 
-        Assert.True(
-            failures.Count == 0,
-            failures.Count == 0 ? string.Empty : string.Join(Environment.NewLine + Environment.NewLine, failures));
+        AssertFailures(failures);
+    }
+
+    [Fact]
+    [Trait("Category", "HostedLegacyDifferentialE2E")]
+    public async Task Reachable_Send_key_events_match_compiled_legacy_exe()
+    {
+        if (!OperatingSystem.IsWindows())
+            return;
+
+        var legacyRunner = new LegacySendEventScenarioRunner();
+        if (!legacyRunner.IsAvailable)
+            return;
+
+        var scenarios = LoadTagged(SendEventTag);
+        Assert.NotEmpty(scenarios);
+
+        var failures = new List<string>();
+        foreach (var scenario in scenarios)
+        {
+            try
+            {
+                var report = await LegacyDifferentialComparison.RunAsync(
+                    scenario,
+                    new IKeydRuntimeScenarioRunner(),
+                    legacyRunner);
+                var reportPath = LegacyDifferentialComparison.WriteReport(report);
+                if (!report.IsMatch)
+                    failures.Add(BuildFailureMessage(report, reportPath));
+            }
+            catch (Exception error)
+            {
+                failures.Add(
+                    $"Compiled Send-event differential failed for scenario '{scenario.Id}': " +
+                    $"{error.GetType().Name}: {error.Message}");
+            }
+        }
+
+        AssertFailures(failures);
     }
 
     [Fact]
@@ -83,24 +115,27 @@ public sealed class HostedLegacyDifferentialTests
     [Fact]
     public void Hosted_adapter_uses_M3_for_S_and_M4_then_M3_for_K()
     {
-        Assert.Equal(
-            new byte[] { 0x33 },
-            HostedTModeLegacyRunner.ResolveModeSelectionDigits("S"));
-        Assert.Equal(
-            new byte[] { 0x34, 0x33 },
-            HostedTModeLegacyRunner.ResolveModeSelectionDigits("K"));
+        Assert.Equal(new byte[] { 0x33 }, HostedTModeLegacyRunner.ResolveModeSelectionDigits("S"));
+        Assert.Equal(new byte[] { 0x34, 0x33 }, HostedTModeLegacyRunner.ResolveModeSelectionDigits("K"));
     }
 
     [Theory]
     [InlineData(@"C:\runner\hotkeySKG.exe", "hotkeySKG")]
     [InlineData(@"C:\runner\compiled-hotkeySKG.exe", "compiled-hotkeySKG")]
     [InlineData(null, "hotkeySKG")]
-    public void Hosted_adapter_tracks_the_configured_legacy_process_name(
-        string? executablePath,
-        string expected)
-    {
-        Assert.Equal(expected, HostedTModeLegacyRunner.ResolveLegacyProcessName(executablePath));
-    }
+    public void Hosted_adapter_tracks_the_configured_legacy_process_name(string? executablePath, string expected)
+        => Assert.Equal(expected, HostedTModeLegacyRunner.ResolveLegacyProcessName(executablePath));
+
+    private static CompatibilityScenario[] LoadTagged(string tag)
+        => CompatibilityScenarioCatalog.LoadDirectory(ScenarioDirectory)
+            .Where(item => item.Tags.Any(value => string.Equals(value, tag, StringComparison.OrdinalIgnoreCase)))
+            .OrderBy(item => item.Id, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+    private static void AssertFailures(IReadOnlyCollection<string> failures)
+        => Assert.True(
+            failures.Count == 0,
+            failures.Count == 0 ? string.Empty : string.Join(Environment.NewLine + Environment.NewLine, failures));
 
     private static string BuildFailureMessage(LegacyDifferentialReport report, string reportPath)
     {

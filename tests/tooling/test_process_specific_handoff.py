@@ -33,8 +33,10 @@ class ProcessSpecificHandoffTests(unittest.TestCase):
         module.apply_coverage([feature], rules)
 
         self.assertEqual("deferred:#57", feature.coverage["scenario"])
-        self.assertEqual("unknown", feature.coverage["implementation"])
-        self.assertEqual("unknown", feature.classification)
+        self.assertEqual("deferred:#57", feature.coverage["implementation"])
+        self.assertEqual("deferred:#57", feature.coverage["exeDiff"])
+        self.assertEqual("deferred:#57", feature.coverage["ahkDiff"])
+        self.assertEqual("real-windows-verification-required", feature.classification)
         self.assertIn("issue:#57", feature.evidence)
 
 
