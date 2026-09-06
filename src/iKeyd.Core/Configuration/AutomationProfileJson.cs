@@ -43,8 +43,13 @@ public static class AutomationProfileJson
         if (!root.TryGetProperty("chords", out var chordRoot) || chordRoot.ValueKind != JsonValueKind.Object)
             throw new InvalidDataException("chords must be an object.");
 
+        var hasBehaviors = root.TryGetProperty("behaviors", out var behaviorRoot);
+        if (hasBehaviors && behaviorRoot.ValueKind != JsonValueKind.Object)
+            throw new InvalidDataException("behaviors must be an object.");
+
         var modeNames = singleRoot.EnumerateObject().Select(property => property.Name)
             .Concat(chordRoot.EnumerateObject().Select(property => property.Name))
+            .Concat(hasBehaviors ? behaviorRoot.EnumerateObject().Select(property => property.Name) : [])
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
 
@@ -76,7 +81,41 @@ public static class AutomationProfileJson
                     item[2].GetString() ?? string.Empty));
             }
 
-            keymaps.Add(new AutomationKeymapProfile(mode, singles, chords));
+            var behaviors = new List<BehaviorMappingProfile>();
+            if (hasBehaviors && TryGetPropertyIgnoreCase(behaviorRoot, mode, out var behaviorsElement))
+            {
+                if (behaviorsElement.ValueKind != JsonValueKind.Object)
+                    throw new InvalidDataException($"behaviors.{mode} must be an object.");
+
+                foreach (var item in behaviorsElement.EnumerateObject())
+                {
+                    if (item.Value.ValueKind != JsonValueKind.Object)
+                        throw new InvalidDataException($"behaviors.{mode}.{item.Name} must be an object.");
+
+                    var invocation = item.Value;
+                    var behaviorName = invocation.GetProperty("name").GetString()
+                        ?? throw new InvalidDataException($"behaviors.{mode}.{item.Name}.name must be a string.");
+                    if (!invocation.TryGetProperty("arguments", out var argumentsElement) ||
+                        argumentsElement.ValueKind != JsonValueKind.Array)
+                    {
+                        throw new InvalidDataException($"behaviors.{mode}.{item.Name}.arguments must be an array.");
+                    }
+
+                    var arguments = new List<string>();
+                    foreach (var argument in argumentsElement.EnumerateArray())
+                    {
+                        if (argument.ValueKind != JsonValueKind.String)
+                            throw new InvalidDataException($"behaviors.{mode}.{item.Name}.arguments must contain strings.");
+                        arguments.Add(argument.GetString()!);
+                    }
+
+                    behaviors.Add(new BehaviorMappingProfile(
+                        new KeyId(item.Name),
+                        new BehaviorInvocationProfile(behaviorName, arguments)));
+                }
+            }
+
+            keymaps.Add(new AutomationKeymapProfile(mode, singles, chords, behaviors));
         }
 
         var hotkeys = new List<HotkeyBinding>();
@@ -167,6 +206,31 @@ public static class AutomationProfileJson
             writer.WriteEndArray();
         }
         writer.WriteEndObject();
+
+        if (profile.Keymaps.Values.Any(keymap => keymap.BehaviorMappings.Count != 0))
+        {
+            writer.WritePropertyName("behaviors");
+            writer.WriteStartObject();
+            foreach (var keymap in profile.Keymaps.Values.OrderBy(value => value.Name, StringComparer.OrdinalIgnoreCase))
+            {
+                writer.WritePropertyName(keymap.Name);
+                writer.WriteStartObject();
+                foreach (var mapping in keymap.BehaviorMappings.OrderBy(value => value.Key.Value, StringComparer.OrdinalIgnoreCase))
+                {
+                    writer.WritePropertyName(mapping.Key.Value);
+                    writer.WriteStartObject();
+                    writer.WriteString("name", mapping.Invocation.Name);
+                    writer.WritePropertyName("arguments");
+                    writer.WriteStartArray();
+                    foreach (var argument in mapping.Invocation.Arguments)
+                        writer.WriteStringValue(argument);
+                    writer.WriteEndArray();
+                    writer.WriteEndObject();
+                }
+                writer.WriteEndObject();
+            }
+            writer.WriteEndObject();
+        }
 
         if (profile.Hotkeys.Count > 0)
         {
