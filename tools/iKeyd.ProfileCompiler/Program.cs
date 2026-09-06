@@ -29,6 +29,7 @@ internal static class ProfileCompiler
 {
     private const int DefaultChordWindowMs = 40;
     private const int CompactKeyCount = 54; // KeyCode.A..KeyCode.At
+    private const int MaxBehaviorStatementDepth = 32;
 
     public static string Compile(string json)
     {
@@ -68,6 +69,9 @@ internal static class ProfileCompiler
         var hasBehaviors = root.TryGetProperty("behaviors", out var behaviorRoot);
         if (hasBehaviors && behaviorRoot.ValueKind != JsonValueKind.Object)
             throw new InvalidDataException("behaviors must be an object.");
+        var hasUserBehaviors = root.TryGetProperty("behaviorDefinitions", out var userBehaviorRoot);
+        if (hasUserBehaviors && userBehaviorRoot.ValueKind != JsonValueKind.Object)
+            throw new InvalidDataException("behaviorDefinitions must be an object.");
 
         var modeNames = new List<string>();
         AddDistinctModeNames(modeNames, singleRoot);
@@ -105,7 +109,6 @@ internal static class ProfileCompiler
         foreach (var mode in modeNames)
         {
             var (singlesElement, chordsElement) = GetModeElements(singleRoot, chordRoot, mode);
-
             builder.AppendLine("                new AutomationKeymapProfile(");
             builder.AppendLine($"                    name: {Literal(mode)},");
             builder.AppendLine("                    singleMappings: new SingleMapping<string>[]");
@@ -119,12 +122,10 @@ internal static class ProfileCompiler
             builder.AppendLine("                    },");
             builder.AppendLine("                    chordMappings: new ChordMapping<string>[]");
             builder.AppendLine("                    {");
-
             foreach (var item in chordsElement.EnumerateArray())
             {
                 if (item.ValueKind != JsonValueKind.Array || item.GetArrayLength() != 3)
                     throw new InvalidDataException($"A chords.{mode} entry must contain [first, second, output].");
-
                 var firstName = item[0].GetString() ?? throw new InvalidDataException("Chord first key is missing.");
                 var secondName = item[1].GetString() ?? throw new InvalidDataException("Chord second key is missing.");
                 var output = item[2].GetString() ?? string.Empty;
@@ -132,7 +133,6 @@ internal static class ProfileCompiler
                 var second = ParseKey(secondName, $"chords.{mode}");
                 builder.AppendLine($"                        new ChordMapping<string>({first.Expression}, {second.Expression}, {Literal(output)}),");
             }
-
             builder.AppendLine("                    },");
             builder.AppendLine("                    behaviorMappings: new BehaviorMappingProfile[]");
             builder.AppendLine("                    {");
@@ -144,12 +144,10 @@ internal static class ProfileCompiler
         builder.AppendLine($"            startupMode: {Literal(startupMode)},");
         builder.AppendLine("            hotkeys: new HotkeyBinding[]");
         builder.AppendLine("            {");
-
         if (root.TryGetProperty("hotkeys", out var hotkeysElement))
         {
             if (hotkeysElement.ValueKind != JsonValueKind.Array)
                 throw new InvalidDataException("hotkeys must be an array.");
-
             foreach (var item in hotkeysElement.EnumerateArray())
             {
                 if (item.ValueKind != JsonValueKind.Object)
@@ -161,7 +159,11 @@ internal static class ProfileCompiler
                 builder.AppendLine($"                new HotkeyBinding({Literal(trigger)}, {Literal(action)}),");
             }
         }
-
+        builder.AppendLine("            },");
+        builder.AppendLine("            behaviorDefinitions: new UserBehaviorDefinitionProfile[]");
+        builder.AppendLine("            {");
+        if (hasUserBehaviors)
+            EmitUserBehaviorDefinitions(builder, userBehaviorRoot, "                ");
         builder.AppendLine("            });");
         builder.AppendLine();
         builder.AppendLine($"        return new IKeydConfiguration(profile, InputMode.{startupModeCode}, SKeymap, KKeymap);");
@@ -171,7 +173,6 @@ internal static class ProfileCompiler
         EmitCompiledKeymapFactory(builder, "S", singleRoot, chordRoot);
         builder.AppendLine();
         EmitCompiledKeymapFactory(builder, "K", singleRoot, chordRoot);
-
         builder.AppendLine("}");
         return builder.ToString();
     }
@@ -192,37 +193,19 @@ internal static class ProfileCompiler
             var key = ParseKey(item.Name, $"behaviors.{mode}");
             if (item.Value.ValueKind != JsonValueKind.Object)
                 throw new InvalidDataException($"behaviors.{mode}.{item.Name} must be an object.");
-
             var behaviorName = item.Value.GetProperty("name").GetString()
                 ?? throw new InvalidDataException($"behaviors.{mode}.{item.Name}.name must be a string.");
-            if (!item.Value.TryGetProperty("arguments", out var argumentsElement) ||
-                argumentsElement.ValueKind != JsonValueKind.Array)
-            {
+            if (!item.Value.TryGetProperty("arguments", out var argumentsElement) || argumentsElement.ValueKind != JsonValueKind.Array)
                 throw new InvalidDataException($"behaviors.{mode}.{item.Name}.arguments must be an array.");
-            }
 
-            var arguments = new List<string>();
-            foreach (var argument in argumentsElement.EnumerateArray())
-            {
-                if (argument.ValueKind != JsonValueKind.String)
-                    throw new InvalidDataException($"behaviors.{mode}.{item.Name}.arguments must contain strings.");
-                arguments.Add(argument.GetString()!);
-            }
-
+            var arguments = ReadStringArray(argumentsElement, $"behaviors.{mode}.{item.Name}.arguments");
             var options = new List<KeyValuePair<string, string>>();
             if (item.Value.TryGetProperty("options", out var optionsElement))
             {
                 if (optionsElement.ValueKind != JsonValueKind.Object)
                     throw new InvalidDataException($"behaviors.{mode}.{item.Name}.options must be an object.");
-
                 foreach (var option in optionsElement.EnumerateObject())
-                {
-                    options.Add(new KeyValuePair<string, string>(
-                        option.Name,
-                        ReadBehaviorOptionValue(
-                            option.Value,
-                            $"behaviors.{mode}.{item.Name}.options.{option.Name}")));
-                }
+                    options.Add(new(option.Name, ReadBehaviorOptionValue(option.Value, $"behaviors.{mode}.{item.Name}.options.{option.Name}")));
             }
 
             builder.AppendLine($"                        new BehaviorMappingProfile({key.Expression}, new BehaviorInvocationProfile({Literal(behaviorName)}, new string[]");
@@ -237,52 +220,139 @@ internal static class ProfileCompiler
         }
     }
 
-    private static void EmitCompiledKeymapFactory(
-        StringBuilder builder,
-        string mode,
-        JsonElement singleRoot,
-        JsonElement chordRoot)
+    private static void EmitUserBehaviorDefinitions(StringBuilder builder, JsonElement root, string indent)
+    {
+        foreach (var item in root.EnumerateObject())
+        {
+            if (item.Value.ValueKind != JsonValueKind.Object)
+                throw new InvalidDataException($"behaviorDefinitions.{item.Name} must be an object.");
+            var definition = item.Value;
+            if (!definition.TryGetProperty("parameters", out var parametersElement) || parametersElement.ValueKind != JsonValueKind.Array)
+                throw new InvalidDataException($"behaviorDefinitions.{item.Name}.parameters must be an array.");
+            var parameters = ReadStringArray(parametersElement, $"behaviorDefinitions.{item.Name}.parameters");
+
+            builder.AppendLine($"{indent}new UserBehaviorDefinitionProfile(");
+            builder.AppendLine($"{indent}    {Literal(item.Name)},");
+            builder.AppendLine($"{indent}    new string[]");
+            builder.AppendLine($"{indent}    {{");
+            foreach (var parameter in parameters)
+                builder.AppendLine($"{indent}        {Literal(parameter)},");
+            builder.AppendLine($"{indent}    }},");
+            builder.AppendLine($"{indent}    new UserBehaviorLocalProfile[]");
+            builder.AppendLine($"{indent}    {{");
+            if (definition.TryGetProperty("locals", out var localsElement))
+            {
+                if (localsElement.ValueKind != JsonValueKind.Object)
+                    throw new InvalidDataException($"behaviorDefinitions.{item.Name}.locals must be an object.");
+                foreach (var local in localsElement.EnumerateObject())
+                {
+                    if (local.Value.ValueKind is not (JsonValueKind.True or JsonValueKind.False))
+                        throw new InvalidDataException($"behaviorDefinitions.{item.Name}.locals.{local.Name} must be boolean.");
+                    builder.AppendLine($"{indent}        new UserBehaviorLocalProfile({Literal(local.Name)}, {(local.Value.GetBoolean() ? "true" : "false")}),");
+                }
+            }
+            builder.AppendLine($"{indent}    }},");
+            builder.AppendLine($"{indent}    new UserBehaviorHandlerProfile[]");
+            builder.AppendLine($"{indent}    {{");
+            if (definition.TryGetProperty("handlers", out var handlersElement))
+            {
+                if (handlersElement.ValueKind != JsonValueKind.Object)
+                    throw new InvalidDataException($"behaviorDefinitions.{item.Name}.handlers must be an object.");
+                foreach (var handler in handlersElement.EnumerateObject())
+                {
+                    if (handler.Value.ValueKind != JsonValueKind.Object)
+                        throw new InvalidDataException($"behaviorDefinitions.{item.Name}.handlers.{handler.Name} must be an object.");
+                    var handlerParameters = handler.Value.TryGetProperty("parameters", out var handlerParamsElement)
+                        ? ReadStringArray(handlerParamsElement, $"behaviorDefinitions.{item.Name}.handlers.{handler.Name}.parameters")
+                        : [];
+                    if (!handler.Value.TryGetProperty("statements", out var statementsElement) || statementsElement.ValueKind != JsonValueKind.Array)
+                        throw new InvalidDataException($"behaviorDefinitions.{item.Name}.handlers.{handler.Name}.statements must be an array.");
+
+                    builder.AppendLine($"{indent}        new UserBehaviorHandlerProfile(");
+                    builder.AppendLine($"{indent}            {Literal(handler.Name)},");
+                    builder.AppendLine($"{indent}            new string[] {{ {string.Join(", ", handlerParameters.Select(Literal))} }},");
+                    builder.AppendLine($"{indent}            new UserBehaviorStatementProfile[]");
+                    builder.AppendLine($"{indent}            {{");
+                    EmitStatements(builder, statementsElement, indent + "                ", 0);
+                    builder.AppendLine($"{indent}            }}),");
+                }
+            }
+            builder.AppendLine($"{indent}    }}),");
+        }
+    }
+
+    private static void EmitStatements(StringBuilder builder, JsonElement statements, string indent, int depth)
+    {
+        if (depth > MaxBehaviorStatementDepth)
+            throw new InvalidDataException("User behavior statement nesting exceeds the supported limit.");
+        foreach (var statement in statements.EnumerateArray())
+        {
+            if (statement.ValueKind != JsonValueKind.Object)
+                throw new InvalidDataException("A user behavior statement must be an object.");
+            var op = statement.GetProperty("op").GetString()
+                ?? throw new InvalidDataException("User behavior statement op must be a string.");
+            var target = statement.TryGetProperty("target", out var targetElement) ? targetElement.GetString() : null;
+            var value = statement.TryGetProperty("value", out var valueElement) ? valueElement.GetString() : null;
+            var condition = statement.TryGetProperty("condition", out var conditionElement) ? conditionElement.GetString() : null;
+
+            builder.AppendLine($"{indent}new UserBehaviorStatementProfile(");
+            builder.AppendLine($"{indent}    op: {Literal(op)},");
+            builder.AppendLine($"{indent}    target: {NullableLiteral(target)},");
+            builder.AppendLine($"{indent}    value: {NullableLiteral(value)},");
+            builder.AppendLine($"{indent}    condition: {NullableLiteral(condition)},");
+            builder.AppendLine($"{indent}    thenStatements: new UserBehaviorStatementProfile[]");
+            builder.AppendLine($"{indent}    {{");
+            if (statement.TryGetProperty("then", out var thenElement))
+            {
+                if (thenElement.ValueKind != JsonValueKind.Array)
+                    throw new InvalidDataException("User behavior statement then must be an array.");
+                EmitStatements(builder, thenElement, indent + "        ", depth + 1);
+            }
+            builder.AppendLine($"{indent}    }},");
+            builder.AppendLine($"{indent}    elseStatements: new UserBehaviorStatementProfile[]");
+            builder.AppendLine($"{indent}    {{");
+            if (statement.TryGetProperty("else", out var elseElement))
+            {
+                if (elseElement.ValueKind != JsonValueKind.Array)
+                    throw new InvalidDataException("User behavior statement else must be an array.");
+                EmitStatements(builder, elseElement, indent + "        ", depth + 1);
+            }
+            builder.AppendLine($"{indent}    }}),");
+        }
+    }
+
+    private static void EmitCompiledKeymapFactory(StringBuilder builder, string mode, JsonElement singleRoot, JsonElement chordRoot)
     {
         var (singlesElement, chordsElement) = GetModeElements(singleRoot, chordRoot, mode);
-
         builder.AppendLine($"    private static Keymap<string> Create{mode}Keymap()");
         builder.AppendLine("    {");
         builder.AppendLine("        var single = new KeymapSlot<string>[Keymap<string>.CompactSingleSlotCount];");
-
         foreach (var item in singlesElement.EnumerateObject())
         {
             var key = ParseKey(item.Name, $"singleStroke.{mode}");
             var output = item.Value.GetString() ?? string.Empty;
             builder.AppendLine($"        single[{key.Code - 1}] = new KeymapSlot<string>({Literal(output)});");
         }
-
         builder.AppendLine("        var chords = new KeymapSlot<string>[Keymap<string>.CompactChordSlotCount];");
         var emittedChordIndices = new HashSet<int>();
         foreach (var item in chordsElement.EnumerateArray())
         {
             if (item.ValueKind != JsonValueKind.Array || item.GetArrayLength() != 3)
                 throw new InvalidDataException($"A chords.{mode} entry must contain [first, second, output].");
-
             var firstName = item[0].GetString() ?? throw new InvalidDataException("Chord first key is missing.");
             var secondName = item[1].GetString() ?? throw new InvalidDataException("Chord second key is missing.");
             var output = item[2].GetString() ?? string.Empty;
             var first = ParseKey(firstName, $"chords.{mode}");
             var second = ParseKey(secondName, $"chords.{mode}");
             var index = GetCompactChordIndex(first.Code, second.Code);
-
-            // Legacy behavior is first declaration wins for duplicate unordered chords.
             if (emittedChordIndices.Add(index))
                 builder.AppendLine($"        chords[{index}] = new KeymapSlot<string>({Literal(output)});");
         }
-
         builder.AppendLine("        return Keymap<string>.FromCompiledTables(single, chords);");
         builder.AppendLine("    }");
     }
 
-    private static (JsonElement Singles, JsonElement Chords) GetModeElements(
-        JsonElement singleRoot,
-        JsonElement chordRoot,
-        string mode)
+    private static (JsonElement Singles, JsonElement Chords) GetModeElements(JsonElement singleRoot, JsonElement chordRoot, string mode)
     {
         if (!TryGetPropertyIgnoreCase(singleRoot, mode, out var singlesElement))
             throw new InvalidDataException($"singleStroke.{mode} is missing from the profile.");
@@ -293,6 +363,20 @@ internal static class ProfileCompiler
         if (chordsElement.ValueKind != JsonValueKind.Array)
             throw new InvalidDataException($"chords.{mode} must be an array.");
         return (singlesElement, chordsElement);
+    }
+
+    private static IReadOnlyList<string> ReadStringArray(JsonElement element, string location)
+    {
+        if (element.ValueKind != JsonValueKind.Array)
+            throw new InvalidDataException($"{location} must be an array.");
+        var result = new List<string>();
+        foreach (var item in element.EnumerateArray())
+        {
+            if (item.ValueKind != JsonValueKind.String)
+                throw new InvalidDataException($"{location} must contain strings.");
+            result.Add(item.GetString()!);
+        }
+        return result;
     }
 
     private static void AddDistinctModeNames(List<string> names, JsonElement root)
@@ -314,7 +398,6 @@ internal static class ProfileCompiler
                 return true;
             }
         }
-
         value = default;
         return false;
     }
@@ -333,11 +416,9 @@ internal static class ProfileCompiler
     {
         if (string.IsNullOrWhiteSpace(key))
             throw new InvalidDataException($"{location} contains an empty key name.");
-
         var normalized = key.Trim().ToUpperInvariant();
         string? token = null;
         var code = 0;
-
         if (normalized.Length == 1 && normalized[0] is >= 'A' and <= 'Z')
         {
             token = normalized;
@@ -348,9 +429,7 @@ internal static class ProfileCompiler
             token = $"Digit{normalized}";
             code = 27 + normalized[0] - '0';
         }
-        else if (normalized.Length is 2 or 3 && normalized[0] == 'F' &&
-                 int.TryParse(normalized.AsSpan(1), out var functionNumber) &&
-                 functionNumber is >= 1 and <= 12)
+        else if (normalized.Length is 2 or 3 && normalized[0] == 'F' && int.TryParse(normalized.AsSpan(1), out var functionNumber) && functionNumber is >= 1 and <= 12)
         {
             token = normalized;
             code = 37 + functionNumber - 1;
@@ -368,10 +447,8 @@ internal static class ProfileCompiler
                 _ => (null, 0)
             };
         }
-
         if (token is null || code is < 1 or > CompactKeyCount)
             throw new InvalidDataException($"{location} contains unsupported key '{key}' for the compiled Windows profile.");
-
         return new KeyInfo($"new KeyId(KeyCode.{token})", code);
     }
 
@@ -381,10 +458,11 @@ internal static class ProfileCompiler
         var secondIndex = secondCode - 1;
         if (firstIndex > secondIndex)
             (firstIndex, secondIndex) = (secondIndex, firstIndex);
-
         var rowOffset = firstIndex * CompactKeyCount - firstIndex * (firstIndex - 1) / 2;
         return rowOffset + secondIndex - firstIndex;
     }
+
+    private static string NullableLiteral(string? value) => value is null ? "null" : Literal(value);
 
     private static string Literal(string value)
     {
