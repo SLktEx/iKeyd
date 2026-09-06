@@ -45,10 +45,11 @@ The runner:
 3. runs the real-IME `LegacyDifferentialE2E` comparison,
 4. runs a safe real-Win32 backend E2E against disposable test windows and restores the original pointer position,
 5. attempts a safe text-clipboard service E2E with exact original-content restoration,
-6. walks each manual verification group and records pass/fail/skip plus notes,
-7. writes `TestResults/real-windows/verification-report.json`.
+6. runs the real Windows low-level-hook / `SendInput` E2E and records its TRX,
+7. walks each manual verification group and records pass/fail/skip plus notes,
+8. writes `TestResults/real-windows/verification-report.json`.
 
-Without `-Interactive`, manual checks remain `pending`; this is useful for collecting environment + automated evidence first. `-SkipDifferential`, `-SkipBackendE2E`, and `-SkipClipboardE2E` are available only when deliberately collecting partial evidence. A complete report requires the differential and backend E2E to pass and the clipboard E2E to have been attempted safely.
+Without `-Interactive`, manual checks remain `pending`; this is useful for collecting environment + automated evidence first. `-SkipDifferential`, `-SkipBackendE2E`, `-SkipClipboardE2E`, and `-SkipPhysicalInputE2E` are available only when deliberately collecting partial evidence. A complete report requires the differential, backend E2E, and hook/SendInput E2E to pass and the clipboard E2E to have been attempted safely.
 
 ## Automated real-Win32 backend E2E
 
@@ -62,6 +63,14 @@ Without `-Interactive`, manual checks remain `pending`; this is useful for colle
 - non-text/custom clipboard: make **no clipboard mutation** and record the automated check as `skipped`.
 
 The runner stores this as `automated.clipboardCompatibility`. A complete report requires the clipboard E2E to be attempted (`pass` or safe `skipped`); `not-run` and `fail` are not accepted. A safe skip does not satisfy the manual `clipboard-ui` group: picker selection, capture/paste behavior and real target-application interaction must still be marked `pass` separately.
+
+## Automated hook / SendInput E2E
+
+The runner executes the existing `WindowsE2E` test category and stores the result as `automated.physicalInputCompatibility` with a TRX under `TestResults/real-windows/physical-input`.
+
+This automated evidence exercises the real Windows `WH_KEYBOARD_LL` path with externally injected input, verifies event down/up ordering through the hook/core path, and confirms iKeyd-marked `SendInput` output is not recaptured by the application handler. A complete report requires this automated check to pass.
+
+This does **not** replace the supplemental manual physical-input check. The operator must still verify actual hardware keyboard input, held keys, repeat, fast typing and observable down/up ordering on the real machine.
 
 ## Input diagnostics for #130 / #131 / #132
 
@@ -107,6 +116,7 @@ Completion requires all of the following:
 - the real-IME legacy differential passed,
 - the real-Win32 backend E2E passed,
 - the clipboard E2E was attempted safely (`pass` or protected `skipped`),
+- the Windows hook/SendInput E2E passed,
 - Japanese IME was detected in the recorded user language configuration,
 - the production legacy executable hash matches the pin,
 - the tested iKeyd executable hash is present,
@@ -116,6 +126,6 @@ A failing check must include notes. Turn every reproducible mismatch into a mini
 
 ## Safety / cleanup
 
-The automated differential uses a dedicated input sink. The backend E2E uses only disposable windows and restores the pointer position. The clipboard E2E mutates only empty/text clipboard state and restores the original text; it refuses to touch non-text/custom clipboard contents. Manual groups can intentionally change clipboard contents, pointer position, CapsLock, media state and window state. Restore those states after each group. Prefer disposable test windows and non-critical media/clipboard content.
+The automated differential uses a dedicated input sink. The backend E2E uses only disposable windows and restores the pointer position. The clipboard E2E mutates only empty/text clipboard state and restores the original text; it refuses to touch non-text/custom clipboard contents. The hook/SendInput E2E uses the reserved F24 key with private injection markers and suppresses those test events. Manual groups can intentionally change clipboard contents, pointer position, CapsLock, media state and window state. Restore those states after each group. Prefer disposable test windows and non-critical media/clipboard content.
 
 Do not mark a group `pass` from deterministic CI evidence alone; the purpose of this plan is the final real-machine observation.
