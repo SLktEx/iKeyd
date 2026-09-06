@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using iKeyd.Core.Chords;
 
@@ -23,8 +24,8 @@ internal static class KeyBehaviorProfileJson
                 {
                     var key = ParseCompactKey(bindingProperty.Name, $"layers.{layerProperty.Name}");
                     var action = ParseAction(bindingProperty.Value, $"layers.{layerProperty.Name}.{bindingProperty.Name}");
-                    if (action.Kind is not (KeyBehaviorActionKind.Key or KeyBehaviorActionKind.Text))
-                        throw new InvalidDataException($"layers.{layerProperty.Name}.{bindingProperty.Name} must emit key or text.");
+                    if (action.IsHoldAction)
+                        throw new InvalidDataException($"layers.{layerProperty.Name}.{bindingProperty.Name} must emit an output action, not layer/modifier.");
                     bindings.Add(new KeyBehaviorLayerBinding(key, action));
                 }
 
@@ -159,8 +160,33 @@ internal static class KeyBehaviorProfileJson
             "text" => KeyBehaviorAction.Text(value),
             "layer" => KeyBehaviorAction.Layer(value),
             "modifier" => KeyBehaviorAction.Modifier(ParseModifier(value, location)),
+            "mouse_move" => ParseMouseMove(value, location),
+            "mouse_click" => KeyBehaviorAction.MouseClick(ParseChoice(value, location, "Left", "Right", "Middle")),
+            "scroll" => KeyBehaviorAction.Scroll(ParseChoice(value, location, "Up", "Down")),
+            "media" => KeyBehaviorAction.Media(ParseChoice(value, location, "VolumeUp", "VolumeMute", "VolumeDown", "NextTrack", "PlayPause", "PreviousTrack")),
+            "window" => KeyBehaviorAction.Window(ParseChoice(value, location,
+                "Minimize", "ToggleMaximize", "LeftHalf", "RightHalf", "TopHalf", "BottomHalf",
+                "ToggleTopMost", "OpacityUp", "OpacityDown", "ToggleCaption", "ActivateBottomSameClass")),
             _ => throw new InvalidDataException($"{location}.kind '{kindText}' is unsupported.")
         };
+    }
+
+    private static KeyBehaviorAction ParseMouseMove(string value, string location)
+    {
+        var parts = value.Split(',', StringSplitOptions.TrimEntries);
+        if (parts.Length != 2 ||
+            !int.TryParse(parts[0], NumberStyles.Integer, CultureInfo.InvariantCulture, out var x) ||
+            !int.TryParse(parts[1], NumberStyles.Integer, CultureInfo.InvariantCulture, out var y))
+            throw new InvalidDataException($"{location} mouse_move value must be 'deltaX,deltaY'.");
+        return KeyBehaviorAction.MouseMove(x, y);
+    }
+
+    private static string ParseChoice(string value, string location, params string[] allowed)
+    {
+        foreach (var choice in allowed)
+            if (string.Equals(value, choice, StringComparison.OrdinalIgnoreCase))
+                return choice;
+        throw new InvalidDataException($"{location} contains unsupported value '{value}'. Allowed: {string.Join(", ", allowed)}.");
     }
 
     private static KeyBehaviorModifier ParseModifier(string value, string location)
@@ -176,8 +202,22 @@ internal static class KeyBehaviorProfileJson
     private static void WriteAction(KeyBehaviorAction action, Utf8JsonWriter writer)
     {
         writer.WriteStartObject();
-        writer.WriteString("kind", action.Kind.ToString().ToLowerInvariant());
+        writer.WriteString("kind", ActionKindName(action.Kind));
         writer.WriteString("value", action.Value);
         writer.WriteEndObject();
     }
+
+    private static string ActionKindName(KeyBehaviorActionKind kind) => kind switch
+    {
+        KeyBehaviorActionKind.Key => "key",
+        KeyBehaviorActionKind.Text => "text",
+        KeyBehaviorActionKind.Layer => "layer",
+        KeyBehaviorActionKind.Modifier => "modifier",
+        KeyBehaviorActionKind.MouseMove => "mouse_move",
+        KeyBehaviorActionKind.MouseClick => "mouse_click",
+        KeyBehaviorActionKind.Scroll => "scroll",
+        KeyBehaviorActionKind.Media => "media",
+        KeyBehaviorActionKind.Window => "window",
+        _ => throw new ArgumentOutOfRangeException(nameof(kind))
+    };
 }
