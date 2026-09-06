@@ -8,37 +8,29 @@ on:
       - tests/legacy-binary/hotkeySKG.exe.gpg
       - tests/legacy-binary/hotkeySKG.ahk.gpg.asc
       - .github/workflows/legacy-differential.yml
+      - src/iKeyd.Core/Chords/**
+      - src/iKeyd.Core/Input/**
       - src/iKeyd.App/IKeydRuntimeHandler.cs
       - src/iKeyd.App/LegacySendOutput.cs
       - src/iKeyd.App/WindowsKeyMap.cs
       - src/iKeyd.Profiles.HotkeySkg/**
+      - src/iKeyd.Windows/Input/**
       - tests/iKeyd.Compatibility.Tests/Scenarios/**
-      - tests/iKeyd.Windows.Tests/HostedTModeLegacyRunner.cs
-      - tests/iKeyd.Windows.Tests/HostedLegacyDifferentialTests.cs
-      - tests/iKeyd.Windows.Tests/HostedAutoHotkeySourceRunner.cs
-      - tests/iKeyd.Windows.Tests/HostedAutoHotkeySourceDifferentialTests.cs
-      - tests/iKeyd.Windows.Tests/HotkeySkgRuntimeScenarioRunner.cs
-      - tests/iKeyd.Windows.Tests/RuntimeEventCaptureRunner.cs
-      - tests/iKeyd.Windows.Tests/RuntimeInputInjectionRunner.cs
-      - tests/iKeyd.Windows.Tests/ScenarioKeyboard.cs
+      - tests/iKeyd.Windows.Tests/**
   pull_request:
     paths:
       - tests/legacy-binary/hotkeySKG.exe.gpg
       - tests/legacy-binary/hotkeySKG.ahk.gpg.asc
       - .github/workflows/legacy-differential.yml
+      - src/iKeyd.Core/Chords/**
+      - src/iKeyd.Core/Input/**
       - src/iKeyd.App/IKeydRuntimeHandler.cs
       - src/iKeyd.App/LegacySendOutput.cs
       - src/iKeyd.App/WindowsKeyMap.cs
       - src/iKeyd.Profiles.HotkeySkg/**
+      - src/iKeyd.Windows/Input/**
       - tests/iKeyd.Compatibility.Tests/Scenarios/**
-      - tests/iKeyd.Windows.Tests/HostedTModeLegacyRunner.cs
-      - tests/iKeyd.Windows.Tests/HostedLegacyDifferentialTests.cs
-      - tests/iKeyd.Windows.Tests/HostedAutoHotkeySourceRunner.cs
-      - tests/iKeyd.Windows.Tests/HostedAutoHotkeySourceDifferentialTests.cs
-      - tests/iKeyd.Windows.Tests/HotkeySkgRuntimeScenarioRunner.cs
-      - tests/iKeyd.Windows.Tests/RuntimeEventCaptureRunner.cs
-      - tests/iKeyd.Windows.Tests/RuntimeInputInjectionRunner.cs
-      - tests/iKeyd.Windows.Tests/ScenarioKeyboard.cs
+      - tests/iKeyd.Windows.Tests/**
 
 permissions:
   contents: read
