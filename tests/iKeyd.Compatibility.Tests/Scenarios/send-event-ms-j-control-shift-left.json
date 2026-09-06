@@ -1,6 +1,6 @@
 {
   "id": "send-event-ms-j-control-shift-left",
-  "description": "M then Space plus J emits Control+Shift+Left with reverse modifier release order.",
+  "description": "M then Space plus J emits legacy left Control+Shift+Left and releases modifiers in press order.",
   "initialState": { "mode": "S", "ime": "off", "layers": ["M", "S"] },
   "input": [
     { "atMs": 10, "kind": "keyDown", "key": "J" },
@@ -8,12 +8,12 @@
   ],
   "expected": {
     "events": [
-      { "kind": "keyDown", "key": "Control" },
-      { "kind": "keyDown", "key": "Shift" },
+      { "kind": "keyDown", "key": "VK_A2" },
+      { "kind": "keyDown", "key": "VK_A0" },
       { "kind": "keyDown", "key": "Left" },
       { "kind": "keyUp", "key": "Left" },
-      { "kind": "keyUp", "key": "Shift" },
-      { "kind": "keyUp", "key": "Control" }
+      { "kind": "keyUp", "key": "VK_A2" },
+      { "kind": "keyUp", "key": "VK_A0" }
     ]
   },
   "tags": ["legacy", "send", "send-event-diff", "hosted-windows"]
