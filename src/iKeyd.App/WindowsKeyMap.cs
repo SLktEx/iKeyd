@@ -181,7 +181,11 @@ internal static class WindowsKeyMap
                 return false;
         }
 
-        key = new KeyboardKey(virtualKey, scanCode, IsExtended(virtualKey));
+        key = new KeyboardKey(
+            virtualKey,
+            scanCode,
+            IsExtended(virtualKey),
+            PreserveVirtualKeyWithScanCode: scanCode != 0);
         return true;
     }
 
