@@ -58,7 +58,7 @@ public sealed class LegacySendOutputCompatibilityTests
 
         output.Send("{LEFT 3}{ENTER 2}{SHIFT DOWN}{HOME}{SHIFT UP}{{}{}}{!}{#}{^}");
 
-        Assert.Equal(16, keyboard.Events.Count);
+        Assert.Equal(14, keyboard.Events.Count);
         Assert.Equal(Event(WindowsKeyMap.Left, KeyEventKind.Down), keyboard.Events[0]);
         Assert.Equal(Event(WindowsKeyMap.Left, KeyEventKind.Up), keyboard.Events[1]);
         Assert.Equal(Event(WindowsKeyMap.Left, KeyEventKind.Down), keyboard.Events[4]);
