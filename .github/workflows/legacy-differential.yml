@@ -17,6 +17,9 @@ on:
       - tests/iKeyd.Compatibility.Tests/Scenarios/**
       - tests/iKeyd.Compatibility.Tests/ScenarioInventoryLinks.json
       - tests/iKeyd.Windows.Tests/LegacyDifferentialComparison.cs
+      - tests/iKeyd.Windows.Tests/LegacySendEventScenarioRunner.cs
+      - tests/iKeyd.Windows.Tests/LegacySendEventScenarioRunnerLayerTests.cs
+      - tests/iKeyd.Windows.Tests/IKeydRuntimeScenarioRunner.cs
       - tests/iKeyd.Windows.Tests/HostedTModeLegacyRunner.cs
       - tests/iKeyd.Windows.Tests/HostedLegacyDifferentialTests.cs
       - tests/iKeyd.Windows.Tests/HostedAutoHotkeySourceRunner.cs
@@ -208,6 +211,7 @@ jobs:
             --filter 'Category=HostedLegacyDifferentialE2E'
 
       - name: Run AHK v1 source differential
+        if: ${{ !cancelled() }}
         shell: powershell
         env:
           IKEYD_AHK_V1_EXE: ${{ steps.ahk.outputs.path }}
