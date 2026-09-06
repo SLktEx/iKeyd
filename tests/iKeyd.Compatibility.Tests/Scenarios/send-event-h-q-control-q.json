@@ -14,5 +14,8 @@
       { "kind": "keyUp", "key": "VK_A2" }
     ]
   },
-  "tags": ["legacy", "send", "send-event-diff", "hosted-windows"]
+  "tags": ["legacy", "send", "send-event-diff", "hosted-windows"],
+  "inventoryIds": ["legacy-send-e796128b41"],
+  "requiredEnvironment": ["hosted-windows"],
+  "oracleTargets": ["compiled-exe", "ahk-source", "ikeyd-runtime"]
 }
