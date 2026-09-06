@@ -63,3 +63,4 @@ jobs:
           git add -A
           git commit -m "Merge latest main into hotkeySKG compatibility"
           git push origin HEAD:issue-46-hotkeyskg-full-compat
+# rerun: semantic patch is idempotent after Git auto-merge
