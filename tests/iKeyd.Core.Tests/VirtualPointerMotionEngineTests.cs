@@ -27,6 +27,25 @@ public sealed class VirtualPointerMotionEngineTests
     }
 
     [Fact]
+    public void Diagonal_and_cardinal_have_the_same_transient_response_magnitude()
+    {
+        var cardinal = new VirtualPointerMotionEngine();
+        cardinal.SetDirection(1, 0);
+        var cardinalDelta = cardinal.Step(0.008, 100_000);
+
+        var diagonal = new VirtualPointerMotionEngine();
+        diagonal.SetDirection(1, 1);
+        var diagonalDelta = diagonal.Step(0.008, 100_000);
+
+        var cardinalMagnitude = Math.Sqrt(
+            cardinalDelta.X * cardinalDelta.X + cardinalDelta.Y * cardinalDelta.Y);
+        var diagonalMagnitude = Math.Sqrt(
+            diagonalDelta.X * diagonalDelta.X + diagonalDelta.Y * diagonalDelta.Y);
+
+        Assert.InRange(Math.Abs(cardinalMagnitude - diagonalMagnitude), 0, 2);
+    }
+
+    [Fact]
     public void Socd_zero_target_stops_the_axis_instead_of_choosing_a_side()
     {
         var engine = ImmediateLinear();
