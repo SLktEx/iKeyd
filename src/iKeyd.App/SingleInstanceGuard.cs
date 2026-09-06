@@ -13,7 +13,9 @@ internal sealed class SingleInstanceGuard : IDisposable
         _ownsMutex = true;
     }
 
-    internal static SingleInstanceGuard? TryAcquire(string mutexName = DefaultMutexName)
+    internal static SingleInstanceGuard? TryAcquire() => TryAcquire(DefaultMutexName);
+
+    internal static SingleInstanceGuard? TryAcquire(string mutexName)
     {
         if (string.IsNullOrWhiteSpace(mutexName))
             throw new ArgumentException("A mutex name is required.", nameof(mutexName));
