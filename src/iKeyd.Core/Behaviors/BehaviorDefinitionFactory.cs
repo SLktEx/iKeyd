@@ -68,6 +68,10 @@ public static class BehaviorDefinitionFactory
             return CreateMomentaryLayer(invocation);
         if (string.Equals(invocation.Name, "MOD", StringComparison.OrdinalIgnoreCase))
             return CreateModifierHold(invocation);
+        if (string.Equals(invocation.Name, "TG", StringComparison.OrdinalIgnoreCase))
+            return CreateToggleLayer(invocation);
+        if (string.Equals(invocation.Name, "TO", StringComparison.OrdinalIgnoreCase))
+            return CreateSetLayer(invocation);
         if (string.Equals(invocation.Name, "UNICODE", StringComparison.OrdinalIgnoreCase))
             return CreateUnicode(invocation);
         if (string.Equals(invocation.Name, "TEXT", StringComparison.OrdinalIgnoreCase))
@@ -174,6 +178,20 @@ public static class BehaviorDefinitionFactory
         RequireNoOptions(invocation);
         RequireCount(invocation, 1, "MOD(modifier)");
         return StandardBehaviors.MOD(NormalizeModifier(invocation.Arguments[0]));
+    }
+
+    private static BehaviorDefinition CreateToggleLayer(BehaviorInvocationProfile invocation)
+    {
+        RequireNoOptions(invocation);
+        RequireCount(invocation, 1, "TG(layer)");
+        return StandardBehaviors.TG(invocation.Arguments[0]);
+    }
+
+    private static BehaviorDefinition CreateSetLayer(BehaviorInvocationProfile invocation)
+    {
+        RequireNoOptions(invocation);
+        RequireCount(invocation, 1, "TO(layer)");
+        return StandardBehaviors.TO(invocation.Arguments[0]);
     }
 
     private static BehaviorDefinition CreateUnicode(BehaviorInvocationProfile invocation)
