@@ -7,6 +7,7 @@
     <Nullable>enable</Nullable>
     <AssemblyName>iKeyd</AssemblyName>
     <RootNamespace>iKeyd.App</RootNamespace>
+    <ApplicationIcon>Assets\ikeyd.ico</ApplicationIcon>
     <ProfileSource>$(MSBuildProjectDirectory)\..\..\config\hotkeySKG.behavior.json</ProfileSource>
     <GeneratedProfileSource>$(MSBuildProjectDirectory)\obj\$(Configuration)\$(TargetFramework)\GeneratedProfile.g.cs</GeneratedProfileSource>
     <GeneratedMouseProfileSource>$(MSBuildProjectDirectory)\obj\$(Configuration)\$(TargetFramework)\GeneratedMouseProfile.g.cs</GeneratedMouseProfileSource>
