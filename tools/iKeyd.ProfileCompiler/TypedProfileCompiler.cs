@@ -42,7 +42,8 @@ internal static class TypedProfileCompiler
         builder.AppendLine("using iKeyd.Core.Chords;");
         builder.AppendLine("using iKeyd.Core.Configuration;");
         builder.AppendLine("using iKeyd.Core.Keymaps;");
-        builder.AppendLine("using iKeyd.Core.State;");
+        if (profile.State.Count != 0)
+            builder.AppendLine("using iKeyd.Core.State;");
         builder.AppendLine("using iKeyd.Profiles.HotkeySkg.Modes;");
         builder.AppendLine();
         builder.AppendLine("namespace iKeyd.App;");
@@ -81,23 +82,31 @@ internal static class TypedProfileCompiler
         builder.AppendLine($"                images: {BoolLiteral(profile.Clipboard.Images)},");
         builder.AppendLine($"                encryption: {Literal(profile.Clipboard.Encryption)},");
         builder.AppendLine($"                cipher: {Literal(profile.Clipboard.Cipher)},");
-        builder.AppendLine($"                directory: {(profile.Clipboard.Directory is null ? "null" : Literal(profile.Clipboard.Directory))}),");
-        builder.AppendLine("            state: new RuntimeStateProfile(new RuntimeStateFieldProfile[]");
-        builder.AppendLine("            {");
-        foreach (var field in profile.State.Fields)
+
+        if (profile.State.Count == 0)
         {
-            if (field.Type == RuntimeStateType.Bool)
-            {
-                builder.AppendLine(
-                    $"                RuntimeStateFieldProfile.Bool({Literal(field.Name)}, {BoolLiteral(field.InitialBool)}),");
-            }
-            else
-            {
-                builder.AppendLine(
-                    $"                RuntimeStateFieldProfile.String({Literal(field.Name)}, {Literal(field.InitialString ?? string.Empty)}),");
-            }
+            builder.AppendLine($"                directory: {(profile.Clipboard.Directory is null ? "null" : Literal(profile.Clipboard.Directory))}));");
         }
-        builder.AppendLine("            }));");
+        else
+        {
+            builder.AppendLine($"                directory: {(profile.Clipboard.Directory is null ? "null" : Literal(profile.Clipboard.Directory))}),");
+            builder.AppendLine("            state: new RuntimeStateProfile(new RuntimeStateFieldProfile[]");
+            builder.AppendLine("            {");
+            foreach (var field in profile.State.Fields)
+            {
+                if (field.Type == RuntimeStateType.Bool)
+                {
+                    builder.AppendLine(
+                        $"                RuntimeStateFieldProfile.Bool({Literal(field.Name)}, {BoolLiteral(field.InitialBool)}),");
+                }
+                else
+                {
+                    builder.AppendLine(
+                        $"                RuntimeStateFieldProfile.String({Literal(field.Name)}, {Literal(field.InitialString ?? string.Empty)}),");
+                }
+            }
+            builder.AppendLine("            }));");
+        }
         builder.AppendLine();
         builder.AppendLine($"        return new IKeydConfiguration(profile, InputMode.{startupModeCode}, SKeymap, KKeymap);");
         builder.AppendLine("    }");
