@@ -65,9 +65,15 @@ internal static class ProfileCompiler
         if (!root.TryGetProperty("chords", out var chordRoot) || chordRoot.ValueKind != JsonValueKind.Object)
             throw new InvalidDataException("chords must be an object.");
 
+        var hasBehaviors = root.TryGetProperty("behaviors", out var behaviorRoot);
+        if (hasBehaviors && behaviorRoot.ValueKind != JsonValueKind.Object)
+            throw new InvalidDataException("behaviors must be an object.");
+
         var modeNames = new List<string>();
         AddDistinctModeNames(modeNames, singleRoot);
         AddDistinctModeNames(modeNames, chordRoot);
+        if (hasBehaviors)
+            AddDistinctModeNames(modeNames, behaviorRoot);
 
         if (!modeNames.Any(name => string.Equals(name, "S", StringComparison.OrdinalIgnoreCase)) ||
             !modeNames.Any(name => string.Equals(name, "K", StringComparison.OrdinalIgnoreCase)))
@@ -127,6 +133,10 @@ internal static class ProfileCompiler
                 builder.AppendLine($"                        new ChordMapping<string>({first.Expression}, {second.Expression}, {Literal(output)}),");
             }
 
+            builder.AppendLine("                    },");
+            builder.AppendLine("                    behaviorMappings: new BehaviorMappingProfile[]");
+            builder.AppendLine("                    {");
+            EmitBehaviorMappings(builder, mode, hasBehaviors, behaviorRoot);
             builder.AppendLine("                    }),");
         }
 
@@ -164,6 +174,47 @@ internal static class ProfileCompiler
 
         builder.AppendLine("}");
         return builder.ToString();
+    }
+
+    private static void EmitBehaviorMappings(
+        StringBuilder builder,
+        string mode,
+        bool hasBehaviors,
+        JsonElement behaviorRoot)
+    {
+        if (!hasBehaviors || !TryGetPropertyIgnoreCase(behaviorRoot, mode, out var behaviorsElement))
+            return;
+        if (behaviorsElement.ValueKind != JsonValueKind.Object)
+            throw new InvalidDataException($"behaviors.{mode} must be an object.");
+
+        foreach (var item in behaviorsElement.EnumerateObject())
+        {
+            var key = ParseKey(item.Name, $"behaviors.{mode}");
+            if (item.Value.ValueKind != JsonValueKind.Object)
+                throw new InvalidDataException($"behaviors.{mode}.{item.Name} must be an object.");
+
+            var behaviorName = item.Value.GetProperty("name").GetString()
+                ?? throw new InvalidDataException($"behaviors.{mode}.{item.Name}.name must be a string.");
+            if (!item.Value.TryGetProperty("arguments", out var argumentsElement) ||
+                argumentsElement.ValueKind != JsonValueKind.Array)
+            {
+                throw new InvalidDataException($"behaviors.{mode}.{item.Name}.arguments must be an array.");
+            }
+
+            var arguments = new List<string>();
+            foreach (var argument in argumentsElement.EnumerateArray())
+            {
+                if (argument.ValueKind != JsonValueKind.String)
+                    throw new InvalidDataException($"behaviors.{mode}.{item.Name}.arguments must contain strings.");
+                arguments.Add(argument.GetString()!);
+            }
+
+            builder.AppendLine($"                        new BehaviorMappingProfile({key.Expression}, new BehaviorInvocationProfile({Literal(behaviorName)}, new string[]");
+            builder.AppendLine("                        {");
+            foreach (var argument in arguments)
+                builder.AppendLine($"                            {Literal(argument)},");
+            builder.AppendLine("                        })),");
+        }
     }
 
     private static void EmitCompiledKeymapFactory(
