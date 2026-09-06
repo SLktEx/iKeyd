@@ -97,6 +97,7 @@ public sealed class LegacySendOutputTests
         Assert.Equal("press", entry.Kind);
         Assert.Equal((ushort)0xF3, entry.Key.VirtualKey);
         Assert.Equal((ushort)0x29, entry.Key.ScanCode);
+        Assert.True(entry.Key.PreserveVirtualKeyWithScanCode);
     }
 
     [Fact]
