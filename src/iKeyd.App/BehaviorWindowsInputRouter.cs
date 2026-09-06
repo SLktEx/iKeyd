@@ -29,6 +29,9 @@ internal sealed class BehaviorWindowsInputRouter : IKeyboardEventHandler, IInput
     private readonly List<string> _persistentLayers = [];
     private readonly HashSet<KeyId> _activeBehaviorKeys = [];
     private readonly HashSet<KeyboardKey> _layerMappedKeys = [];
+    private string? _armedOneShotLayer;
+    private string? _consumedOneShotLayer;
+    private KeyboardKey? _oneShotConsumedKey;
     private bool _disposed;
 
     public BehaviorWindowsInputRouter(
@@ -124,11 +127,16 @@ internal sealed class BehaviorWindowsInputRouter : IKeyboardEventHandler, IInput
         _layerMappedKeys.Clear();
         _activeLayers.Clear();
         _persistentLayers.Clear();
+        _armedOneShotLayer = null;
+        _consumedOneShotLayer = null;
+        _oneShotConsumedKey = null;
         _runtimeState.Reset();
     }
 
     private KeyboardDisposition HandleKeyDown(KeyboardEvent keyboardEvent, KeyId keyId)
     {
+        ConsumeArmedOneShot(keyboardEvent.Key);
+
         foreach (var activeRuntime in _behaviorRuntimes.Values)
             ApplyActions(activeRuntime.ObserveKeyDown(keyId, keyboardEvent.TimestampMs).Actions);
 
@@ -151,16 +159,35 @@ internal sealed class BehaviorWindowsInputRouter : IKeyboardEventHandler, IInput
         return _fallback.OnKeyboardEvent(keyboardEvent);
     }
 
+    private void ConsumeArmedOneShot(KeyboardKey key)
+    {
+        if (_armedOneShotLayer is null || _oneShotConsumedKey is not null)
+            return;
+
+        _consumedOneShotLayer = _armedOneShotLayer;
+        _armedOneShotLayer = null;
+        _oneShotConsumedKey = key;
+    }
+
     private bool TryHandleLayeredKeyDown(KeyboardEvent keyboardEvent, KeyId keyId)
     {
         // Layers are transparent overlays. Search the newest momentary activation
-        // first, then persistent selections, then the base behavior map. Base
+        // first, then the one-shot layer consumed by this physical key lifecycle,
+        // then persistent selections and finally the base behavior map. Base
         // ordinary mappings intentionally remain in the legacy fallback so this
         // bridge does not bypass the existing chord/simultaneous-key engine.
         for (var index = _activeLayers.Count - 1; index >= 0; index--)
         {
             if (TryHandleKeymapKeyDown(_activeLayers[index], keyboardEvent, keyId, includeSingles: true))
                 return true;
+        }
+
+        if (_consumedOneShotLayer is not null &&
+            _oneShotConsumedKey is KeyboardKey consumedKey &&
+            consumedKey == keyboardEvent.Key &&
+            TryHandleKeymapKeyDown(_consumedOneShotLayer, keyboardEvent, keyId, includeSingles: true))
+        {
+            return true;
         }
 
         for (var index = _persistentLayers.Count - 1; index >= 0; index--)
@@ -218,6 +245,12 @@ internal sealed class BehaviorWindowsInputRouter : IKeyboardEventHandler, IInput
         if (_layerMappedKeys.Remove(keyboardEvent.Key))
             suppress = true;
 
+        if (_oneShotConsumedKey is KeyboardKey consumedKey && consumedKey == keyboardEvent.Key)
+        {
+            _oneShotConsumedKey = null;
+            _consumedOneShotLayer = null;
+        }
+
         return suppress
             ? KeyboardDisposition.Suppress
             : _fallback.OnKeyboardEvent(keyboardEvent);
@@ -258,6 +291,10 @@ internal sealed class BehaviorWindowsInputRouter : IKeyboardEventHandler, IInput
                 case BehaviorActionKind.LayerSet:
                     _persistentLayers.Clear();
                     _persistentLayers.Add(RequireKnownLayer(action.Name));
+                    break;
+
+                case BehaviorActionKind.LayerOneShot:
+                    _armedOneShotLayer = RequireKnownLayer(action.Name);
                     break;
 
                 case BehaviorActionKind.ModifierDown:
@@ -332,7 +369,7 @@ internal sealed class BehaviorWindowsInputRouter : IKeyboardEventHandler, IInput
             foreach (var mapping in keymap.BehaviorMappings)
             {
                 var helper = mapping.Invocation.Name.ToUpperInvariant();
-                if (helper is not ("LT" or "MO" or "TG" or "TO") ||
+                if (helper is not ("LT" or "MO" or "TG" or "TO" or "OSL") ||
                     mapping.Invocation.Arguments.Count < 1)
                 {
                     continue;
