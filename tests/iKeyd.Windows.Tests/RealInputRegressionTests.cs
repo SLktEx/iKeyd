@@ -92,7 +92,7 @@ public sealed class RealInputRegressionTests
     }
 
     [Theory]
-    [InlineData(false, false, false, 2200.0)]
+    [InlineData(false, false, false, 1000.0)]
     [InlineData(true, false, false, 800.0)]
     [InlineData(false, true, false, 240.0)]
     [InlineData(false, false, true, 4400.0)]
