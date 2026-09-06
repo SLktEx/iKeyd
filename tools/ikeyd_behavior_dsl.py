@@ -88,6 +88,13 @@ def _scan_layouts(base: Any, lines: list[str], path: Path) -> OrderedDict[str, l
     return layouts
 
 
+def _choice(base: Any, path: Path, lineno: int, description: str, arg: str, choices: tuple[str, ...]) -> str:
+    for choice in choices:
+        if arg.casefold() == choice.casefold():
+            return choice
+    raise base.DslError(path, lineno, f"unknown {description} '{arg}'; expected one of: {', '.join(choices)}")
+
+
 def _action(base: Any, path: Path, lineno: int, expression: str, *, allow_hold: bool) -> OrderedDict[str, str]:
     expression = expression.strip().rstrip(";").strip()
     call = re.fullmatch(rf"({base.IDENT})\((.*)\)", expression)
@@ -107,6 +114,26 @@ def _action(base: Any, path: Path, lineno: int, expression: str, *, allow_hold: 
         if not isinstance(value, str):
             raise base.DslError(path, lineno, "text(...) requires a quoted string")
         return OrderedDict(kind="text", value=value)
+    if kind == "mouse_move":
+        parts = [part.strip() for part in arg.split(",")]
+        if len(parts) != 2:
+            raise base.DslError(path, lineno, "mouse_move(...) expects two integer deltas, for example mouse_move(-30, 0)")
+        try:
+            dx, dy = int(parts[0]), int(parts[1])
+        except ValueError as exc:
+            raise base.DslError(path, lineno, "mouse_move(...) expects two integer deltas, for example mouse_move(-30, 0)") from exc
+        return OrderedDict(kind="mouse_move", value=f"{dx},{dy}")
+    if kind == "mouse_click":
+        return OrderedDict(kind="mouse_click", value=_choice(base, path, lineno, "mouse button", arg, ("Left", "Right", "Middle")))
+    if kind == "scroll":
+        return OrderedDict(kind="scroll", value=_choice(base, path, lineno, "scroll direction", arg, ("Up", "Down")))
+    if kind == "media":
+        return OrderedDict(kind="media", value=_choice(base, path, lineno, "media command", arg,
+            ("VolumeUp", "VolumeMute", "VolumeDown", "NextTrack", "PlayPause", "PreviousTrack")))
+    if kind == "window":
+        return OrderedDict(kind="window", value=_choice(base, path, lineno, "window command", arg,
+            ("Minimize", "ToggleMaximize", "LeftHalf", "RightHalf", "TopHalf", "BottomHalf",
+             "ToggleTopMost", "OpacityUp", "OpacityDown", "ToggleCaption", "ActivateBottomSameClass")))
     if kind == "layer" and allow_hold:
         if not re.fullmatch(base.IDENT, arg):
             raise base.DslError(path, lineno, "layer(...) expects one layer name")
@@ -120,7 +147,8 @@ def _action(base: Any, path: Path, lineno: int, expression: str, *, allow_hold: 
         if value is None:
             raise base.DslError(path, lineno, f"unknown modifier '{arg}'")
         return OrderedDict(kind="modifier", value=value)
-    allowed = "key(...), text(...), layer(...) or modifier(...)" if allow_hold else "key(...) or text(...)"
+    output = "key(...), text(...), mouse_move(...), mouse_click(...), scroll(...), media(...) or window(...)"
+    allowed = f"{output}, layer(...) or modifier(...)" if allow_hold else output
     raise base.DslError(path, lineno, f"action must be {allowed}")
 
 
@@ -155,8 +183,8 @@ def _validate_behavior(base: Any, path: Path, lineno: int, trigger: str, behavio
     if not isinstance(hold, dict) or hold.get("kind") not in {"layer", "modifier"}:
         raise base.DslError(path, lineno, f"behavior '{trigger}' requires hold = layer(...) or modifier(...)")
     tap = behavior.get("tap")
-    if isinstance(tap, dict) and tap.get("kind") not in {"key", "text"}:
-        raise base.DslError(path, lineno, f"behavior '{trigger}' tap action must be key or text")
+    if isinstance(tap, dict) and tap.get("kind") in {"layer", "modifier"}:
+        raise base.DslError(path, lineno, f"behavior '{trigger}' tap action cannot be layer or modifier")
     if check_layer and hold.get("kind") == "layer":
         name = str(hold.get("value"))
         if not any(existing.casefold() == name.casefold() for existing in layers):
