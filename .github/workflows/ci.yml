@@ -19,4 +19,11 @@ jobs:
       - run: python -m unittest discover tests/tooling -p 'test_*.py' -v
       - run: dotnet restore iKeyd.sln
       - run: dotnet build iKeyd.sln --no-restore --configuration Release
+      - name: Compile built-in JIS109 DSL preset
+        shell: pwsh
+        run: |
+          dotnet tools/iKeyd.ProfileCompiler/bin/Release/net8.0/iKeyd.ProfileCompiler.dll `
+            tests/tooling/fixtures/jis109-preset.ikeyd `
+            "$env:RUNNER_TEMP/Jis109Preset.g.cs" `
+            --emit-json "$env:RUNNER_TEMP/jis109-preset.json"
       - run: dotnet test iKeyd.sln --no-build --configuration Release
