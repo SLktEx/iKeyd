@@ -16,7 +16,7 @@ spec.loader.exec_module(module)
 
 
 class ProcessSpecificHandoffTests(unittest.TestCase):
-    def test_uncovered_process_specific_entry_is_explicitly_routed_to_issue_57(self):
+    def test_process_specific_entry_is_implemented_and_routed_to_real_windows_validation(self):
         feature = module.Feature(
             "hotkey",
             1,
@@ -32,12 +32,12 @@ class ProcessSpecificHandoffTests(unittest.TestCase):
 
         module.apply_coverage([feature], rules)
 
-        self.assertEqual("deferred:#57", feature.coverage["scenario"])
-        self.assertEqual("deferred:#57", feature.coverage["implementation"])
-        self.assertEqual("deferred:#57", feature.coverage["exeDiff"])
-        self.assertEqual("deferred:#57", feature.coverage["ahkDiff"])
+        self.assertEqual("regression", feature.coverage["scenario"])
+        self.assertEqual("implemented", feature.coverage["implementation"])
+        self.assertEqual("not-required", feature.coverage["exeDiff"])
+        self.assertEqual("not-required", feature.coverage["ahkDiff"])
         self.assertEqual("real-windows-verification-required", feature.classification)
-        self.assertIn("issue:#57", feature.evidence)
+        self.assertIn("issue:#59", feature.evidence)
 
 
 if __name__ == "__main__":

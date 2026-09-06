@@ -35,10 +35,10 @@ The `scenario` field uses explicit states rather than treating every non-shared 
 
 - `yes`: an exact shared compatibility scenario is linked through `inventoryIds`.
 - `regression`: an explicit deterministic regression layer covers the behavior, but this does not claim legacy-oracle differential evidence.
-- `deferred:#57`: the entry is deliberately handed to long-tail compatibility-fix work because implementation/oracle behavior must be resolved before a useful scenario can be claimed.
+- `deferred:<issue>`: the entry is deliberately handed to a follow-up issue because implementation/oracle behavior must be resolved before a useful scenario can be claimed.
 - `real-windows:#59`: the entry requires interactive/real-Windows verification and is deliberately handed to the final real-machine pass.
 
-These states never promote `exeDiff` or `ahkDiff`. Those dimensions remain independent, so routing an entry to #57/#59 cannot be mistaken for compatibility success.
+These states never promote `exeDiff` or `ahkDiff`. Those dimensions remain independent, so routing an entry to a follow-up issue or #59 cannot be mistaken for compatibility success.
 
 The derived `classification` is one of the categories used by #46/#54, including `unknown`, `implementation-missing`, `scenario-missing`, `implemented-but-untested`, `real-windows-verification-required`, `partially-verified`, and `implemented-and-verified`.
 
@@ -48,7 +48,7 @@ The derived `classification` is one of the categories used by #46/#54, including
 
 A category-level `regression` status must be narrower than the user-facing feature shell. For example, `macro-operation` and `clipboard-operation` entries can point at deterministic parser/executor/history/controller regressions, while interactive `InputBox` UI is routed to #59 instead of being swept into the same status.
 
-Likewise, the remaining unlinked window/mouse branches are explicitly routed to #57. Linked runtime scenarios are applied after the broad coverage rules, so an exact scenario link upgrades `deferred:#57` to `yes` without losing the conservative default for unlinked long-tail entries.
+The #57 window/mouse and process-specific long tail now has deterministic regression coverage. Real pointer/window/application effects and Japanese IME behavior remain explicitly routed to #59 instead of being inferred from hosted tests.
 
 Later issues should link scenarios back to matrix entries using an `inventoryIds` array in scenario JSON. The scanner already indexes that field when present, so #55 can incrementally make scenario coverage explicit without redesigning the matrix format.
 

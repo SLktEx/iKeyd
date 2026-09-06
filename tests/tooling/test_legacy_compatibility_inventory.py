@@ -173,8 +173,8 @@ class InventoryTests(unittest.TestCase):
         self.assertEqual("real-windows:#59", clipboard_label.coverage["scenario"])
         self.assertEqual("implemented", global_hotkey.coverage["implementation"])
         self.assertEqual("regression", global_hotkey.coverage["scenario"])
-        self.assertEqual("deferred:#57", console_hotkey.coverage["implementation"])
-        self.assertEqual("deferred:#57", console_hotkey.coverage["scenario"])
+        self.assertEqual("implemented", console_hotkey.coverage["implementation"])
+        self.assertEqual("regression", console_hotkey.coverage["scenario"])
         self.assertEqual("implemented", suspend.coverage["implementation"])
         self.assertEqual("regression", suspend.coverage["scenario"])
 
