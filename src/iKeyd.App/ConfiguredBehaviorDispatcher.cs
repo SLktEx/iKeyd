@@ -23,16 +23,16 @@ internal sealed class ConfiguredBehaviorDispatcher
 {
     private readonly KeyBehaviorProfile _profile;
     private readonly ConfiguredKeyBehaviorRuntime _runtime;
-    private readonly LegacySendOutput _send;
+    private readonly IKeyboardOutput _keyboard;
     private readonly IDesktopBackend _desktop;
     private readonly DesktopActionService _desktopActions;
-    private readonly List<ushort> _modifiers = new(4);
+    private readonly List<KeyboardKey> _modifiers = new(4);
 
-    public ConfiguredBehaviorDispatcher(KeyBehaviorProfile profile, LegacySendOutput send, IDesktopBackend desktop)
+    public ConfiguredBehaviorDispatcher(KeyBehaviorProfile profile, IKeyboardOutput keyboard, IDesktopBackend desktop)
     {
         _profile = profile ?? throw new ArgumentNullException(nameof(profile));
         _runtime = new ConfiguredKeyBehaviorRuntime(profile);
-        _send = send ?? throw new ArgumentNullException(nameof(send));
+        _keyboard = keyboard ?? throw new ArgumentNullException(nameof(keyboard));
         _desktop = desktop ?? throw new ArgumentNullException(nameof(desktop));
         _desktopActions = new DesktopActionService(desktop);
     }
@@ -97,7 +97,7 @@ internal sealed class ConfiguredBehaviorDispatcher
         if (_modifiers.Count == 0)
             return false;
 
-        SendKeyWithModifiers(physicalKey.VirtualKey);
+        SendKeyWithModifiers(physicalKey);
         return true;
     }
 
@@ -109,15 +109,15 @@ internal sealed class ConfiguredBehaviorDispatcher
                 if (!WindowsKeyMap.TryResolveNamedKey(action.Value, out var key))
                     throw new InvalidOperationException($"Configured behavior output key '{action.Value}' is not supported on Windows.");
                 if (applyModifiersToKey)
-                    SendKeyWithModifiers(key.VirtualKey);
+                    SendKeyWithModifiers(key);
                 else
-                    _send.SendKey(key.VirtualKey);
+                    _keyboard.SendKeyPress(key);
                 return;
 
             case KeyBehaviorActionKind.Text:
-                // text(...) is literal output by design; virtual held modifiers do
-                // not transform its characters.
-                _send.Send(action.Value);
+                // text(...) is literal output by design; unlike legacy Send it
+                // never interprets ^ ! + # or brace syntax.
+                _keyboard.SendText(action.Value);
                 return;
 
             case KeyBehaviorActionKind.MouseMove:
@@ -241,28 +241,25 @@ internal sealed class ConfiguredBehaviorDispatcher
             }
         }
 
-        if (control) _modifiers.Add(WindowsKeyMap.Control);
-        if (shift) _modifiers.Add(WindowsKeyMap.Shift);
-        if (alt) _modifiers.Add(WindowsKeyMap.Alt);
-        if (gui) _modifiers.Add(WindowsKeyMap.LeftWin);
+        if (control) _modifiers.Add(WindowsKeyMap.Keyboard(WindowsKeyMap.LeftControl));
+        if (shift) _modifiers.Add(WindowsKeyMap.Keyboard(WindowsKeyMap.LeftShift));
+        if (alt) _modifiers.Add(WindowsKeyMap.Keyboard(WindowsKeyMap.LeftAlt));
+        if (gui) _modifiers.Add(WindowsKeyMap.Keyboard(WindowsKeyMap.LeftWin));
     }
 
-    private void SendKeyWithModifiers(ushort virtualKey)
+    private void SendKeyWithModifiers(KeyboardKey key)
     {
-        switch (_modifiers.Count)
+        foreach (var modifier in _modifiers)
+            _keyboard.SendKey(modifier, KeyEventKind.Down);
+
+        try
         {
-            case 0:
-                _send.SendKey(virtualKey);
-                break;
-            case 1:
-                _send.SendChord(_modifiers[0], virtualKey);
-                break;
-            case 2:
-                _send.SendChord(_modifiers[0], _modifiers[1], virtualKey);
-                break;
-            default:
-                _send.SendChord(_modifiers, virtualKey);
-                break;
+            _keyboard.SendKeyPress(key);
+        }
+        finally
+        {
+            for (var index = _modifiers.Count - 1; index >= 0; index--)
+                _keyboard.SendKey(_modifiers[index], KeyEventKind.Up);
         }
     }
 }
