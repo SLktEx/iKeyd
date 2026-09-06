@@ -845,16 +845,21 @@ internal sealed class IKeydRuntimeHandler : IKeyboardEventHandler, IInputStateRe
     }
 
     private InputDiagnosticState CaptureDiagnosticState()
-        => new(
+    {
+        var physical = _keyboardState.GetSummary();
+        return new InputDiagnosticState(
             _layers.Layers.Modifiers,
             _layers.Layers.Count,
             _layers.Consumed,
             _heldLayerPresses.Count,
+            physical.PressedCount,
+            physical.Modifiers,
             _suppressedKeys.Count,
             _sEngine.State,
             _kEngine.State,
             _timerMode,
             _timerDueAt);
+    }
 
     private void RecoverIfInvariantBroken(long timestampMs)
     {
