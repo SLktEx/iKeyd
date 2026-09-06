@@ -1,3 +1,4 @@
+using System.Text;
 using iKeyd.Core.Clipboard;
 using iKeyd.Core.Macros;
 using iKeyd.Core.Modes;
@@ -113,6 +114,7 @@ internal sealed class IKeydApplicationContext : ApplicationContext
         };
         _menu.Items.Add(_cancelMacroItem);
         _menu.Items.Add(new ToolStripMenuItem("Reset Input State", null, (_, _) => ResetInputState()));
+        _menu.Items.Add(new ToolStripMenuItem("Save Input Diagnostics...", null, (_, _) => SaveInputDiagnostics()));
         _menu.Items.Add(new ToolStripSeparator());
         _menu.Items.Add(new ToolStripMenuItem("Exit", null, (_, _) => ExitThread()));
 
@@ -191,6 +193,32 @@ internal sealed class IKeydApplicationContext : ApplicationContext
         catch (Exception exception)
         {
             ShowError("Could not reset input state.", exception);
+        }
+    }
+
+    private void SaveInputDiagnostics()
+    {
+        try
+        {
+            using var dialog = new SaveFileDialog
+            {
+                Title = "Save iKeyd Input Diagnostics",
+                Filter = "Log files (*.log)|*.log|Text files (*.txt)|*.txt|All files (*.*)|*.*",
+                DefaultExt = "log",
+                AddExtension = true,
+                RestoreDirectory = true,
+                FileName = $"ikeyd-input-diagnostics-{DateTime.Now:yyyyMMdd-HHmmss}.log"
+            };
+
+            if (dialog.ShowDialog() != DialogResult.OK)
+                return;
+
+            File.WriteAllText(dialog.FileName, _runtime.ExportInputDiagnostics(), new UTF8Encoding(false));
+            _notifyIcon.Text = $"iKeyd — {_runtime.Mode.Mode} mode — diagnostics saved";
+        }
+        catch (Exception exception)
+        {
+            ShowError("Could not save input diagnostics.", exception);
         }
     }
 
