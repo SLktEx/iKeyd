@@ -167,3 +167,5 @@ jobs:
           path: TestResults/compatibility-inventory
           if-no-files-found: warn
           retention-days: 30
+
+# rerun after S+Kana expected modifier identity was corrected to VK_A2
