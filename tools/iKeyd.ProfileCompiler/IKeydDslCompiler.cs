@@ -23,7 +23,7 @@ internal static class IKeydDslCompiler
             throw new IKeydDslException(path, 1, "profile must not be empty");
 
         var source = new JsonObject();
-        var layouts = new Dictionary<string, List<List<string>>>(StringComparer.Ordinal);
+        var layouts = new Dictionary<string, List<List<string>>>(StringComparer.OrdinalIgnoreCase);
         var singles = new Dictionary<string, List<KeyValuePair<string, string>>>(StringComparer.Ordinal);
         var chords = new Dictionary<string, List<ChordEntry>>(StringComparer.Ordinal);
         var keymapLayouts = new Dictionary<string, string?>(StringComparer.Ordinal);
@@ -34,6 +34,7 @@ internal static class IKeydDslCompiler
         string? blockName = null;
         string? sectionKind = null;
         string? sectionArg = null;
+        string? keyboardPreset = null;
         var mapRowIndex = 0;
         var sawProfile = false;
         var lines = text.Replace("\r\n", "\n", StringComparison.Ordinal).Replace('\r', '\n').Split('\n');
@@ -85,6 +86,22 @@ internal static class IKeydDslCompiler
                     sawProfile = true;
                     blockKind = "profile";
                     blockName = profile.Groups[1].Value;
+                    continue;
+                }
+
+                var keyboard = Match(line, $@"^keyboard\s+({Ident})\s*;?$");
+                if (keyboard.Success)
+                {
+                    var requested = keyboard.Groups[1].Value;
+                    if (keyboardPreset is not null)
+                        throw Error(path, lineNumber, $"keyboard preset already declared as '{keyboardPreset}'");
+                    if (!string.Equals(requested, "JIS109", StringComparison.OrdinalIgnoreCase))
+                        throw Error(path, lineNumber, $"unknown keyboard preset '{requested}'");
+                    if (layouts.ContainsKey("JIS109"))
+                        throw Error(path, lineNumber, "layout 'JIS109' is already defined");
+
+                    layouts.Add("JIS109", CreateJis109Layout());
+                    keyboardPreset = "JIS109";
                     continue;
                 }
 
@@ -193,6 +210,24 @@ internal static class IKeydDslCompiler
 
         return root.ToJsonString();
     }
+
+    private static List<List<string>> CreateJis109Layout() =>
+    [
+        ["Escape", "F1", "F2", "F3", "F4", "F5", "F6", "F7", "F8", "F9", "F10", "F11", "F12", "PrintScreen", "ScrollLock", "Pause"],
+        ["ZenkakuHankaku", "1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "Minus", "Caret", "Yen", "Backspace"],
+        ["Tab", "Q", "W", "E", "R", "T", "Y", "U", "I", "O", "P", "AT", "LeftBracket"],
+        ["CapsLock", "A", "S", "D", "F", "G", "H", "J", "K", "L", "SColon", "Colon", "RightBracket", "Enter"],
+        ["LeftShift", "Z", "X", "C", "V", "B", "N", "M", "Comma", "Dot", "Slash", "Ro", "RightShift"],
+        ["LeftControl", "LeftGui", "LeftAlt", "Muhenkan", "Space", "Henkan", "KatakanaHiragana", "RightAlt", "RightGui", "Menu", "RightControl"],
+        ["Insert", "Home", "PageUp"],
+        ["Delete", "End", "PageDown"],
+        ["Left", "Up", "Down", "Right"],
+        ["NumLock", "NumpadSlash", "NumpadAsterisk", "NumpadMinus"],
+        ["Numpad7", "Numpad8", "Numpad9", "NumpadPlus"],
+        ["Numpad4", "Numpad5", "Numpad6"],
+        ["Numpad1", "Numpad2", "Numpad3", "NumpadEnter"],
+        ["Numpad0", "NumpadDot"],
+    ];
 
     private static void ParseProfileSetting(JsonObject source, string path, int lineNumber, string line)
     {
@@ -392,7 +427,7 @@ internal static class IKeydDslCompiler
             var layoutName = named.Groups[1].Value;
             var requestedKey = named.Groups[2].Value;
             var resolvedLayoutName = layoutName;
-            if (layoutName == "POS" && !layouts.ContainsKey("POS") && layouts.ContainsKey("BASE"))
+            if (string.Equals(layoutName, "POS", StringComparison.OrdinalIgnoreCase) && !layouts.ContainsKey("POS") && layouts.ContainsKey("BASE"))
                 resolvedLayoutName = "BASE";
             if (!layouts.TryGetValue(resolvedLayoutName, out var namedLayout))
                 throw Error(path, lineNumber, $"unknown layout '{layoutName}' in key reference '{value}'");
@@ -417,7 +452,7 @@ internal static class IKeydDslCompiler
             throw Error(path, lineNumber, $"key positions are 1-based: '{value}'");
 
         var resolvedCoordinateLayoutName = coordinateLayoutName;
-        if (coordinateLayoutName == "POS" && !layouts.ContainsKey("POS") && layouts.ContainsKey("BASE"))
+        if (string.Equals(coordinateLayoutName, "POS", StringComparison.OrdinalIgnoreCase) && !layouts.ContainsKey("POS") && layouts.ContainsKey("BASE"))
             resolvedCoordinateLayoutName = "BASE";
         if (!layouts.TryGetValue(resolvedCoordinateLayoutName, out var layout))
             throw Error(path, lineNumber, $"unknown layout '{coordinateLayoutName}' in key reference '{value}'");
