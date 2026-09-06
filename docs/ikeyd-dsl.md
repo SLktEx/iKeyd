@@ -55,6 +55,47 @@ This resolves to the physical pair `Q + S`.
 
 An explicit `layout POS` can be declared when the canonical physical geometry should be separate from a named authoring layout.
 
+## Behavior invocations
+
+A key mapping may invoke a first-class behavior instead of producing a string directly:
+
+```text
+layout BASE {
+    row Q W E
+}
+
+keymap BASE {
+    POS[1,1] = LT(NUM, Z)
+    POS[1,2] = "w"
+}
+```
+
+The authoring compiler keeps these two mapping kinds separate. The example above lowers approximately to:
+
+```json
+{
+  "singleStroke": {
+    "BASE": {
+      "W": "w"
+    }
+  },
+  "behaviors": {
+    "BASE": {
+      "Q": {
+        "name": "LT",
+        "arguments": ["NUM", "Z"]
+      }
+    }
+  }
+}
+```
+
+`LT` is not a special execution path in the runtime. The profile representation is compiled into a normal `BehaviorDefinition`, and standard `LT` uses the same generic Behavior runtime that future user-defined behaviors use.
+
+In the current first syntax slice, behavior arguments are identifier-like tokens. Per-instance options, typed values and user-defined `behavior` bodies are specified in `behavior-dsl.md` but are intentionally added in later slices.
+
+A physical key cannot simultaneously have a string mapping and a behavior mapping in the same keymap.
+
 ## Rules
 
 - Rows and columns are 1-based.
@@ -62,8 +103,9 @@ An explicit `layout POS` can be declared when the canonical physical geometry sh
 - A physical key identifier may appear only once inside a layout.
 - Direct key identifiers such as `Q`, `K`, and `SColon` remain valid.
 - `layout` blocks are compile-time-only and do not appear in generated JSON.
+- Position references are resolved before behavior mappings are emitted.
 - Out-of-range coordinates and unknown layouts are compile errors with source line numbers.
 
 ## Why position references exist
 
-For a combo, the important thing is often "these two physical finger positions", not the letters currently assigned there. Position references let the BASE mapping evolve without coupling every combo definition to the current visible character layout.
+For a combo or behavior binding, the important thing is often "this physical finger position", not the letter currently assigned there. Position references let the BASE mapping evolve without coupling behavior or combo definitions to the current visible character layout.
