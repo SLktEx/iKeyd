@@ -71,12 +71,13 @@ internal static class WindowsKeyMap
     public const ushort MediaPrevious = 0xB1;
     public const ushort MediaPlayPause = 0xB3;
 
-    // Japanese 106/109 layout OEM keys. Keep physical-position names separate
-    // from Win32's historically confusing VK_OEM_* symbolic names.
+    // Japanese 106/109 layout OEM positions. The old iKeyd code used
+    // OemSemicolon/OemPlus as semantic aliases, so keep those names compatible
+    // while exposing the less-confusing physical constants beside them.
     public const ushort OemColon = 0xBA;      // VK_OEM_1: ':' / '*'
     public const ushort Oem1 = OemColon;
     public const ushort OemSemicolon = 0xBB;  // VK_OEM_PLUS: ';' / '+'
-    public const ushort OemPlus = OemSemicolon;
+    public const ushort OemPlus = OemColon;   // legacy iKeyd alias: colon position
     public const ushort OemComma = 0xBC;
     public const ushort OemMinus = 0xBD;
     public const ushort OemPeriod = 0xBE;
@@ -115,7 +116,7 @@ internal static class WindowsKeyMap
             return new KeyId(scanned);
         }
 
-        // Generic modifier VKs are still emitted by some synthetic/test paths.
+        // Generic modifier/Kana VKs are still emitted by some synthetic paths.
         var generic = physicalKey.VirtualKey switch
         {
             Shift => KeyCode.LeftShift,
@@ -249,7 +250,7 @@ internal static class WindowsKeyMap
 
         Add(result, KeyCode.Escape, Escape, 0x01);
         for (var index = 0; index < 10; index++)
-            Add(result, KeyCode.F1 + index, (ushort)(F1 + index), (ushort)(0x3B + index));
+            Add(result, (KeyCode)((int)KeyCode.F1 + index), (ushort)(F1 + index), (ushort)(0x3B + index));
         Add(result, KeyCode.F11, (ushort)(F1 + 10), 0x57);
         Add(result, KeyCode.F12, F12, 0x58);
         Add(result, KeyCode.PrintScreen, PrintScreen, 0x37, true);
@@ -413,7 +414,17 @@ internal static class WindowsKeyMap
 
     private static Dictionary<KeyCode, KeyboardKey> BuildOutputMap()
     {
-        var result = Jis109Bindings.ToDictionary(item => item.Code, item => item.WindowsKey);
+        var result = new Dictionary<KeyCode, KeyboardKey>();
+        foreach (var binding in Jis109Bindings)
+        {
+            // Preserve the normal SendInput/VK path for keys that were already
+            // unambiguous. Only keys whose physical identity is required to
+            // distinguish the event keep the legacy-compatible VK+scan pair.
+            result[binding.Code] = RequiresCombinedPhysicalOutput(binding.Code)
+                ? binding.WindowsKey
+                : Keyboard(binding.WindowsKey.VirtualKey);
+        }
+
         result[KeyCode.VolumeUp] = Keyboard(VolumeUp);
         result[KeyCode.VolumeDown] = Keyboard(VolumeDown);
         result[KeyCode.VolumeMute] = Keyboard(VolumeMute);
@@ -422,6 +433,10 @@ internal static class WindowsKeyMap
         result[KeyCode.MediaPrevious] = Keyboard(MediaPrevious);
         return result;
     }
+
+    private static bool RequiresCombinedPhysicalOutput(KeyCode code)
+        => code is KeyCode.HankakuZenkaku or KeyCode.Kana or KeyCode.Convert or
+            KeyCode.NonConvert or KeyCode.NumpadEnter;
 
     private static bool IsExtended(ushort virtualKey)
         => virtualKey is PageUp or PageDown or End or Home or Left or Up or Right or Down or
