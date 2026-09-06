@@ -1,3 +1,4 @@
+using System.Globalization;
 using iKeyd.Core.Chords;
 using iKeyd.Core.Input;
 
@@ -58,6 +59,12 @@ internal static class WindowsKeyMap
     public const ushort RightControl = 0xA3;
     public const ushort LeftAlt = 0xA4;
     public const ushort RightAlt = 0xA5;
+    public const ushort VolumeMute = 0xAD;
+    public const ushort VolumeDown = 0xAE;
+    public const ushort VolumeUp = 0xAF;
+    public const ushort MediaNext = 0xB0;
+    public const ushort MediaPrevious = 0xB1;
+    public const ushort MediaPlayPause = 0xB3;
     public const ushort OemSemicolon = 0xBA;
     public const ushort OemPlus = 0xBB;
     public const ushort OemComma = 0xBC;
@@ -180,6 +187,9 @@ internal static class WindowsKeyMap
     public static bool TryResolveNamedKey(ReadOnlySpan<char> name, out KeyboardKey key)
     {
         var normalized = name.Trim();
+        if (TryResolveVirtualScanCode(normalized, out key))
+            return true;
+
         ushort virtualKey;
 
         if (normalized.Length > 1 && (normalized[0] is 'F' or 'f') &&
@@ -204,6 +214,16 @@ internal static class WindowsKeyMap
         else if (normalized.Equals("ESC", StringComparison.OrdinalIgnoreCase) || normalized.Equals("ESCAPE", StringComparison.OrdinalIgnoreCase)) virtualKey = Escape;
         else if (normalized.Equals("APPSKEY", StringComparison.OrdinalIgnoreCase) || normalized.Equals("APPS", StringComparison.OrdinalIgnoreCase) || normalized.Equals("MENU", StringComparison.OrdinalIgnoreCase)) virtualKey = Apps;
         else if (normalized.Equals("SPACE", StringComparison.OrdinalIgnoreCase)) virtualKey = Space;
+        else if (normalized.Equals("CTRL", StringComparison.OrdinalIgnoreCase) || normalized.Equals("CONTROL", StringComparison.OrdinalIgnoreCase)) virtualKey = Control;
+        else if (normalized.Equals("SHIFT", StringComparison.OrdinalIgnoreCase)) virtualKey = Shift;
+        else if (normalized.Equals("ALT", StringComparison.OrdinalIgnoreCase)) virtualKey = Alt;
+        else if (normalized.Equals("LWIN", StringComparison.OrdinalIgnoreCase) || normalized.Equals("WIN", StringComparison.OrdinalIgnoreCase)) virtualKey = LeftWin;
+        else if (normalized.Equals("VOLUME_MUTE", StringComparison.OrdinalIgnoreCase)) virtualKey = VolumeMute;
+        else if (normalized.Equals("VOLUME_DOWN", StringComparison.OrdinalIgnoreCase)) virtualKey = VolumeDown;
+        else if (normalized.Equals("VOLUME_UP", StringComparison.OrdinalIgnoreCase)) virtualKey = VolumeUp;
+        else if (normalized.Equals("MEDIA_NEXT", StringComparison.OrdinalIgnoreCase)) virtualKey = MediaNext;
+        else if (normalized.Equals("MEDIA_PREV", StringComparison.OrdinalIgnoreCase)) virtualKey = MediaPrevious;
+        else if (normalized.Equals("MEDIA_PLAY_PAUSE", StringComparison.OrdinalIgnoreCase)) virtualKey = MediaPlayPause;
         else if (normalized.Equals("KANA", StringComparison.OrdinalIgnoreCase) || normalized.Equals("KATAKANAHIRAGANA", StringComparison.OrdinalIgnoreCase)) virtualKey = Kana;
         else if (normalized.Equals("HENKAN", StringComparison.OrdinalIgnoreCase) || normalized.Equals("CONVERT", StringComparison.OrdinalIgnoreCase)) virtualKey = Convert;
         else if (normalized.Equals("MUHENKAN", StringComparison.OrdinalIgnoreCase) || normalized.Equals("NONCONVERT", StringComparison.OrdinalIgnoreCase)) virtualKey = NonConvert;
@@ -367,6 +387,26 @@ internal static class WindowsKeyMap
         };
 
         return code != KeyCode.None;
+    }
+
+    private static bool TryResolveVirtualScanCode(ReadOnlySpan<char> token, out KeyboardKey key)
+    {
+        key = default;
+        if (token.Length < 7 || !token.StartsWith("vk", StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        var scanMarker = token.IndexOf("sc", StringComparison.OrdinalIgnoreCase);
+        if (scanMarker <= 2 || scanMarker + 2 >= token.Length)
+            return false;
+
+        if (!ushort.TryParse(token[2..scanMarker], NumberStyles.AllowHexSpecifier, CultureInfo.InvariantCulture, out var virtualKey) ||
+            !ushort.TryParse(token[(scanMarker + 2)..], NumberStyles.AllowHexSpecifier, CultureInfo.InvariantCulture, out var scanCode))
+        {
+            return false;
+        }
+
+        key = new KeyboardKey(virtualKey, scanCode, IsExtended(virtualKey));
+        return true;
     }
 
     private static bool IsExtended(ushort virtualKey)
