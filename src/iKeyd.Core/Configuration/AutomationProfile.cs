@@ -14,7 +14,6 @@ public sealed record AutomationProfile
 
     private readonly IReadOnlyDictionary<string, AutomationKeymapProfile> _keymaps;
     private readonly IReadOnlyDictionary<string, UserBehaviorDefinitionProfile> _behaviorDefinitions;
-    private readonly IReadOnlyList<string> _systemQueries;
 
     public AutomationProfile(
         int chordWindowMs,
@@ -58,17 +57,6 @@ public sealed record AutomationProfile
             }
         }
         _behaviorDefinitions = definitions;
-
-        var queries = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var keymap in byName.Values)
-        {
-            foreach (var mapping in keymap.BehaviorMappings)
-            {
-                foreach (var query in BehaviorDefinitionFactory.GetRequiredSystemQueries(mapping.Invocation))
-                    queries.Add(query);
-            }
-        }
-        _systemQueries = queries.OrderBy(value => value, StringComparer.OrdinalIgnoreCase).ToArray();
     }
 
     public int ChordWindowMs { get; }
@@ -77,7 +65,28 @@ public sealed record AutomationProfile
     public ClipboardHistoryProfile Clipboard { get; }
     public IReadOnlyDictionary<string, AutomationKeymapProfile> Keymaps => _keymaps;
     public IReadOnlyDictionary<string, UserBehaviorDefinitionProfile> BehaviorDefinitions => _behaviorDefinitions;
-    public IReadOnlyList<string> SystemQueries => _systemQueries;
+
+    /// <summary>
+    /// Query keys required by the compiled profile. This is intentionally derived
+    /// after construction so canonical parsing can wrap invalid behavior payloads
+    /// with source-path diagnostics before a consumer requests the query set.
+    /// </summary>
+    public IReadOnlyList<string> SystemQueries
+    {
+        get
+        {
+            var queries = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var keymap in _keymaps.Values)
+            {
+                foreach (var mapping in keymap.BehaviorMappings)
+                {
+                    foreach (var query in BehaviorDefinitionFactory.GetRequiredSystemQueries(mapping.Invocation))
+                        queries.Add(query);
+                }
+            }
+            return queries.OrderBy(value => value, StringComparer.OrdinalIgnoreCase).ToArray();
+        }
+    }
 
     public AutomationKeymapProfile GetKeymap(string name)
     {
