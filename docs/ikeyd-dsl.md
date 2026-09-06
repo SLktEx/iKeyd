@@ -1,14 +1,47 @@
 # iKeyd authoring DSL
 
-The `.ikeyd` format is an authoring language that compiles to the existing iKeyd JSON profile. Runtime code does not parse the DSL and does not carry authoring-only layout metadata.
+`.ikeyd` is the canonical human-authored source for iKeyd keyboard behavior.
 
-Use `python tools/compile-ikeyd.py input.ikeyd output.json` as the public compiler entry point. `compile-ikeyd-dsl.py` remains the compatibility parser core used by that front-end.
-
-## Position-based key references
-
-A layout gives stable coordinates to physical input keys:
+The normal Windows build does **not** compile `.ikeyd` to JSON and then read that JSON at runtime. The current path is:
 
 ```text
+config/hotkeySKG.ikeyd
+  -> typed DSL document
+  -> semantic/profile + Behavior representation
+  -> build-time static generators
+       -> GeneratedProfile.g.cs
+       -> GeneratedMouseProfile.g.cs
+  -> iKeyd.exe
+```
+
+JSON remains available for compatibility fixtures, migration/debug tooling, and historical differential checks. It is not a required normal-build or runtime intermediate.
+
+The application project invokes `tools/iKeyd.DslCompiler` automatically during `dotnet build`. The compiler's direct low-level interface is:
+
+```text
+iKeyd.DslCompiler <profile.ikeyd> <GeneratedProfile.g.cs> <GeneratedMouseProfile.g.cs>
+```
+
+The older `ikeyd check` / `ikeyd import` CLI currently belongs to the AHK-v1 migration/importer path; `ikeyd build` is still reserved there. Do not confuse that legacy migration CLI with the canonical `.ikeyd` build pipeline.
+
+## Profile block
+
+A document contains one profile block. `chord_window` is required by the current parser; `startup_mode` defaults to `S` when omitted.
+
+```ikeyd
+profile hotkeySKG {
+    chord_window = 40ms
+    startup_mode = S
+}
+```
+
+The Windows reference profile currently expects the normal S/K mode family used by hotkeySKG.
+
+## Physical layouts and position references
+
+A `layout` gives stable row/column coordinates to physical keys:
+
+```ikeyd
 layout BASE {
     row Q W E R T Y U I O P
     row A S D F G H J K L SColon
@@ -16,33 +49,24 @@ layout BASE {
 }
 ```
 
-Coordinates are 1-based, so `BASE[1,1]` is the physical `Q` position and `BASE[2,8]` is the physical `K` position.
+Rows and columns are 1-based. `BASE[1,1]` is the physical `Q` position in this example.
 
-Position references can be used anywhere a key input is accepted in a keymap:
+Position references can be used anywhere the current keymap grammar accepts an input key:
 
-```text
+```ikeyd
 keymap S {
     BASE[1,1] = "-"
     combo BASE[2,8] + BASE[1,1] = "fa"
 }
 ```
 
-The compiler resolves those references before emitting JSON. The example above emits the same runtime keys as:
-
-```text
-keymap S {
-    Q = "-"
-    combo K + Q = "fa"
-}
-```
-
-This keeps combos attached to finger positions rather than to the current character/output assignment. Changing what the BASE keys output therefore does not require rewriting the combo definitions.
+The compiler resolves authoring coordinates to canonical physical key identities before static profile generation. Changing the visible output assigned to a position therefore does not require rewriting combos that refer to that physical position.
 
 ### `POS[row,column]`
 
-`POS[...]` is the canonical physical-position spelling. If no explicit `layout POS` exists, `POS[...]` aliases `layout BASE`:
+`POS[...]` is the canonical physical-position spelling. If no explicit `layout POS` exists, it aliases `layout BASE`:
 
-```text
+```ikeyd
 layout BASE {
     row Q W E
     row A S D
@@ -53,110 +77,177 @@ keymap S {
 }
 ```
 
-This resolves to the physical pair `Q + S`.
+An explicit `layout POS` may be declared when the canonical physical geometry should be independent from another named authoring layout.
 
-An explicit `layout POS` can be declared when the canonical physical geometry should be separate from a named authoring layout.
+The Windows key surface is no longer limited to the historical compact 54-key set. The JIS109 registry and Windows `(VK, scan code, extended)` identity rules are documented in `jis109-key-surface-audit.md`.
 
-## Behavior invocations
+## Keymaps
 
-A key mapping may invoke a first-class behavior instead of producing a string directly:
+A keymap contains ordinary mappings, behavior mappings, and two-key combos.
 
-```text
-layout BASE {
-    row Q W E
-}
-
-keymap BASE {
-    POS[1,1] = LT(NUM, Z)
-    POS[1,2] = "w"
+```ikeyd
+keymap S {
+    Q = "q"
+    W = "w"
+    combo Q + W = "escape"
 }
 ```
 
-The authoring compiler keeps these two mapping kinds separate. The example above lowers approximately to:
+A physical key may not have both an ordinary string mapping and a behavior mapping in the same keymap.
 
-```json
-{
-  "singleStroke": {
-    "BASE": {
-      "W": "w"
-    }
-  },
-  "behaviors": {
-    "BASE": {
-      "Q": {
-        "name": "LT",
-        "arguments": ["NUM", "Z"]
-      }
-    }
-  }
+Quoted string mappings are retained for the existing hotkeySKG-compatible profile/output path. When the intended meaning is explicitly "one Unicode scalar" or "arbitrary direct text", use the first-class `UNICODE` / `TEXT` behaviors described below rather than relying on a legacy string's interpretation.
+
+## Standard behavior invocations
+
+A key may invoke a first-class behavior instead of producing a legacy string output:
+
+```ikeyd
+keymap S {
+    A = LT(NUM, Z)
+    X = MT(Ctrl, X)
+    Space = MO(NAV)
+    Muhenkan = MOD(Ctrl)
 }
 ```
 
-`LT` is not a special execution path in the runtime. The profile representation is compiled into a normal `BehaviorDefinition`, and standard `LT` uses the same generic Behavior runtime that future user-defined behaviors use.
+Behavior invocations are represented as typed/profile semantic data and executed through the generic Behavior runtime. The platform event loop does not add separate LT/MT/MO/MOD state machines.
 
-### Per-instance behavior options
+### `LT(layer, tap_key)`
 
-A behavior invocation can have an option block. Options are stored generically on the invocation instead of becoming LT-specific profile fields:
+Layer-tap sends `tap_key` on a tap and owns `layer` while held.
 
-```text
-keymap BASE {
-    A = LT(NUM, Z) {
-        tapping_term = 170ms
-        hold_on_other_key_press = false
-    }
+```ikeyd
+A = LT(NUM, Z) {
+    tapping_term = 170ms
+    hold_on_other_key_press = false
 }
 ```
 
-This compiles approximately to:
+Current options:
 
-```json
-{
-  "behaviors": {
-    "BASE": {
-      "A": {
-        "name": "LT",
-        "arguments": ["NUM", "Z"],
-        "options": {
-          "tapping_term": "170ms",
-          "hold_on_other_key_press": "false"
-        }
-      }
-    }
-  }
-}
-```
-
-The first supported tap/hold options are:
-
-- `tapping_term = <duration>` — currently milliseconds such as `170ms`; default is `200ms`.
-- `hold_on_other_key_press = true|false` — whether another physical key-down resolves the pending tap/hold as hold immediately.
-
-Unknown options are rejected when the behavior definition is built instead of being silently ignored.
+- `tapping_term = <duration>` — milliseconds such as `170ms`; default `200ms`.
+- `hold_on_other_key_press = true|false` — whether another physical key-down resolves the pending behavior as a hold immediately.
 
 ### `MT(modifier, tap_key)`
 
-`MT` uses the same tap/hold resolver as `LT`, but its hold action owns an OS modifier instead of a named layer:
+Mod-tap uses the same tap/hold resolver, but owns a modifier while held:
 
-```text
-keymap BASE {
-    X = MT(Ctrl, X)
-    C = MT(Shift, C) {
-        tapping_term = 150ms
+```ikeyd
+X = MT(Ctrl, X)
+C = MT(Shift, C) {
+    tapping_term = 150ms
+}
+```
+
+Release/cancellation cleanup guarantees that an owned modifier is released.
+
+### `MO(layer)`
+
+`MO` activates a named layer for exactly the physical hold duration:
+
+```ikeyd
+Space = MO(NAV)
+```
+
+The first physical key-down activates the layer. Keyboard auto-repeat does not activate it again. Key-up or runtime cancellation releases the owned layer.
+
+### `MOD(modifier)`
+
+`MOD` owns a modifier for the physical hold duration:
+
+```ikeyd
+Muhenkan = MOD(Ctrl)
+```
+
+Accepted aliases in the current standard helper include:
+
+- `Ctrl` / `Control`
+- `Shift`
+- `Alt`
+- `Gui` / `Win` / `Super`
+
+Repeated physical key-downs do not replay modifier-down; key-up/cancellation emits the matching modifier-up.
+
+## First-class Unicode and text output
+
+Key output, one Unicode scalar, and arbitrary text are distinct semantics.
+
+The current literal-friendly authoring form uses a behavior option block because the general behavior argument grammar remains identifier-oriented:
+
+```ikeyd
+keymap SYMBOL {
+    J = UNICODE() {
+        value = "→"
+    }
+
+    K = UNICODE() {
+        value = "🦀"
+    }
+
+    L = TEXT() {
+        value = "hello 世界"
     }
 }
 ```
 
-A tap sends the tap key. A hold sends modifier-down and guarantees modifier-up on release or cancellation. `Ctrl`, `Shift`, `Alt`, and GUI/Win-compatible modifier names are handled by the Windows behavior router.
+Semantics:
 
-The current syntax still restricts behavior arguments to identifier-like tokens. User-defined `behavior` bodies, typed profile/local state, composition/inheritance, one-shot behaviors and tap dance are specified in `behavior-dsl.md` and will build on the same invocation/runtime model.
+- `UNICODE` contains exactly one Unicode scalar and follows physical keyboard repeat.
+- `TEXT` contains a non-empty Unicode string and is emitted once; repeated key-down does not implicitly replay the whole string.
+- layer/modifier ownership transitions remain non-repeatable.
+- Windows lowers direct Unicode/text output through `SendInput` + `KEYEVENTF_UNICODE`; UTF-16 is a backend detail rather than part of portable Behavior semantics.
 
-A physical key cannot simultaneously have a string mapping and a behavior mapping in the same keymap.
+See `unicode-text-output.md` for the detailed repeat/validation/backend contract.
+
+## User-defined behaviors
+
+The current generic Behavior DSL supports a bounded first slice of user-defined behavior logic, including:
+
+- top-level `behavior NAME(args) { ... }`
+- behavior-local boolean variables
+- `on_press`
+- `on_interrupt(key)`
+- `on_release`
+- bounded `if/else`
+- `send`
+- `layer.on/off`
+- `modifier.down/up`
+- boolean assignment
+- deterministic owned layer/modifier cleanup
+
+Example:
+
+```ikeyd
+behavior SMART(layer, tap) {
+    var active: bool = false
+
+    on_press {
+        active = true
+        layer.on(layer)
+    }
+
+    on_release {
+        if active {
+            layer.off(layer)
+        }
+        send tap
+    }
+}
+
+keymap S {
+    Q = SMART(NUM, Z)
+}
+```
+
+This is intentionally not a general-purpose scripting language. Unbounded loops, recursion, blocking I/O, and arbitrary asynchronous work do not belong on the keyboard event path.
+
+The remaining behavior-language work (`on_hold` / `on_tap`, bounded timer semantics, richer local values, composition/reuse, one-shot helpers and tap dance) is tracked by #99. See `behavior-dsl.md` for the Behavior-specific design/status.
 
 ## Clipboard history settings
 
-The optional top-level `clipboard` block configures iKeyd's own Win+V-like history. It never changes or encrypts the normal system clipboard itself.
+The optional top-level `clipboard` block configures iKeyd's own history. It does not change or encrypt the normal system clipboard itself.
 
-```text
+```ikeyd
 clipboard {
     history = true
     max_items = 100
@@ -165,28 +256,28 @@ clipboard {
     encryption = user
     cipher = auto
 
-    // Optional. If omitted, Windows uses %LOCALAPPDATA%\iKeyd.
+    // Optional Windows persistence directory.
     // directory = "%LOCALAPPDATA%\\iKeyd"
 }
 ```
 
-Settings:
+Current settings:
 
-- `history = true|false` — enables or disables iKeyd history collection and the history picker. Default: `true`.
-- `max_items = <positive integer>` — maximum number of text/image history items kept. Default: `20`.
-- `persist = true|false` — when `false`, history is memory-only and iKeyd does not create its encrypted history/key files. Default: `true`.
-- `images = true|false` — controls whether image clipboard payloads are included in iKeyd history. Normal Windows image copy/paste is unaffected. Default: `true`.
-- `encryption = user` — protects the history master key for the current OS user. Windows currently implements this with DPAPI. `user` is the only supported value for now.
-- `cipher = auto|chacha20_poly1305` — `auto` selects the runtime's preferred authenticated cipher. The .NET runtime currently resolves `auto` to ChaCha20-Poly1305; a future Rust runtime can prefer AEGIS-256 without requiring a DSL change. Default: `auto`.
-- `directory = "..."` — optional persistence directory. Windows environment variables such as `%LOCALAPPDATA%` are expanded at runtime.
+- `history = true|false` — history collection/picker; default `true`.
+- `max_items = <positive integer>` — retained item count; default `20`.
+- `persist = true|false` — encrypted persistence vs memory-only; default `true`.
+- `images = true|false` — include image payloads; default `true`.
+- `encryption = user` — current supported user-scoped key-protection policy.
+- `cipher = auto|chacha20_poly1305` — authenticated cipher selection. `auto` lets a future runtime choose its preferred implementation without changing the DSL.
+- `directory = "..."` — optional persistence directory.
 
-The persisted history contains authenticated ciphertext rather than plaintext clipboard payloads. `persist = false` bypasses persistence entirely. Omitting the entire `clipboard` block preserves the current compatible defaults and keeps generated legacy JSON unchanged.
+Clipboard settings become typed profile data/static configuration in the canonical build. They do not require a generated JSON file.
 
 ## Mouse motion settings
 
-The optional top-level `mouse` block controls the continuous keyboard-driven pointer engine independently from the key bindings that activate mouse directions or buttons.
+The optional top-level `mouse` block controls the continuous keyboard-driven virtual-stick pointer engine independently from the bindings that select mouse actions.
 
-```text
+```ikeyd
 mouse {
     engine = virtual_stick
     update = 8ms
@@ -210,34 +301,72 @@ mouse {
 }
 ```
 
-Settings:
+Current settings:
 
-- `engine = virtual_stick` — selects the digital-key to virtual-stick motion model. `virtual_stick` is the only engine currently supported.
-- `update = <duration>` — motion-loop cadence. Default: `8ms` (125 Hz). It must be greater than zero.
-- `response.press = <duration>` — virtual-stick rise time constant. Default: `45ms`.
-- `response.release = <duration>` — return-to-center time constant after release. Default: `2ms`; at the default 8 ms cadence this is effectively stopped by the next tick.
-- `response.curve = linear|smoothstep` — radial response curve applied to stick magnitude. Default: `smoothstep`; radial application keeps diagonal and cardinal transient speed consistent.
-- `speed.normal`, `speed.precision`, `speed.fine`, `speed.fast` — pointer velocity bands in pixels per second. A bare number or a value such as `800px/s` is accepted. Defaults: `1000`, `800`, `240`, and `4400`.
-- `socd = neutral` — opposite directions cancel (`J+L => X=0`, `I+K => Y=0`). `neutral` is the only policy currently supported.
-- `tap_nudge = <pixels>` — deterministic immediate movement for a tap shorter than one motion tick. Default: `1px`; `0px` disables it.
-- `max_catchup = <duration>` — maximum delayed time integrated after scheduler stalls, preventing one large catch-up jump under load. Default: `32ms`.
+- `engine = virtual_stick` — current engine.
+- `update = <duration>` — motion-loop cadence; default `8ms`.
+- `response.press` / `response.release` — virtual-stick rise/release timing.
+- `response.curve = linear|smoothstep` — response curve.
+- `speed.normal`, `speed.precision`, `speed.fine`, `speed.fast` — pointer velocity bands.
+- `socd = neutral` — opposite directions cancel.
+- `tap_nudge = <pixels>` — deterministic short-tap movement.
+- `max_catchup = <duration>` — caps delayed integration after scheduler stalls.
 
-The block compiles to a `mouse` object in the generated JSON profile. Windows snapshots the selected mouse profile when the app starts and uses it for the virtual-stick controller; ordinary absolute pointer warps remain separate from these continuous-motion settings.
+The mouse block is parsed into typed mouse configuration and then emitted as static generated C# for the Windows build. It is not a mandatory JSON runtime configuration.
 
-Omitting the entire `mouse` block preserves the built-in defaults and leaves the legacy JSON shape unchanged.
+## Target extensions
 
-## Rules
+Portable behavior and target-specific configuration are deliberately separate.
 
-- Rows and columns are 1-based.
-- Layouts must be declared before a keymap uses their coordinates in the current prototype.
-- A physical key identifier may appear only once inside a layout.
-- Direct key identifiers such as `Q`, `K`, and `SColon` remain valid.
-- `layout` blocks are compile-time-only and do not appear in generated JSON.
-- Position references are resolved before behavior mappings are emitted.
-- Behavior option blocks belong to one behavior invocation and may not contain duplicate option names.
-- A profile may contain at most one top-level `clipboard` block and at most one top-level `mouse` block; duplicate settings are compile errors.
-- Out-of-range coordinates, unknown layouts, unsupported clipboard/mouse values, and invalid settings are compile errors with source line numbers.
+The current target-extension syntax supports explicit target blocks such as:
 
-## Why position references exist
+- `target ikeyd`
+- `target ikeyd-csharp`
+- `target ikeyd-rust`
+- `target qmk`
+- `target zmk`
 
-For a combo or behavior binding, the important thing is often "this physical finger position", not the letter currently assigned there. Position references let the BASE mapping evolve without coupling behavior or combo definitions to the current visible character layout.
+Target blocks may carry the supported `require`, `option`, and `native` declarations. They are additive target metadata; they may not silently redefine portable key bindings.
+
+Unsupported target requirements must produce diagnostics rather than disappearing. See `target-extensions.md` and `portable-dsl-architecture.md` for the capability/backend model.
+
+## Current tooling boundary
+
+There are currently two different tool surfaces with different jobs:
+
+1. **Canonical application build** — `dotnet build` runs `iKeyd.DslCompiler` against `config/hotkeySKG.ikeyd` and generates static C# under `obj/`.
+2. **Legacy migration CLI** — `ikeyd check` / `ikeyd import` operate on the supported AHK-v1 importer subset; its `build` command is still reserved.
+
+A friendly public `ikeyd check profile.ikeyd` / `ikeyd build profile.ikeyd` surface is still #64 work. Until that lands, documentation should not claim the AHK migration CLI already validates/builds arbitrary `.ikeyd` files.
+
+Historical Python `.ikeyd -> JSON` compilers may remain useful for compatibility/migration tests. They are not the source of truth for normal builds.
+
+## Grammar and validation rules
+
+Current important rules include:
+
+- rows and columns are 1-based.
+- layouts must be declared before coordinates that use them in the current parser.
+- a physical key identifier may appear only once inside a layout.
+- direct canonical key names remain valid alongside position references.
+- position aliases are resolved before static profile generation.
+- a physical key may not have both ordinary and behavior mappings in the same keymap.
+- behavior option names may not be duplicated.
+- behavior arguments in the current general invocation grammar are identifier-like tokens; arbitrary direct Unicode/text literals use the `value = "..."` option form.
+- the document may contain at most one top-level `clipboard` block and one top-level `mouse` block.
+- invalid positions, unsupported clipboard/mouse values, malformed target requirements, and invalid first-class Unicode/text values produce compile/parser diagnostics instead of being silently ignored.
+- the Windows static compiler preserves the canonical JIS109 physical-key universe rather than truncating mappings to the historical compact key set.
+
+## Architecture invariant
+
+Normal authoring/build flow is:
+
+```text
+.ikeyd
+  -> parser / typed document
+  -> semantic analysis / Behavior representation
+  -> selected target/static representation
+  -> runtime/backend
+```
+
+Do not introduce a required JSON hop to add new language features. Do not add a second runtime parser for source `.ikeyd`. JSON is optional compatibility/debug output only.
