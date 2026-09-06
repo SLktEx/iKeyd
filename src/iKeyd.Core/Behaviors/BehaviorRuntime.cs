@@ -24,6 +24,10 @@ public abstract class BehaviorInstance
 
     public KeyId SourceKey { get; }
 
+    internal virtual void OnPress(long timestampMs, List<BehaviorAction> actions)
+    {
+    }
+
     internal virtual void AdvanceTo(long timestampMs, List<BehaviorAction> actions)
     {
     }
@@ -120,7 +124,11 @@ public sealed class BehaviorRuntime
         // up. A behavior press is a single state-machine instance, so repeated downs
         // are suppressed but do not restart timers or duplicate local state.
         if (!_active.ContainsKey(key))
-            _active.Add(key, definition.CreateInstance(key, timestampMs));
+        {
+            var instance = definition.CreateInstance(key, timestampMs);
+            instance.OnPress(timestampMs, actions);
+            _active.Add(key, instance);
+        }
 
         return Result(true, actions);
     }
