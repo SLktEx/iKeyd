@@ -9,34 +9,19 @@ internal static class Program
     {
         ApplicationConfiguration.Initialize();
 
-        using var mutex = new Mutex(initiallyOwned: true, "Local\\iKeyd", out var createdNew);
-        if (!createdNew)
-        {
-            MessageBox.Show(
-                "iKeyd is already running.",
-                "iKeyd",
-                MessageBoxButtons.OK,
-                MessageBoxIcon.Information);
-            return;
-        }
-
         try
         {
-            var explicitConfigPath = GetOption(args, "--config");
-            var configuration = explicitConfigPath is null
-                ? GeneratedProfile.Create()
-                : IKeydConfiguration.Load(explicitConfigPath);
+            var started = RunSingleInstance(
+                SingleInstanceGuard.TryAcquire,
+                () => RunPrimaryInstance(args),
+                () => MessageBox.Show(
+                    "iKeyd is already running.",
+                    "iKeyd",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Information));
 
-            var modeOverride = GetOption(args, "--mode");
-            if (!string.IsNullOrWhiteSpace(modeOverride))
-            {
-                if (!Enum.TryParse<InputMode>(modeOverride, ignoreCase: true, out var mode))
-                    throw new ArgumentException($"Unsupported --mode value '{modeOverride}'. Use S, K, T, or R.");
-                configuration = configuration with { StartupMode = mode };
-            }
-
-            using var context = new IKeydApplicationContext(configuration);
-            Application.Run(context);
+            if (!started)
+                return;
         }
         catch (Exception exception)
         {
@@ -46,17 +31,41 @@ internal static class Program
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Error);
         }
-        finally
+    }
+
+    internal static bool RunSingleInstance(
+        Func<IDisposable?> acquireInstance,
+        Action runPrimaryInstance,
+        Action runSecondaryInvocation)
+    {
+        using var instance = acquireInstance();
+        if (instance is null)
         {
-            try
-            {
-                mutex.ReleaseMutex();
-            }
-            catch (ApplicationException)
-            {
-                // The mutex was not owned, for example after an early startup failure.
-            }
+            runSecondaryInvocation();
+            return false;
         }
+
+        runPrimaryInstance();
+        return true;
+    }
+
+    private static void RunPrimaryInstance(string[] args)
+    {
+        var explicitConfigPath = GetOption(args, "--config");
+        var configuration = explicitConfigPath is null
+            ? GeneratedProfile.Create()
+            : IKeydConfiguration.Load(explicitConfigPath);
+
+        var modeOverride = GetOption(args, "--mode");
+        if (!string.IsNullOrWhiteSpace(modeOverride))
+        {
+            if (!Enum.TryParse<InputMode>(modeOverride, ignoreCase: true, out var mode))
+                throw new ArgumentException($"Unsupported --mode value '{modeOverride}'. Use S, K, T, or R.");
+            configuration = configuration with { StartupMode = mode };
+        }
+
+        using var context = new IKeydApplicationContext(configuration);
+        Application.Run(context);
     }
 
     private static string? GetOption(IReadOnlyList<string> args, string option)
