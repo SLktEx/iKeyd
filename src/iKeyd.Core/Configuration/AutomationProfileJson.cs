@@ -40,6 +40,8 @@ public static class AutomationProfileJson
         if (string.IsNullOrWhiteSpace(startupMode))
             throw new InvalidDataException("startupMode must not be empty.");
 
+        var clipboard = ParseClipboard(root);
+
         if (!root.TryGetProperty("singleStroke", out var singleRoot) || singleRoot.ValueKind != JsonValueKind.Object)
             throw new InvalidDataException("singleStroke must be an object.");
         if (!root.TryGetProperty("chords", out var chordRoot) || chordRoot.ValueKind != JsonValueKind.Object)
@@ -149,7 +151,8 @@ public static class AutomationProfileJson
             keymaps,
             startupMode,
             hotkeys,
-            behaviorDefinitions);
+            behaviorDefinitions,
+            clipboard);
     }
 
     public static void Save(AutomationProfile profile, string path)
@@ -184,6 +187,9 @@ public static class AutomationProfileJson
         writer.WriteNumber("chordWindowMs", profile.ChordWindowMs);
         writer.WriteEndObject();
         writer.WriteString("startupMode", profile.StartupMode);
+
+        if (profile.Clipboard != ClipboardHistoryProfile.Default)
+            WriteClipboard(profile.Clipboard, writer);
 
         writer.WritePropertyName("singleStroke");
         writer.WriteStartObject();
@@ -270,6 +276,80 @@ public static class AutomationProfileJson
 
         writer.WriteEndObject();
         writer.Flush();
+    }
+
+    private static ClipboardHistoryProfile ParseClipboard(JsonElement root)
+    {
+        if (!root.TryGetProperty("clipboard", out var clipboardElement))
+            return ClipboardHistoryProfile.Default;
+        if (clipboardElement.ValueKind != JsonValueKind.Object)
+            throw new InvalidDataException("clipboard must be an object.");
+
+        var defaults = ClipboardHistoryProfile.Default;
+        var history = ReadOptionalBoolean(clipboardElement, "history", defaults.History);
+        var maxItems = ReadOptionalInt32(clipboardElement, "maxItems", defaults.MaxItems);
+        var persist = ReadOptionalBoolean(clipboardElement, "persist", defaults.Persist);
+        var images = ReadOptionalBoolean(clipboardElement, "images", defaults.Images);
+        var encryption = ReadOptionalString(clipboardElement, "encryption", defaults.Encryption);
+        var cipher = ReadOptionalString(clipboardElement, "cipher", defaults.Cipher);
+        string? directory = defaults.Directory;
+        if (clipboardElement.TryGetProperty("directory", out var directoryElement))
+        {
+            if (directoryElement.ValueKind != JsonValueKind.String)
+                throw new InvalidDataException("clipboard.directory must be a string.");
+            directory = directoryElement.GetString();
+        }
+
+        try
+        {
+            return new ClipboardHistoryProfile(history, maxItems, persist, images, encryption, cipher, directory);
+        }
+        catch (ArgumentException exception)
+        {
+            throw new InvalidDataException($"Invalid clipboard settings: {exception.Message}", exception);
+        }
+    }
+
+    private static void WriteClipboard(ClipboardHistoryProfile clipboard, Utf8JsonWriter writer)
+    {
+        writer.WritePropertyName("clipboard");
+        writer.WriteStartObject();
+        writer.WriteBoolean("history", clipboard.History);
+        writer.WriteNumber("maxItems", clipboard.MaxItems);
+        writer.WriteBoolean("persist", clipboard.Persist);
+        writer.WriteBoolean("images", clipboard.Images);
+        writer.WriteString("encryption", clipboard.Encryption);
+        writer.WriteString("cipher", clipboard.Cipher);
+        if (clipboard.Directory is not null)
+            writer.WriteString("directory", clipboard.Directory);
+        writer.WriteEndObject();
+    }
+
+    private static bool ReadOptionalBoolean(JsonElement element, string name, bool fallback)
+    {
+        if (!element.TryGetProperty(name, out var value))
+            return fallback;
+        if (value.ValueKind is not (JsonValueKind.True or JsonValueKind.False))
+            throw new InvalidDataException($"clipboard.{name} must be a boolean.");
+        return value.GetBoolean();
+    }
+
+    private static int ReadOptionalInt32(JsonElement element, string name, int fallback)
+    {
+        if (!element.TryGetProperty(name, out var value))
+            return fallback;
+        if (value.ValueKind != JsonValueKind.Number || !value.TryGetInt32(out var result))
+            throw new InvalidDataException($"clipboard.{name} must be an integer.");
+        return result;
+    }
+
+    private static string ReadOptionalString(JsonElement element, string name, string fallback)
+    {
+        if (!element.TryGetProperty(name, out var value))
+            return fallback;
+        if (value.ValueKind != JsonValueKind.String)
+            throw new InvalidDataException($"clipboard.{name} must be a string.");
+        return value.GetString() ?? string.Empty;
     }
 
     private static IReadOnlyList<UserBehaviorDefinitionProfile> ParseUserBehaviorDefinitions(JsonElement root)
