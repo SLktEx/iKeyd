@@ -6,6 +6,7 @@ using iKeyd.Core.Keymaps;
 using iKeyd.Core.Layers;
 using iKeyd.Core.Macros;
 using iKeyd.Core.Modes;
+using iKeyd.Profiles.HotkeySkg.Runtime;
 using iKeyd.Windows.Input;
 
 namespace iKeyd.App;
@@ -21,6 +22,7 @@ internal sealed class IKeydRuntimeHandler : IKeyboardEventHandler, IMacroActionD
     private readonly IDesktopBackend _desktop;
     private readonly DesktopActionService _desktopActions;
     private readonly WindowGroupController _windowGroup;
+    private readonly IHotkeySkgInteractiveActions? _interactiveActions;
     private readonly ChordEngine<string> _sEngine;
     private readonly ChordEngine<string> _kEngine;
     private readonly HashSet<ushort> _suppressedKeys = new(64);
@@ -38,7 +40,8 @@ internal sealed class IKeydRuntimeHandler : IKeyboardEventHandler, IMacroActionD
         IInputMethod inputMethod,
         KeyboardState keyboardState,
         LegacySendOutput send,
-        IDesktopBackend desktop)
+        IDesktopBackend desktop,
+        IHotkeySkgInteractiveActions? interactiveActions = null)
     {
         _configuration = configuration ?? throw new ArgumentNullException(nameof(configuration));
         _inputMethod = inputMethod ?? throw new ArgumentNullException(nameof(inputMethod));
@@ -47,6 +50,7 @@ internal sealed class IKeydRuntimeHandler : IKeyboardEventHandler, IMacroActionD
         _desktop = desktop ?? throw new ArgumentNullException(nameof(desktop));
         _desktopActions = new DesktopActionService(desktop);
         _windowGroup = new WindowGroupController(desktop);
+        _interactiveActions = interactiveActions;
         _sEngine = new ChordEngine<string>(configuration.SKeymap, configuration.ChordWindowMs);
         _kEngine = new ChordEngine<string>(configuration.KKeymap, configuration.ChordWindowMs);
         _mode = InputModeState.Initial.SwitchTo(configuration.StartupMode);
@@ -371,6 +375,15 @@ internal sealed class IKeydRuntimeHandler : IKeyboardEventHandler, IMacroActionD
                 if (state.IsExact(LayerKey.M, LayerKey.S)) { _desktopActions.ToggleCaptionActive(); return true; }
                 break;
 
+            case KeyCode.Y:
+                return DispatchMacroKey('Y', state);
+
+            case KeyCode.H:
+                return DispatchMacroKey('H', state);
+
+            case KeyCode.V:
+                return DispatchClipboardKey(state);
+
             case KeyCode.G:
                 if (state.IsExact(LayerKey.M)) { _windowGroup.ActivateNext(); return true; }
                 if (state.IsExact(LayerKey.M, LayerKey.H)) { _send.SendChord(WindowsKeyMap.Control, WindowsKeyMap.Tab); return true; }
@@ -426,6 +439,12 @@ internal sealed class IKeydRuntimeHandler : IKeyboardEventHandler, IMacroActionD
             if (state == "MS") { _desktopActions.ToggleCaptionActive(); return true; }
         }
 
+        if (name is "Y" or "H")
+            return DispatchMacroKey(name[0], state);
+
+        if (name == "V")
+            return DispatchClipboardKey(state);
+
         if (name == "G")
         {
             if (state == "M") { _windowGroup.ActivateNext(); return true; }
@@ -442,6 +461,50 @@ internal sealed class IKeydRuntimeHandler : IKeyboardEventHandler, IMacroActionD
             if (state == "MS") { _windowGroup.ResetAndAdvance(); return true; }
         }
 
+        return false;
+    }
+
+    private bool DispatchMacroKey(char slot, LayerState state)
+    {
+        if (state.IsExact(LayerKey.M))
+        {
+            _interactiveActions?.RunMacro(slot);
+            return true;
+        }
+        if (state.IsExact(LayerKey.M, LayerKey.H))
+        {
+            _interactiveActions?.EditMacro(slot);
+            return true;
+        }
+        if (state.IsExact(LayerKey.H, LayerKey.M))
+        {
+            _interactiveActions?.EditMacroRepeat();
+            return true;
+        }
+        return false;
+    }
+
+    private bool DispatchMacroKey(char slot, string state)
+    {
+        if (state == "M") { _interactiveActions?.RunMacro(slot); return true; }
+        if (state == "MH") { _interactiveActions?.EditMacro(slot); return true; }
+        if (state == "HM") { _interactiveActions?.EditMacroRepeat(); return true; }
+        return false;
+    }
+
+    private bool DispatchClipboardKey(LayerState state)
+    {
+        if (state.IsExact(LayerKey.M)) { _interactiveActions?.ShowClipboardHistory(); return true; }
+        if (state.IsExact(LayerKey.M, LayerKey.H)) { _interactiveActions?.CaptureLatestClipboard(); return true; }
+        if (state.IsExact(LayerKey.H, LayerKey.M)) { _interactiveActions?.PasteCapturedClipboard(); return true; }
+        return false;
+    }
+
+    private bool DispatchClipboardKey(string state)
+    {
+        if (state == "M") { _interactiveActions?.ShowClipboardHistory(); return true; }
+        if (state == "MH") { _interactiveActions?.CaptureLatestClipboard(); return true; }
+        if (state == "HM") { _interactiveActions?.PasteCapturedClipboard(); return true; }
         return false;
     }
 
