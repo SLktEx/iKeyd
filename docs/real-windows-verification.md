@@ -50,16 +50,28 @@ Without `-Interactive`, manual checks remain `pending`; this is useful for colle
 
 ## Input diagnostics for #130 / #131 / #132
 
-The tray menu contains `Save Input Diagnostics...` and `Reset Input State` for real-machine failures. The diagnostics buffer is memory-only and bounded to the most recent 256 entries; nothing is written to disk until `Save Input Diagnostics...` is selected.
+The most recent input diagnostics are persisted automatically to:
+
+```text
+%LOCALAPPDATA%\iKeyd\logs\input-diagnostics.log
+```
+
+The file is refreshed every two seconds from the bounded 256-entry in-memory ring buffer, so keyboard-hook processing never performs per-key disk I/O and the log does not grow without bound. On the next iKeyd start, the previous session is retained as:
+
+```text
+%LOCALAPPDATA%\iKeyd\logs\input-diagnostics.previous.log
+```
+
+The tray menu still contains `Save Input Diagnostics...` for making an explicit copy and `Reset Input State` for recovery.
 
 The trace records physical VK/scan code, key down/up, physical held-key count and Shift/Ctrl/Alt/Win state, logical layer state, held layer triggers, suppressed keys, chord/timer state, output-path markers, reset markers and detected invariant violations. Logical S/K output text is not stored literally; only payload length and a fingerprint are retained.
 
 When a mismatch occurs:
 
-1. choose `Save Input Diagnostics...` before restarting iKeyd,
+1. first preserve `%LOCALAPPDATA%\iKeyd\logs\input-diagnostics.log` or choose `Save Input Diagnostics...`,
 2. record the matching verification group and visible symptom in the report notes,
 3. if input remains stuck, choose `Reset Input State` to clear iKeyd's transient logical state,
-4. preserve the saved diagnostic log with the verification report when reducing the mismatch to a regression.
+4. preserve the diagnostic log with the verification report when reducing the mismatch to a regression.
 
 For #130, the trace explicitly marks the `NonConvert + F` legacy `vkF3/sc029` path. For #131, it records whether 新下駄 output used ordinary keyboard-key injection (the IME composition path) or the legacy text/send fallback. For #132, compare the physical held-key/modifier summary with the logical layer/chord state around any reset or invariant-violation marker.
 
