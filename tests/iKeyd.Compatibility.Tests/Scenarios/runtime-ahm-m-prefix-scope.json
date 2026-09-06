@@ -1,6 +1,6 @@
 {
   "id": "runtime-ahm-m-prefix-scope",
-  "description": "A+H+M with letter M probes whether the legacy Alt prefix remains held across {HOME}+{END}.",
+  "description": "A+H+M with letter M verifies that the legacy Alt prefix applies only to the first key in {HOME}+{END}.",
   "initialState": { "mode": "S", "ime": "off", "modifiers": [] },
   "input": [
     { "atMs": 0, "kind": "keyDown", "key": "ALT" },
@@ -22,11 +22,11 @@
       { "kind": "keyDown", "key": "ALT" },
       { "kind": "keyDown", "key": "HOME" },
       { "kind": "keyUp", "key": "HOME" },
+      { "kind": "keyUp", "key": "ALT" },
       { "kind": "keyDown", "key": "SHIFT" },
       { "kind": "keyDown", "key": "END" },
       { "kind": "keyUp", "key": "END" },
-      { "kind": "keyUp", "key": "SHIFT" },
-      { "kind": "keyUp", "key": "ALT" }
+      { "kind": "keyUp", "key": "SHIFT" }
     ]
   },
   "tags": ["hosted-legacy", "hosted-legacy-runtime", "function-prefix", "long-tail"]
