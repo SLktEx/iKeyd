@@ -11,58 +11,59 @@
   },
   "rules": [
     {
-      "name": "captured S/K keymap declarations",
+      "name": "captured S/K keymap declarations are implemented and hosted-covered; real keyboard/IME validation remains",
       "match": {"kind": ["single-stroke", "chord"]},
-      "set": {"implementation":"implemented","unit":"covered","scenario":"partial","exeDiff":"partial","ahkDiff":"partial","realWindows":"unverified","intentionalDifference":"no"},
-      "evidence": ["config/hotkeySKG.behavior.json","tests/iKeyd.LegacySpec.Tests/LegacyBehaviorSpecTests.cs","tests/iKeyd.Compatibility.Tests/Scenarios"]
+      "set": {"implementation":"implemented","unit":"covered","scenario":"regression","exeDiff":"covered","ahkDiff":"covered","realWindows":"required","intentionalDifference":"no"},
+      "evidence": ["config/hotkeySKG.behavior.json","tests/iKeyd.LegacySpec.Tests/LegacyBehaviorSpecTests.cs","tests/iKeyd.Compatibility.Tests/Scenarios","issue:#59"]
     },
     {
-      "name": "core keyboard dispatch",
+      "name": "core keyboard dispatch is deterministic-covered; final physical hook path remains real-Windows work",
       "match": {"ownerRegex": "(?:function|hotkey):(onKeyDown|onKeyUp|outputChar)"},
-      "set": {"implementation":"implemented","unit":"covered","scenario":"partial","exeDiff":"partial","ahkDiff":"partial","realWindows":"unverified","intentionalDifference":"no"},
-      "evidence": ["tests/iKeyd.Core.Tests","tests/iKeyd.Compatibility.Tests","tests/iKeyd.Windows.Tests"]
+      "set": {"implementation":"implemented","unit":"covered","scenario":"regression","exeDiff":"covered","ahkDiff":"covered","realWindows":"required","intentionalDifference":"no"},
+      "evidence": ["tests/iKeyd.Core.Tests","tests/iKeyd.Compatibility.Tests","tests/iKeyd.Windows.Tests","issue:#59"]
     },
     {
-      "name": "mode and layer behavior has regression coverage but long-tail remains",
+      "name": "mode and ordered layer behavior is implemented and regression-covered; IME/physical integration remains",
       "match": {"tag": ["mode", "layer"]},
-      "set": {"implementation":"partial","unit":"covered","scenario":"partial","exeDiff":"partial","ahkDiff":"partial","realWindows":"unverified","intentionalDifference":"no"},
-      "evidence": ["tests/iKeyd.LegacySpec.Tests/LegacyRuntimeSpecTests.cs","tests/COMPATIBILITY.md"]
+      "set": {"implementation":"implemented","unit":"covered","scenario":"regression","exeDiff":"partial","ahkDiff":"partial","realWindows":"required","intentionalDifference":"no"},
+      "evidence": ["tests/iKeyd.LegacySpec.Tests/LegacyRuntimeSpecTests.cs","tests/iKeyd.Windows.Tests/IKeydRuntimeScenarioRunnerTests.cs","tests/COMPATIBILITY.md","issue:#59"]
     },
     {
       "name": "hotkeySKG Send grammar is implemented and exhaustively checked for every finite pinned-source expression",
       "match": {"tag": "send"},
-      "set": {"implementation":"implemented","unit":"covered","scenario":"regression","exeDiff":"partial","ahkDiff":"partial","realWindows":"not-required","intentionalDifference":"no"},
+      "set": {"implementation":"implemented","unit":"covered","scenario":"regression","exeDiff":"covered","ahkDiff":"covered","realWindows":"not-required","intentionalDifference":"no"},
       "evidence": [
         "src/iKeyd.App/LegacySendOutput.cs",
         "tools/analyze-send-syntax.py",
         "tests/iKeyd.Windows.Tests/LegacySendOutputCompatibilityTests.cs",
         "tests/iKeyd.Windows.Tests/PinnedSendSyntaxInventoryTests.cs",
-        "tests/iKeyd.Compatibility.Tests/Scenarios/send-event-*.json"
+        "tests/iKeyd.Compatibility.Tests/Scenarios/send-event-*.json",
+        "issue:#56"
       ]
     },
     {
-      "name": "desktop window operations",
+      "name": "desktop window operations are implemented with deterministic backend coverage; visible desktop effects remain",
       "match": {"tag": "window"},
-      "set": {"implementation":"partial","unit":"partial","scenario":"missing","exeDiff":"missing","ahkDiff":"missing","realWindows":"required","intentionalDifference":"no"},
-      "evidence": ["tests/iKeyd.Windows.Tests","tests/COMPATIBILITY.md"]
+      "set": {"implementation":"implemented","unit":"covered","scenario":"regression","exeDiff":"not-required","ahkDiff":"not-required","realWindows":"required","intentionalDifference":"no"},
+      "evidence": ["src/iKeyd.App/IKeydRuntimeHandler.cs","tests/iKeyd.Windows.Tests/Issue57RuntimeCompatibilityTests.cs","tests/iKeyd.Windows.Tests","tests/COMPATIBILITY.md","issue:#59"]
     },
     {
-      "name": "mouse and media operations",
+      "name": "mouse and media operations are implemented with deterministic runtime coverage; device/desktop effects remain",
       "match": {"tag": ["mouse", "media"]},
-      "set": {"implementation":"partial","unit":"partial","scenario":"missing","exeDiff":"missing","ahkDiff":"missing","realWindows":"required","intentionalDifference":"no"},
-      "evidence": ["tests/iKeyd.Windows.Tests","tests/COMPATIBILITY.md"]
+      "set": {"implementation":"implemented","unit":"covered","scenario":"regression","exeDiff":"not-required","ahkDiff":"not-required","realWindows":"required","intentionalDifference":"no"},
+      "evidence": ["src/iKeyd.App/IKeydRuntimeHandler.cs","tests/iKeyd.Windows.Tests/Issue57RuntimeCompatibilityTests.cs","tests/iKeyd.Windows.Tests","tests/COMPATIBILITY.md","issue:#59"]
     },
     {
-      "name": "clipboard history and picker",
+      "name": "clipboard history and picker semantics are implemented and deterministic-covered; real clipboard/UI integration remains",
       "match": {"tag": "clipboard"},
-      "set": {"implementation":"partial","unit":"covered","scenario":"missing","exeDiff":"missing","ahkDiff":"missing","realWindows":"required","intentionalDifference":"no"},
-      "evidence": ["tests/iKeyd.Core.Tests","tests/iKeyd.Windows.Tests","tests/COMPATIBILITY.md"]
+      "set": {"implementation":"implemented","unit":"covered","scenario":"regression","exeDiff":"not-required","ahkDiff":"not-required","realWindows":"required","intentionalDifference":"no"},
+      "evidence": ["src/iKeyd.App/IKeydApplicationContext.cs","tests/iKeyd.Core.Tests/ClipboardHistoryTests.cs","tests/iKeyd.Windows.Tests/ClipboardControllerTests.cs","tests/iKeyd.Windows.Tests/InteractiveRuntimeCompatibilityTests.cs","issue:#59"]
     },
     {
-      "name": "macro engine behavior",
+      "name": "macro engine and H/Y runtime reachability are implemented and deterministic-covered; interactive editor use remains",
       "match": {"tag": "macro"},
-      "set": {"implementation":"partial","unit":"covered","scenario":"missing","exeDiff":"missing","ahkDiff":"missing","realWindows":"required","intentionalDifference":"no"},
-      "evidence": ["tests/iKeyd.Core.Tests","tests/iKeyd.Windows.Tests","tests/COMPATIBILITY.md"]
+      "set": {"implementation":"implemented","unit":"covered","scenario":"regression","exeDiff":"not-required","ahkDiff":"not-required","realWindows":"required","intentionalDifference":"no"},
+      "evidence": ["src/iKeyd.App/IKeydApplicationContext.cs","tests/iKeyd.Core.Tests/MacroExecutorTests.cs","tests/iKeyd.Core.Tests/MacroParserTests.cs","tests/iKeyd.Windows.Tests/InteractiveRuntimeCompatibilityTests.cs","issue:#59"]
     },
     {
       "name": "clipboard operations have explicit deterministic regression coverage",
@@ -77,22 +78,16 @@
       "evidence": ["tests/iKeyd.Core.Tests/MacroExecutorTests.cs","tests/iKeyd.Core.Tests/MacroParserTests.cs","tests/COMPATIBILITY.md"]
     },
     {
-      "name": "IME behavior requires a real Japanese IME for final verification",
+      "name": "IME routing is implemented and deterministic-covered but requires a real Japanese IME for final verification",
       "match": {"tag": "ime"},
-      "set": {"implementation":"partial","unit":"partial","scenario":"partial","exeDiff":"partial","ahkDiff":"partial","realWindows":"required","intentionalDifference":"no"},
-      "evidence": ["tests/iKeyd.LegacySpec.Tests/LegacyRuntimeSpecTests.cs","tests/iKeyd.Windows.Tests","tests/COMPATIBILITY.md"]
+      "set": {"implementation":"implemented","unit":"covered","scenario":"regression","exeDiff":"partial","ahkDiff":"partial","realWindows":"required","intentionalDifference":"no"},
+      "evidence": ["tests/iKeyd.LegacySpec.Tests/LegacyRuntimeSpecTests.cs","tests/iKeyd.Windows.Tests","tests/COMPATIBILITY.md","issue:#59"]
     },
     {
-      "name": "process/application-specific legacy branches are explicitly handed to compatibility-fix work",
+      "name": "process/application-specific legacy branches are implemented; actual application effects remain real-Windows verification",
       "match": {"tag": "process-specific"},
-      "set": {"implementation":"deferred:#57","unit":"deferred:#57","scenario":"deferred:#57","exeDiff":"deferred:#57","ahkDiff":"deferred:#57","realWindows":"required","intentionalDifference":"pending:#57"},
-      "evidence": ["issue:#57","tests/COMPATIBILITY.md"]
-    },
-    {
-      "name": "unlinked window/mouse long-tail is explicitly handed to compatibility-fix work",
-      "match": {"tag": ["window", "mouse"]},
-      "set": {"scenario": "deferred:#57"},
-      "evidence": ["issue:#57","tests/iKeyd.Compatibility.Tests/Scenarios"]
+      "set": {"implementation":"implemented","unit":"covered","scenario":"regression","exeDiff":"not-required","ahkDiff":"not-required","realWindows":"required","intentionalDifference":"no"},
+      "evidence": ["src/iKeyd.App/IKeydRuntimeHandler.cs","tests/iKeyd.Windows.Tests/ProcessSpecificRuntimeCompatibilityTests.cs","issue:#59"]
     },
     {
       "name": "legacy macro function shells are represented by deterministic macro regressions",
@@ -103,13 +98,13 @@
     {
       "name": "interactive macro UI requires real Windows verification",
       "match": {"kind": "ui-operation", "tag": "macro"},
-      "set": {"scenario": "real-windows:#59"},
+      "set": {"scenario": "real-windows:#59","realWindows":"required"},
       "evidence": ["issue:#59","src/iKeyd.Windows/Macros/WindowsMacroEditor.cs"]
     },
     {
       "name": "legacy clipboard callback requires real Windows verification",
       "match": {"id": "legacy-label-610ca263a5"},
-      "set": {"scenario": "real-windows:#59"},
+      "set": {"scenario": "real-windows:#59","realWindows":"required"},
       "evidence": ["issue:#59","tests/iKeyd.Windows.Tests/ClipboardControllerTests.cs"]
     },
     {
