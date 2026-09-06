@@ -30,10 +30,10 @@ public readonly struct KeymapSlot<TOutput> where TOutput : notnull
 
 public sealed class Keymap<TOutput> where TOutput : notnull
 {
-    // Compact KeyCode values are dense and start at 1. Keep the lookup tables
-    // sized from the enum boundary so changing the compact key universe is an
-    // explicit source change rather than a runtime discovery step.
-    public const int CompactKeyCount = (int)KeyCode.At;
+    // Compact KeyCode values are dense and start at 1. Size lookup tables from
+    // the canonical boundary so adding a supported physical key automatically
+    // participates in generated/static keymaps as well as dynamic ones.
+    public const int CompactKeyCount = (int)KeyId.LastCompactCode;
     public const int CompactSingleSlotCount = CompactKeyCount;
     public const int CompactChordSlotCount = CompactKeyCount * (CompactKeyCount + 1) / 2;
 
@@ -146,7 +146,7 @@ public sealed class Keymap<TOutput> where TOutput : notnull
     public static int GetCompactSingleIndex(KeyCode code)
     {
         var value = (int)code;
-        if (value < (int)KeyCode.A || value > (int)KeyCode.At)
+        if (value < (int)KeyCode.A || value > CompactKeyCount)
             throw new ArgumentOutOfRangeException(nameof(code), code, "Key code is not compact.");
         return value - 1;
     }
