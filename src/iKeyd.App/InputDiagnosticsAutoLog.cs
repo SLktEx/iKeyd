@@ -41,7 +41,7 @@ internal sealed class InputDiagnosticsAutoLog : IDisposable
         _timer = new Timer(
             static state => ((InputDiagnosticsAutoLog)state!).FlushBestEffort(),
             this,
-            TimeSpan.Zero,
+            interval,
             interval);
     }
 
