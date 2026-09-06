@@ -87,6 +87,51 @@ public sealed class HostedLegacyDifferentialTests
     }
 
     [Fact]
+    [Trait("Category", "HostedLegacyDifferentialE2E")]
+    public async Task S_Kana_keeps_iKeyd_deterministic_while_accepting_the_observed_compiled_EXE_tail_race()
+    {
+        if (!OperatingSystem.IsWindows())
+            return;
+
+        var legacyRunner = new LegacySendEventScenarioRunner();
+        if (!legacyRunner.IsAvailable)
+            return;
+
+        var stableEvents = new List<ObservedKeyEvent>
+        {
+            new() { Kind = "keyDown", Key = "VK_A2" },
+            new() { Kind = "keyDown", Key = "Escape" },
+            new() { Kind = "keyUp", Key = "Escape" },
+            new() { Kind = "keyUp", Key = "VK_A2" }
+        };
+        var scenario = new CompatibilityScenario
+        {
+            Id = "runtime-s-kana-known-compiled-tail-race",
+            InitialState = new ScenarioInitialState { Mode = "S", Ime = "off", Layers = ["S"] },
+            Input =
+            [
+                new ScenarioInputEvent { AtMs = 10, Kind = "keyDown", Key = "KANA" },
+                new ScenarioInputEvent { AtMs = 11, Kind = "keyUp", Key = "KANA" }
+            ],
+            Expected = new ScenarioExpected { Events = stableEvents }
+        };
+
+        var iKeyd = await new IKeydRuntimeScenarioRunner().RunAsync(scenario);
+        Assert.Empty(CompatibilityScenarioDiff.Compare(scenario, iKeyd));
+
+        var legacy = await legacyRunner.RunAsync(scenario);
+        var withSpaceTail = stableEvents.Concat(
+        [
+            new ObservedKeyEvent { Kind = "keyDown", Key = "Space" },
+            new ObservedKeyEvent { Kind = "keyUp", Key = "Space" }
+        ]).ToArray();
+
+        Assert.True(
+            EventSequenceEquals(legacy.Events, stableEvents) || EventSequenceEquals(legacy.Events, withSpaceTail),
+            $"Pinned compiled EXE produced an unrecognized S+Kana sequence: {string.Join(", ", legacy.Events.Select(item => $"{item.Kind}:{item.Key}"))}");
+    }
+
+    [Fact]
     public void Hosted_adapter_bootstraps_inner_runner_in_S_mode_and_disables_IME_dependency()
     {
         var scenario = new CompatibilityScenario
@@ -125,6 +170,21 @@ public sealed class HostedLegacyDifferentialTests
     [InlineData(null, "hotkeySKG")]
     public void Hosted_adapter_tracks_the_configured_legacy_process_name(string? executablePath, string expected)
         => Assert.Equal(expected, HostedTModeLegacyRunner.ResolveLegacyProcessName(executablePath));
+
+    private static bool EventSequenceEquals(
+        IReadOnlyList<ObservedKeyEvent> actual,
+        IReadOnlyList<ObservedKeyEvent> expected)
+    {
+        if (actual.Count != expected.Count)
+            return false;
+        for (var index = 0; index < actual.Count; index++)
+        {
+            if (!string.Equals(actual[index].Kind, expected[index].Kind, StringComparison.OrdinalIgnoreCase) ||
+                !string.Equals(actual[index].Key, expected[index].Key, StringComparison.OrdinalIgnoreCase))
+                return false;
+        }
+        return true;
+    }
 
     private static CompatibilityScenario[] LoadTagged(string tag)
         => CompatibilityScenarioCatalog.LoadDirectory(ScenarioDirectory)

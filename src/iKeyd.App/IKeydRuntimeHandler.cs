@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using iKeyd.Core.Chords;
 using iKeyd.Core.Clipboard;
 using iKeyd.Core.Desktop;
@@ -6,12 +7,14 @@ using iKeyd.Core.Keymaps;
 using iKeyd.Core.Layers;
 using iKeyd.Core.Macros;
 using iKeyd.Core.Modes;
+using iKeyd.Profiles.HotkeySkg.Runtime;
 using iKeyd.Windows.Input;
 
 namespace iKeyd.App;
 
 internal sealed class IKeydRuntimeHandler : IKeyboardEventHandler, IMacroActionDispatcher, IDisposable
 {
+    private const uint WmCommand = 0x0111;
     private readonly object _gate = new();
     private readonly IKeydConfiguration _configuration;
     private readonly IInputMethod _inputMethod;
@@ -19,6 +22,7 @@ internal sealed class IKeydRuntimeHandler : IKeyboardEventHandler, IMacroActionD
     private readonly LegacySendOutput _send;
     private readonly IDesktopBackend _desktop;
     private readonly IClipboardHistoryActions? _clipboard;
+    private readonly IHotkeySkgInteractiveActions? _interactiveActions;
     private readonly DesktopActionService _desktopActions;
     private readonly WindowGroupController _windowGroups;
     private readonly ChordEngine<string> _sEngine;
@@ -30,6 +34,7 @@ internal sealed class IKeydRuntimeHandler : IKeyboardEventHandler, IMacroActionD
     private LayerRuntimeState _layers = LayerRuntimeState.Empty;
     private KeymapMode? _timerMode;
     private long _timerDueAt;
+    private bool _suspended;
     private bool _disposed;
 
     public IKeydRuntimeHandler(
@@ -38,7 +43,8 @@ internal sealed class IKeydRuntimeHandler : IKeyboardEventHandler, IMacroActionD
         KeyboardState keyboardState,
         LegacySendOutput send,
         IDesktopBackend desktop,
-        IClipboardHistoryActions? clipboard = null)
+        IClipboardHistoryActions? clipboard = null,
+        IHotkeySkgInteractiveActions? interactiveActions = null)
     {
         _configuration = configuration ?? throw new ArgumentNullException(nameof(configuration));
         _inputMethod = inputMethod ?? throw new ArgumentNullException(nameof(inputMethod));
@@ -46,6 +52,7 @@ internal sealed class IKeydRuntimeHandler : IKeyboardEventHandler, IMacroActionD
         _send = send ?? throw new ArgumentNullException(nameof(send));
         _desktop = desktop ?? throw new ArgumentNullException(nameof(desktop));
         _clipboard = clipboard;
+        _interactiveActions = interactiveActions;
         _desktopActions = new DesktopActionService(desktop);
         _windowGroups = new WindowGroupController(desktop);
         _sEngine = new ChordEngine<string>(configuration.SKeymap, configuration.ChordWindowMs);
@@ -60,6 +67,15 @@ internal sealed class IKeydRuntimeHandler : IKeyboardEventHandler, IMacroActionD
         {
             lock (_gate)
                 return _mode;
+        }
+    }
+
+    internal bool IsSuspended
+    {
+        get
+        {
+            lock (_gate)
+                return _suspended;
         }
     }
 
@@ -82,6 +98,20 @@ internal sealed class IKeydRuntimeHandler : IKeyboardEventHandler, IMacroActionD
         {
             if (_disposed)
                 return KeyboardDisposition.PassThrough;
+
+            if (TryHandleSuspendToggle(keyboardEvent))
+                return KeyboardDisposition.Suppress;
+
+            if (_suspended)
+            {
+                if (keyboardEvent.Kind == KeyEventKind.Up &&
+                    _suppressedKeys.Remove(keyboardEvent.Key.VirtualKey))
+                    return KeyboardDisposition.Suppress;
+                return KeyboardDisposition.PassThrough;
+            }
+
+            if (TryHandleContextHotkey(keyboardEvent))
+                return KeyboardDisposition.Suppress;
 
             if (TryHandleLayerKey(keyboardEvent))
                 return KeyboardDisposition.Suppress;
@@ -162,6 +192,74 @@ internal sealed class IKeydRuntimeHandler : IKeyboardEventHandler, IMacroActionD
             _suppressedKeys.Clear();
         }
         _chordTimer.Dispose();
+    }
+
+    private bool TryHandleSuspendToggle(KeyboardEvent keyboardEvent)
+    {
+        if (keyboardEvent.Key.VirtualKey != WindowsKeyMap.Escape ||
+            keyboardEvent.Kind != KeyEventKind.Down ||
+            !_keyboardState.IsVirtualKeyPressed(WindowsKeyMap.Control) ||
+            _keyboardState.IsVirtualKeyPressed(WindowsKeyMap.Alt) ||
+            _keyboardState.IsVirtualKeyPressed(WindowsKeyMap.Shift) ||
+            _keyboardState.IsVirtualKeyPressed(WindowsKeyMap.LeftWin) ||
+            _keyboardState.IsVirtualKeyPressed(0x5C))
+            return false;
+
+        FlushAllPending();
+        _suspended = !_suspended;
+        _suppressedKeys.Add(WindowsKeyMap.Escape);
+        return true;
+    }
+
+    private bool TryHandleContextHotkey(KeyboardEvent keyboardEvent)
+    {
+        if (keyboardEvent.Kind != KeyEventKind.Down)
+            return false;
+
+        var window = _desktop.GetActiveWindow();
+        if (!_desktop.IsWindow(window))
+            return false;
+
+        var className = _desktop.GetWindowClass(window);
+        if (string.IsNullOrEmpty(className))
+            return false;
+
+        var ctrl = _keyboardState.IsVirtualKeyPressed(WindowsKeyMap.Control);
+        var alt = _keyboardState.IsVirtualKeyPressed(WindowsKeyMap.Alt);
+        var shift = _keyboardState.IsVirtualKeyPressed(WindowsKeyMap.Shift);
+        var win = _keyboardState.IsVirtualKeyPressed(WindowsKeyMap.LeftWin) ||
+                  _keyboardState.IsVirtualKeyPressed(0x5C);
+
+        if (string.Equals(className, "ConsoleWindowClass", StringComparison.Ordinal) &&
+            ctrl && !alt && !shift && !win)
+        {
+            if (keyboardEvent.Key.VirtualKey == (ushort)'V')
+            {
+                FlushAllPending();
+                _send.Send("!{Space}ep");
+                _suppressedKeys.Add(keyboardEvent.Key.VirtualKey);
+                return true;
+            }
+            if (keyboardEvent.Key.VirtualKey == (ushort)'X')
+            {
+                FlushAllPending();
+                _send.Send("!{Space}ek");
+                _suppressedKeys.Add(keyboardEvent.Key.VirtualKey);
+                return true;
+            }
+        }
+
+        if (string.Equals(className, "gsview_class", StringComparison.Ordinal) &&
+            alt && !ctrl && !shift && !win &&
+            keyboardEvent.Key.VirtualKey == (ushort)'E')
+        {
+            FlushAllPending();
+            NativeMethods.PostMessageW(window.Value, WmCommand, 105, 0);
+            _suppressedKeys.Add(keyboardEvent.Key.VirtualKey);
+            return true;
+        }
+
+        return false;
     }
 
     private bool TryHandleLayerKey(KeyboardEvent keyboardEvent)
@@ -303,6 +401,12 @@ internal sealed class IKeydRuntimeHandler : IKeyboardEventHandler, IMacroActionD
                 if (state.IsExact(LayerKey.M, LayerKey.S)) { _windowGroups.ResetAndAdvance(); return true; }
                 break;
 
+            case KeyCode.Y:
+                return DispatchMacroKey('Y', state);
+
+            case KeyCode.H:
+                return DispatchMacroKey('H', state);
+
             case KeyCode.V:
                 if (_clipboard is null)
                     break;
@@ -378,6 +482,9 @@ internal sealed class IKeydRuntimeHandler : IKeyboardEventHandler, IMacroActionD
             if (state == "MS") { _windowGroups.ResetAndAdvance(); return true; }
         }
 
+        if (name is "Y" or "H")
+            return DispatchMacroKey(name[0], state);
+
         if (name == "V" && _clipboard is not null)
         {
             if (state == "M") { _clipboard.ShowPickerAndPaste(); return true; }
@@ -385,6 +492,22 @@ internal sealed class IKeydRuntimeHandler : IKeyboardEventHandler, IMacroActionD
             if (state == "HM") { _clipboard.PasteCaptured(); return true; }
         }
 
+        return false;
+    }
+
+    private bool DispatchMacroKey(char slot, LayerState state)
+    {
+        if (state.IsExact(LayerKey.M)) { _interactiveActions?.RunMacro(slot); return true; }
+        if (state.IsExact(LayerKey.M, LayerKey.H)) { _interactiveActions?.EditMacro(slot); return true; }
+        if (state.IsExact(LayerKey.H, LayerKey.M)) { _interactiveActions?.EditMacroRepeat(); return true; }
+        return false;
+    }
+
+    private bool DispatchMacroKey(char slot, string state)
+    {
+        if (state == "M") { _interactiveActions?.RunMacro(slot); return true; }
+        if (state == "MH") { _interactiveActions?.EditMacro(slot); return true; }
+        if (state == "HM") { _interactiveActions?.EditMacroRepeat(); return true; }
         return false;
     }
 
@@ -409,7 +532,6 @@ internal sealed class IKeydRuntimeHandler : IKeyboardEventHandler, IMacroActionD
 
     private bool DispatchMouseMedia(KeyId key)
     {
-        var amount = GetMouseMoveAmount();
         switch (key.Code)
         {
             case KeyCode.D:
@@ -417,16 +539,16 @@ internal sealed class IKeydRuntimeHandler : IKeyboardEventHandler, IMacroActionD
             case KeyCode.C:
                 return true;
             case KeyCode.J:
-                _desktop.MovePointerBy(-amount, 0);
+                MoveMouse(-1, 0);
                 return true;
             case KeyCode.K:
-                _desktop.MovePointerBy(0, amount);
+                MoveMouse(0, 1);
                 return true;
             case KeyCode.L:
-                _desktop.MovePointerBy(amount, 0);
+                MoveMouse(1, 0);
                 return true;
             case KeyCode.I:
-                _desktop.MovePointerBy(0, -amount);
+                MoveMouse(0, -1);
                 return true;
             case KeyCode.U:
                 _desktop.Click(DesktopMouseButton.Left);
@@ -438,7 +560,10 @@ internal sealed class IKeydRuntimeHandler : IKeyboardEventHandler, IMacroActionD
                 ToggleMouseButton(DesktopMouseButton.Left);
                 return true;
             case KeyCode.H:
-                ToggleMouseButton(DesktopMouseButton.Right);
+                // Preserve the pinned legacy typo: right-button down is unreachable,
+                // but an already-held right button is released.
+                if (_desktop.IsMouseButtonDown(DesktopMouseButton.Right))
+                    _desktop.SetMouseButton(DesktopMouseButton.Right, false);
                 return true;
             case KeyCode.N:
                 MovePointerToActiveWindowCorner(bottomRight: false);
@@ -489,7 +614,10 @@ internal sealed class IKeydRuntimeHandler : IKeyboardEventHandler, IMacroActionD
 
     private void MovePointerToActiveWindowCorner(bool bottomRight)
     {
-        var bounds = _desktop.GetWindowBounds(_desktop.GetActiveWindow());
+        var window = _desktop.GetActiveWindow();
+        if (!_desktop.IsWindow(window))
+            return;
+        var bounds = _desktop.GetWindowBounds(window);
         if (bounds.X < 0)
             return;
 
@@ -498,15 +626,27 @@ internal sealed class IKeydRuntimeHandler : IKeyboardEventHandler, IMacroActionD
             : new DesktopPoint(bounds.X + 1, bounds.Y + 1));
     }
 
-    private int GetMouseMoveAmount()
+    private void MoveMouse(int xDirection, int yDirection)
     {
         if (_keyboardState.IsVirtualKeyPressed((ushort)'D'))
-            return 30;
+        {
+            _desktop.MovePointerBy(xDirection * 30, yDirection * 30);
+            return;
+        }
         if (_keyboardState.IsVirtualKeyPressed((ushort)'E'))
-            return 10;
+        {
+            _desktop.MovePointerBy(xDirection * 10, yDirection * 10);
+            return;
+        }
         if (_keyboardState.IsVirtualKeyPressed((ushort)'C'))
-            return Math.Max(1, _desktop.GetPrimaryWorkArea().Width / 4);
-        return 100;
+        {
+            var area = _desktop.GetPrimaryWorkArea();
+            _desktop.MovePointerBy(
+                xDirection * Math.Max(1, area.Width / 4),
+                yDirection * Math.Max(1, area.Height / 4));
+            return;
+        }
+        _desktop.MovePointerBy(xDirection * 100, yDirection * 100);
     }
 
     private void SendLayerAction(LayerAction action)
@@ -591,4 +731,12 @@ internal sealed class IKeydRuntimeHandler : IKeyboardEventHandler, IMacroActionD
 
     private void ThrowIfDisposed()
         => ObjectDisposedException.ThrowIf(_disposed, this);
+
+
+    private static class NativeMethods
+    {
+        [DllImport("user32.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static extern bool PostMessageW(nint window, uint message, nuint wParam, nint lParam);
+    }
 }

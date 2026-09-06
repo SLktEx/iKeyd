@@ -218,9 +218,10 @@ public sealed class LegacySendEventScenarioRunner : ICompatibilityScenarioRunner
     private static void SendScenarioInput(ScenarioInputEvent input)
     {
         var virtualKey = ResolveVirtualKey(input.Key!);
+        var scanCode = ResolveScanCode(input.Key!);
         SendKey(
             virtualKey,
-            0,
+            scanCode,
             string.Equals(input.Kind, "keyUp", StringComparison.OrdinalIgnoreCase));
     }
 
@@ -235,6 +236,7 @@ public sealed class LegacySendEventScenarioRunner : ICompatibilityScenarioRunner
 
         return key.Trim().ToUpperInvariant() switch
         {
+            "KANA" => VkKana,
             "COMMA" => 0xBC,
             "SCOLON" => 0xBA,
             "DOT" => 0xBE,
@@ -242,6 +244,13 @@ public sealed class LegacySendEventScenarioRunner : ICompatibilityScenarioRunner
             _ => throw new NotSupportedException($"No virtual-key mapping for Send-event scenario key '{key}'.")
         };
     }
+
+    private static byte ResolveScanCode(string key)
+        => key.Trim().ToUpperInvariant() switch
+        {
+            "KANA" => KanaScanCode,
+            _ => 0
+        };
 
     private static void SendKey(byte virtualKey, byte scanCode, bool keyUp)
         => NativeMethods.keybd_event(
@@ -464,6 +473,7 @@ public sealed class LegacySendEventScenarioRunner : ICompatibilityScenarioRunner
                 0x10 => "Shift",
                 0x11 => "Control",
                 0x12 => "Alt",
+                0x1B => "Escape",
                 0x20 => "Space",
                 0x21 => "PageUp",
                 0x22 => "PageDown",

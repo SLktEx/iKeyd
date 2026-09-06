@@ -160,7 +160,7 @@ class InventoryTests(unittest.TestCase):
         self.assertEqual("regression", clipboard.coverage["scenario"])
         self.assertEqual("regression", macro_function.coverage["scenario"])
         self.assertEqual("real-windows:#59", macro_ui.coverage["scenario"])
-        self.assertEqual("deferred:#57", window.coverage["scenario"])
+        self.assertEqual("regression", window.coverage["scenario"])
         self.assertEqual("real-windows:#59", clipboard_label.coverage["scenario"])
 
         self.assertEqual("real-windows-verification-required", macro.classification)
