@@ -7,7 +7,12 @@ public enum KeyBehaviorActionKind
     Key,
     Text,
     Layer,
-    Modifier
+    Modifier,
+    MouseMove,
+    MouseClick,
+    Scroll,
+    Media,
+    Window
 }
 
 public enum KeyBehaviorModifier
@@ -30,11 +35,18 @@ public readonly record struct KeyBehaviorAction(KeyBehaviorActionKind Kind, stri
     public static KeyBehaviorAction Text(string text) => new(KeyBehaviorActionKind.Text, text ?? throw new ArgumentNullException(nameof(text)));
     public static KeyBehaviorAction Layer(string layer) => new(KeyBehaviorActionKind.Layer, RequireValue(layer, nameof(layer)));
     public static KeyBehaviorAction Modifier(KeyBehaviorModifier modifier) => new(KeyBehaviorActionKind.Modifier, modifier.ToString());
+    public static KeyBehaviorAction MouseMove(int deltaX, int deltaY) => new(KeyBehaviorActionKind.MouseMove, $"{deltaX},{deltaY}");
+    public static KeyBehaviorAction MouseClick(string button) => new(KeyBehaviorActionKind.MouseClick, RequireValue(button, nameof(button)));
+    public static KeyBehaviorAction Scroll(string direction) => new(KeyBehaviorActionKind.Scroll, RequireValue(direction, nameof(direction)));
+    public static KeyBehaviorAction Media(string command) => new(KeyBehaviorActionKind.Media, RequireValue(command, nameof(command)));
+    public static KeyBehaviorAction Window(string command) => new(KeyBehaviorActionKind.Window, RequireValue(command, nameof(command)));
 
     public KeyBehaviorModifier GetModifier()
         => Kind == KeyBehaviorActionKind.Modifier && Enum.TryParse<KeyBehaviorModifier>(Value, ignoreCase: true, out var modifier)
             ? modifier
             : throw new InvalidOperationException($"Behavior action '{Kind}:{Value}' is not a modifier.");
+
+    public bool IsHoldAction => Kind is KeyBehaviorActionKind.Layer or KeyBehaviorActionKind.Modifier;
 
     private static string RequireValue(string value, string parameterName)
         => !string.IsNullOrWhiteSpace(value)
@@ -53,9 +65,9 @@ public sealed record KeyBehaviorBinding
     {
         if (timeoutMs <= 0)
             throw new ArgumentOutOfRangeException(nameof(timeoutMs), "Tap/hold timeout must be positive.");
-        if (tap is { Kind: KeyBehaviorActionKind.Layer or KeyBehaviorActionKind.Modifier })
-            throw new ArgumentException("Tap actions must be key or text actions.", nameof(tap));
-        if (hold.Kind is not (KeyBehaviorActionKind.Layer or KeyBehaviorActionKind.Modifier))
+        if (tap is { IsHoldAction: true })
+            throw new ArgumentException("Tap actions cannot be layer or modifier actions.", nameof(tap));
+        if (!hold.IsHoldAction)
             throw new ArgumentException("Hold actions must be layer or modifier actions.", nameof(hold));
 
         Trigger = trigger;
@@ -76,8 +88,8 @@ public sealed record KeyBehaviorLayerBinding
 {
     public KeyBehaviorLayerBinding(KeyId key, KeyBehaviorAction action)
     {
-        if (action.Kind is not (KeyBehaviorActionKind.Key or KeyBehaviorActionKind.Text))
-            throw new ArgumentException("Layer mappings must currently emit key or text actions.", nameof(action));
+        if (action.IsHoldAction)
+            throw new ArgumentException("Layer mappings must emit output actions, not layer/modifier holds.", nameof(action));
         Key = key;
         Action = action;
     }
