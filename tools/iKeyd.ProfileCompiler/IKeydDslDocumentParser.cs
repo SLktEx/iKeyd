@@ -25,6 +25,7 @@ internal static class IKeydDslDocumentParser
             parsed.Clipboard,
             state.Profile);
         ValidateCompileTimeBehaviorInvocations(profile, sourcePath);
+        ValidateLayerTargets(profile, sourcePath);
         return new IKeydDslDocument(profile, mouse.Profile, targets.Extensions);
     }
 
@@ -65,8 +66,37 @@ internal static class IKeydDslDocumentParser
         }
     }
 
+    private static void ValidateLayerTargets(AutomationProfile profile, string sourcePath)
+    {
+        foreach (var keymap in profile.Keymaps.Values)
+        {
+            foreach (var mapping in keymap.BehaviorMappings)
+            {
+                var helper = mapping.Invocation.Name.ToUpperInvariant();
+                if (helper is not ("LT" or "MO" or "TG" or "TO") ||
+                    mapping.Invocation.Arguments.Count < 1)
+                {
+                    continue;
+                }
+
+                var layer = mapping.Invocation.Arguments[0];
+                if (!profile.Keymaps.ContainsKey(layer))
+                {
+                    throw new InvalidDataException(
+                        $"{sourcePath}: {helper} on {keymap.Name}.{mapping.Key} references unknown layer '{layer}'.");
+                }
+            }
+        }
+    }
+
     private static bool RequiresCompileTimeValidation(string name)
-        => name.Equals("UNICODE", StringComparison.OrdinalIgnoreCase) ||
+        => name.Equals("LT", StringComparison.OrdinalIgnoreCase) ||
+           name.Equals("MT", StringComparison.OrdinalIgnoreCase) ||
+           name.Equals("MO", StringComparison.OrdinalIgnoreCase) ||
+           name.Equals("MOD", StringComparison.OrdinalIgnoreCase) ||
+           name.Equals("TG", StringComparison.OrdinalIgnoreCase) ||
+           name.Equals("TO", StringComparison.OrdinalIgnoreCase) ||
+           name.Equals("UNICODE", StringComparison.OrdinalIgnoreCase) ||
            name.Equals("TEXT", StringComparison.OrdinalIgnoreCase) ||
            name.Equals("EXEC", StringComparison.OrdinalIgnoreCase) ||
            name.Equals("SHELL", StringComparison.OrdinalIgnoreCase) ||

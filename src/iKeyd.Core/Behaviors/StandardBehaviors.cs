@@ -42,6 +42,20 @@ public static class StandardBehaviors
     public static BehaviorDefinition MOD(string modifier)
         => new ModifierHoldBehaviorDefinition(modifier);
 
+    /// <summary>
+    /// Toggles a persistent layer selection. Physical auto-repeat cannot replay
+    /// the toggle because layer-state actions use RepeatPolicy.Never.
+    /// </summary>
+    public static BehaviorDefinition TG(string layer)
+        => Press(BehaviorAction.LayerToggle(layer));
+
+    /// <summary>
+    /// Replaces the persistent layer selection with one layer. Momentary layer
+    /// ownership remains independent and is released by its owning behavior.
+    /// </summary>
+    public static BehaviorDefinition TO(string layer)
+        => Press(BehaviorAction.LayerSet(layer));
+
     public static BehaviorDefinition Unicode(string scalar)
         => Press(BehaviorAction.SendUnicode(scalar));
 
