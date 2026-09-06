@@ -72,8 +72,9 @@ jobs:
           $out = 'TestResults\compatibility-inventory'
           New-Item -ItemType Directory -Force -Path $out | Out-Null
           $matrix = Join-Path $out 'compatibility-matrix.json'
-          python -B tools/analyze-legacy-compatibility.py $env:IKEYD_LEGACY_AHK --coverage tests/compatibility/coverage-rules.json --profile config/hotkeySKG.behavior.json --scenarios tests/iKeyd.Compatibility.Tests/Scenarios --json $matrix --markdown (Join-Path $out 'compatibility-matrix.md')
-          python -B tools/apply-scenario-coverage.py --matrix $matrix --scenarios tests/iKeyd.Compatibility.Tests/Scenarios --links tests/iKeyd.Compatibility.Tests/ScenarioInventoryLinks.json
+          $markdown = Join-Path $out 'compatibility-matrix.md'
+          python -B tools/analyze-legacy-compatibility.py $env:IKEYD_LEGACY_AHK --coverage tests/compatibility/coverage-rules.json --profile config/hotkeySKG.behavior.json --scenarios tests/iKeyd.Compatibility.Tests/Scenarios --json $matrix --markdown $markdown
+          python -B tools/apply-scenario-coverage.py --matrix $matrix --scenarios tests/iKeyd.Compatibility.Tests/Scenarios --links tests/iKeyd.Compatibility.Tests/ScenarioInventoryLinks.json --markdown $markdown
           $data = Get-Content $matrix -Raw | ConvertFrom-Json
           if ([int]$data.summary.unknownCount -ne 0 -or [int]$data.summary.missingCount -ne 0) { throw "matrix not complete: unknown=$($data.summary.unknownCount) missing=$($data.summary.missingCount)" }
           if (Select-String -Path $matrix -Pattern 'deferred:#57|pending:#57') { throw 'stale #57 handoff remains' }
