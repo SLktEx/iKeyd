@@ -54,6 +54,26 @@ public sealed class InputDiagnosticsTests
     }
 
     [Fact]
+    public void Export_preserves_extended_physical_key_identity()
+    {
+        var diagnostics = new InputDiagnosticsBuffer();
+        var state = EmptyState();
+        var numpadEnter = new KeyboardKey(WindowsKeyMap.Enter, 0x1C, true);
+
+        diagnostics.RecordEvent(
+            new KeyboardEvent(numpadEnter, KeyEventKind.Down, KeyEventOrigin.Physical, 10),
+            state,
+            state,
+            KeyboardDisposition.Suppress);
+
+        var entry = Assert.Single(diagnostics.Snapshot());
+        Assert.Equal(WindowsKeyMap.Enter, entry.VirtualKey);
+        Assert.Equal(0x1C, entry.ScanCode);
+        Assert.True(entry.IsExtended);
+        Assert.Contains("vk=0D/sc=01C/ext=1", diagnostics.ExportText(), StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void NonConvert_F_trace_records_legacy_vk_sc_output_and_clean_release_state()
     {
         using var fixture = CreateRuntime(InputMode.R);
