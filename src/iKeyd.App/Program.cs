@@ -85,6 +85,7 @@ internal static class Program
             configuration = configuration with { StartupMode = mode };
         }
 
+        KeyboardMouseMotion.ConfigureDefaultProfile(configuration.Mouse);
         using var context = new IKeydApplicationContext(configuration);
         Application.Run(context);
     }
