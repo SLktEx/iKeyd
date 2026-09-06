@@ -5,28 +5,28 @@ using iKeyd.Windows.Input;
 namespace iKeyd.App;
 
 /// <summary>
-/// Time-based pointer movement for the legacy S+M mouse layer. Physical keyboard
-/// repeat is intentionally ignored: one held direction starts a short-period
-/// timer and key-up stops that direction immediately.
+/// Virtual-stick pointer movement for the legacy S+M mouse layer. Physical
+/// keyboard repeat is ignored. Direction keys request a two-dimensional analog
+/// stick target; the Core motion engine smooths toward that target and emits
+/// time-based relative movement.
 /// </summary>
 internal sealed class KeyboardMouseMotion : IDisposable
 {
     internal const int TickIntervalMs = 8;
     internal const int MaxIntegratedTickMs = 32;
-    internal const double InitialSpeedPixelsPerSecond = 110.0;
-    internal const double MaxSpeedPixelsPerSecond = 1700.0;
-    internal const double AccelerationDurationMs = 650.0;
+    internal const double NormalSpeedPixelsPerSecond = 2200.0;
+    internal const double PrecisionSpeedPixelsPerSecond = 800.0;
+    internal const double FineSpeedPixelsPerSecond = 240.0;
+    internal const double FastSpeedPixelsPerSecond = 4400.0;
 
     private readonly object _gate = new();
     private readonly IDesktopBackend _desktop;
     private readonly KeyboardState _keyboardState;
     private readonly HashSet<ushort> _directions = [];
+    private readonly VirtualPointerMotionEngine _motion = new();
     private readonly Timer _timer;
 
-    private long _startedAt;
     private long _lastTickAt;
-    private double _remainderX;
-    private double _remainderY;
     private bool _disposed;
 
     public KeyboardMouseMotion(IDesktopBackend desktop, KeyboardState keyboardState)
@@ -46,29 +46,17 @@ internal sealed class KeyboardMouseMotion : IDisposable
             if (_disposed)
                 return true;
 
-            // A WH_KEYBOARD_LL down event is repeated by Windows while a key is
-            // held. The movement loop already represents the hold, so duplicate
-            // downs must not create extra movement or restart acceleration.
             if (!_directions.Add(virtualKey))
                 return true;
 
-            // A tap can be shorter than the first timer tick. Give every fresh
-            // direction press exactly one pixel of deterministic movement so fine
-            // positioning remains possible without restoring the old 10/30/100px
-            // jumps that made keyboard mouse movement feel coarse.
-            var (nudgeX, nudgeY) = DirectionUnit(key.Code);
-            _desktop.MovePointerBy(nudgeX, nudgeY);
-
             if (_directions.Count == 1)
             {
-                var now = Environment.TickCount64;
-                _startedAt = now;
-                _lastTickAt = now;
-                _remainderX = 0;
-                _remainderY = 0;
-                _timer.Change(TickIntervalMs, TickIntervalMs);
+                var (nudgeX, nudgeY) = DirectionUnit(key.Code);
+                _desktop.MovePointerBy(nudgeX, nudgeY);
             }
 
+            var (x, y) = UpdateTargetCore();
+            EnsureTimerForTargetCore(x, y);
             return true;
         }
     }
@@ -80,8 +68,8 @@ internal sealed class KeyboardMouseMotion : IDisposable
             if (!_directions.Remove(virtualKey))
                 return false;
 
-            if (_directions.Count == 0)
-                StopCore();
+            var (x, y) = UpdateTargetCore();
+            EnsureTimerForTargetCore(x, y);
             return true;
         }
     }
@@ -108,14 +96,15 @@ internal sealed class KeyboardMouseMotion : IDisposable
         _timer.Dispose();
     }
 
-    internal static double SpeedAt(long heldMilliseconds, double multiplier = 1.0)
+    internal static double SpeedForModifiers(bool precision, bool fine, bool fast)
     {
-        var progress = Math.Clamp(heldMilliseconds / AccelerationDurationMs, 0.0, 1.0);
-        // smoothstep removes the visible velocity discontinuities of stepped
-        // acceleration while keeping both ends of the curve gentle.
-        var smooth = progress * progress * (3.0 - (2.0 * progress));
-        return (InitialSpeedPixelsPerSecond +
-            ((MaxSpeedPixelsPerSecond - InitialSpeedPixelsPerSecond) * smooth)) * multiplier;
+        if (precision)
+            return PrecisionSpeedPixelsPerSecond;
+        if (fine)
+            return FineSpeedPixelsPerSecond;
+        if (fast)
+            return FastSpeedPixelsPerSecond;
+        return NormalSpeedPixelsPerSecond;
     }
 
     private void OnTick(object? state)
@@ -124,7 +113,7 @@ internal sealed class KeyboardMouseMotion : IDisposable
         {
             lock (_gate)
             {
-                if (_disposed || _directions.Count == 0)
+                if (_disposed || _lastTickAt == 0)
                     return;
 
                 var now = Environment.TickCount64;
@@ -133,66 +122,63 @@ internal sealed class KeyboardMouseMotion : IDisposable
                     return;
 
                 _lastTickAt = now;
-                // Never replay an arbitrarily long scheduling delay as one huge
-                // pointer jump. Lost time is deliberately dropped under CPU load.
                 var integratedMs = Math.Min(elapsed, MaxIntegratedTickMs);
+                var delta = _motion.Step(
+                    integratedMs / 1000.0,
+                    GetSpeedPixelsPerSecond());
 
-                var x = (_directions.Contains((ushort)'L') ? 1.0 : 0.0) -
-                        (_directions.Contains((ushort)'J') ? 1.0 : 0.0);
-                var y = (_directions.Contains((ushort)'K') ? 1.0 : 0.0) -
-                        (_directions.Contains((ushort)'I') ? 1.0 : 0.0);
-                if (x == 0 && y == 0)
-                    return;
+                if (delta.X != 0 || delta.Y != 0)
+                    _desktop.MovePointerBy(delta.X, delta.Y);
 
-                if (x != 0 && y != 0)
-                {
-                    const double inverseSqrtTwo = 0.7071067811865476;
-                    x *= inverseSqrtTwo;
-                    y *= inverseSqrtTwo;
-                }
-
-                var speed = SpeedAt(now - _startedAt, GetSpeedMultiplier());
-                var distance = speed * integratedMs / 1000.0;
-                _remainderX += x * distance;
-                _remainderY += y * distance;
-
-                var deltaX = (int)Math.Truncate(_remainderX);
-                var deltaY = (int)Math.Truncate(_remainderY);
-                _remainderX -= deltaX;
-                _remainderY -= deltaY;
-
-                if (deltaX != 0 || deltaY != 0)
-                    _desktop.MovePointerBy(deltaX, deltaY);
+                var (x, y) = CurrentDirectionCore();
+                if (x == 0 && y == 0 && _motion.IsIdle)
+                    StopCore();
             }
         }
         catch
         {
-            // A ThreadPool timer exception must never terminate iKeyd. Stop the
-            // movement session and require a fresh physical press after failure.
             Reset();
         }
     }
 
-    private double GetSpeedMultiplier()
+    private (int X, int Y) UpdateTargetCore()
     {
-        // Preserve the old D/E/C speed-modifier idea but apply it as a multiplier
-        // to continuous motion instead of swapping between giant fixed jumps.
-        if (_keyboardState.IsVirtualKeyPressed((ushort)'E'))
-            return 0.18;
-        if (_keyboardState.IsVirtualKeyPressed((ushort)'D'))
-            return 0.45;
-        if (_keyboardState.IsVirtualKeyPressed((ushort)'C'))
-            return 2.5;
-        return 1.0;
+        var direction = CurrentDirectionCore();
+        _motion.SetDirection(direction.X, direction.Y);
+        return direction;
     }
+
+    private (int X, int Y) CurrentDirectionCore()
+    {
+        var x = (_directions.Contains((ushort)'L') ? 1 : 0) -
+                (_directions.Contains((ushort)'J') ? 1 : 0);
+        var y = (_directions.Contains((ushort)'K') ? 1 : 0) -
+                (_directions.Contains((ushort)'I') ? 1 : 0);
+        return (x, y);
+    }
+
+    private void EnsureTimerForTargetCore(int x, int y)
+    {
+        if (x == 0 && y == 0)
+            return;
+        if (_lastTickAt != 0)
+            return;
+
+        _lastTickAt = Environment.TickCount64;
+        _timer.Change(TickIntervalMs, TickIntervalMs);
+    }
+
+    private double GetSpeedPixelsPerSecond()
+        => SpeedForModifiers(
+            _keyboardState.IsVirtualKeyPressed((ushort)'D'),
+            _keyboardState.IsVirtualKeyPressed((ushort)'E'),
+            _keyboardState.IsVirtualKeyPressed((ushort)'C'));
 
     private void StopCore()
     {
         _timer.Change(Timeout.Infinite, Timeout.Infinite);
-        _startedAt = 0;
         _lastTickAt = 0;
-        _remainderX = 0;
-        _remainderY = 0;
+        _motion.Reset();
     }
 
     private static bool IsDirection(KeyCode key)
