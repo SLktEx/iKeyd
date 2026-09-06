@@ -8,13 +8,14 @@ namespace iKeyd.App;
 /// Preserves the small set of pinned #IfWinActive hotkeys that sit outside the
 /// normal hotkeySKG keymap/layer state machine.
 /// </summary>
-internal sealed class LegacyContextualHotkeyHandler : IKeyboardEventHandler
+internal sealed class LegacyContextualHotkeyHandler : IKeyboardEventHandler, IInputStateResettable
 {
     private const ushort LeftControl = 0xA2;
     private const ushort RightControl = 0xA3;
     private const ushort LeftAlt = 0xA4;
     private const ushort RightAlt = 0xA5;
 
+    private readonly object _gate = new();
     private readonly KeyboardState _keyboardState;
     private readonly IDesktopBackend _desktop;
     private readonly IKeyboardOutput _keyboard;
@@ -45,8 +46,11 @@ internal sealed class LegacyContextualHotkeyHandler : IKeyboardEventHandler
             return _fallback.OnKeyboardEvent(keyboardEvent);
 
         var virtualKey = keyboardEvent.Key.VirtualKey;
-        if (keyboardEvent.Kind == KeyEventKind.Up && _suppressedKeys.Remove(virtualKey))
-            return KeyboardDisposition.Suppress;
+        lock (_gate)
+        {
+            if (keyboardEvent.Kind == KeyEventKind.Up && _suppressedKeys.Remove(virtualKey))
+                return KeyboardDisposition.Suppress;
+        }
         if (keyboardEvent.Kind != KeyEventKind.Down)
             return _fallback.OnKeyboardEvent(keyboardEvent);
 
@@ -67,11 +71,21 @@ internal sealed class LegacyContextualHotkeyHandler : IKeyboardEventHandler
             IsAltPressed())
         {
             _postCommand(window, 105);
-            _suppressedKeys.Add(virtualKey);
+            lock (_gate)
+                _suppressedKeys.Add(virtualKey);
             return KeyboardDisposition.Suppress;
         }
 
         return _fallback.OnKeyboardEvent(keyboardEvent);
+    }
+
+    public void ResetInputState()
+    {
+        lock (_gate)
+            _suppressedKeys.Clear();
+
+        if (_fallback is IInputStateResettable resettable)
+            resettable.ResetInputState();
     }
 
     private KeyboardDisposition HandleConsoleHotkey(ushort triggerVirtualKey, string menuKeys)
@@ -96,7 +110,8 @@ internal sealed class LegacyContextualHotkeyHandler : IKeyboardEventHandler
                 _keyboard.SendKey(control, KeyEventKind.Down);
         }
 
-        _suppressedKeys.Add(triggerVirtualKey);
+        lock (_gate)
+            _suppressedKeys.Add(triggerVirtualKey);
         return KeyboardDisposition.Suppress;
     }
 
