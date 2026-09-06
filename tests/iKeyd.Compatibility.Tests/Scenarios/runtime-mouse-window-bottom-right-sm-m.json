@@ -1,0 +1,18 @@
+{
+  "id": "runtime-mouse-window-bottom-right-sm-m",
+  "description": "Space then M plus M moves the pointer one pixel inside the active window's bottom-right corner.",
+  "initialState": { "mode": "S", "ime": "off", "layers": ["S", "M"] },
+  "input": [
+    { "atMs": 10, "kind": "keyDown", "key": "M" },
+    { "atMs": 11, "kind": "keyUp", "key": "M" }
+  ],
+  "expected": {
+    "actions": [
+      { "kind": "mouse", "value": "move:899,699" }
+    ]
+  },
+  "tags": ["legacy", "runtime-long-tail", "mouse", "window", "deterministic"],
+  "inventoryIds": ["legacy-mouse-operation-781014bbfb"],
+  "requiredEnvironment": ["deterministic-windows-runtime"],
+  "oracleTargets": ["ikeyd-runtime"]
+}

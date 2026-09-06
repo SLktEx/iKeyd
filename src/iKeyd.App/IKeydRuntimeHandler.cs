@@ -367,6 +367,18 @@ internal sealed class IKeydRuntimeHandler : IKeyboardEventHandler, IMacroActionD
             case KeyCode.O:
                 _desktop.Click(DesktopMouseButton.Right);
                 return true;
+            case KeyCode.Y:
+                ToggleMouseButton(DesktopMouseButton.Left);
+                return true;
+            case KeyCode.H:
+                ToggleMouseButton(DesktopMouseButton.Right);
+                return true;
+            case KeyCode.N:
+                MovePointerToActiveWindowCorner(bottomRight: false);
+                return true;
+            case KeyCode.M:
+                MovePointerToActiveWindowCorner(bottomRight: true);
+                return true;
             case KeyCode.Comma:
                 _desktop.Click(DesktopMouseButton.Middle);
                 return true;
@@ -403,6 +415,20 @@ internal sealed class IKeydRuntimeHandler : IKeyboardEventHandler, IMacroActionD
             default:
                 return false;
         }
+    }
+
+    private void ToggleMouseButton(DesktopMouseButton button)
+        => _desktop.SetMouseButton(button, !_desktop.IsMouseButtonDown(button));
+
+    private void MovePointerToActiveWindowCorner(bool bottomRight)
+    {
+        var bounds = _desktop.GetWindowBounds(_desktop.GetActiveWindow());
+        if (bounds.X < 0)
+            return;
+
+        _desktop.MovePointer(bottomRight
+            ? new DesktopPoint(bounds.X + bounds.Width - 1, bounds.Y + bounds.Height - 1)
+            : new DesktopPoint(bounds.X + 1, bounds.Y + 1));
     }
 
     private int GetMouseMoveAmount()
