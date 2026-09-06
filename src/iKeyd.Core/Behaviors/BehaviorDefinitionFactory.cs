@@ -1,3 +1,4 @@
+using iKeyd.Core.Automation;
 using iKeyd.Core.Chords;
 using iKeyd.Core.Configuration;
 
@@ -17,14 +18,24 @@ public static class BehaviorDefinitionFactory
     ];
 
     public static BehaviorDefinition Create(BehaviorInvocationProfile invocation)
-        => Create(invocation, new Dictionary<string, UserBehaviorDefinitionProfile>(StringComparer.OrdinalIgnoreCase));
+        => Create(
+            invocation,
+            new Dictionary<string, UserBehaviorDefinitionProfile>(StringComparer.OrdinalIgnoreCase),
+            EmptySystemQuerySnapshot.Instance);
 
     public static BehaviorDefinition Create(
         BehaviorInvocationProfile invocation,
         IReadOnlyDictionary<string, UserBehaviorDefinitionProfile> userDefinitions)
+        => Create(invocation, userDefinitions, EmptySystemQuerySnapshot.Instance);
+
+    public static BehaviorDefinition Create(
+        BehaviorInvocationProfile invocation,
+        IReadOnlyDictionary<string, UserBehaviorDefinitionProfile> userDefinitions,
+        ISystemQuerySnapshot systemQueries)
     {
         ArgumentNullException.ThrowIfNull(invocation);
         ArgumentNullException.ThrowIfNull(userDefinitions);
+        ArgumentNullException.ThrowIfNull(systemQueries);
 
         if (string.Equals(invocation.Name, "LT", StringComparison.OrdinalIgnoreCase))
             return CreateLayerTap(invocation);
@@ -44,10 +55,32 @@ public static class BehaviorDefinitionFactory
             return CreateShell(invocation);
         if (string.Equals(invocation.Name, "QUERY", StringComparison.OrdinalIgnoreCase))
             return CreateQuery(invocation);
+        if (string.Equals(invocation.Name, "WHEN", StringComparison.OrdinalIgnoreCase))
+            return CreateWhen(invocation, systemQueries);
         if (userDefinitions.TryGetValue(invocation.Name, out var userDefinition))
             return new ScriptedBehaviorDefinition(userDefinition, invocation);
 
         throw new NotSupportedException($"Unknown behavior '{invocation.Name}'.");
+    }
+
+    public static IReadOnlyList<string> GetRequiredSystemQueries(BehaviorInvocationProfile invocation)
+    {
+        ArgumentNullException.ThrowIfNull(invocation);
+        var queries = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        if (string.Equals(invocation.Name, "QUERY", StringComparison.OrdinalIgnoreCase))
+        {
+            queries.Add(ReadQueryKey(invocation));
+        }
+        else if (string.Equals(invocation.Name, "WHEN", StringComparison.OrdinalIgnoreCase))
+        {
+            var used = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var branch = ReadConditionalBranch(invocation, string.Empty, used);
+            ValidateNoUnusedWhenOptions(invocation, used);
+            branch.CollectSystemQueries(queries);
+        }
+
+        return queries.OrderBy(value => value, StringComparer.OrdinalIgnoreCase).ToArray();
     }
 
     private static BehaviorDefinition CreateLayerTap(BehaviorInvocationProfile invocation)
@@ -135,18 +168,7 @@ public static class BehaviorDefinitionFactory
 
     private static BehaviorDefinition CreateQuery(BehaviorInvocationProfile invocation)
     {
-        string key;
-        if (invocation.Arguments.Count == 1 && invocation.Options.Count == 0)
-        {
-            key = invocation.Arguments[0];
-        }
-        else
-        {
-            RequireCount(invocation, 0, "QUERY() { key = foreground.process }");
-            ValidateKnownOptions(invocation, ["key"]);
-            key = RequireOption(invocation, "key");
-        }
-
+        var key = ReadQueryKey(invocation);
         try
         {
             return StandardBehaviors.Press(BehaviorAction.Query(key));
@@ -154,6 +176,107 @@ public static class BehaviorDefinitionFactory
         catch (ArgumentException exception)
         {
             throw new InvalidDataException(exception.Message, exception);
+        }
+    }
+
+    private static string ReadQueryKey(BehaviorInvocationProfile invocation)
+    {
+        if (invocation.Arguments.Count == 1 && invocation.Options.Count == 0)
+            return SystemQueryKeys.Normalize(invocation.Arguments[0]);
+
+        RequireCount(invocation, 0, "QUERY() { key = foreground.process }");
+        ValidateKnownOptions(invocation, ["key"]);
+        return SystemQueryKeys.Normalize(RequireOption(invocation, "key"));
+    }
+
+    private static BehaviorDefinition CreateWhen(
+        BehaviorInvocationProfile invocation,
+        ISystemQuerySnapshot systemQueries)
+    {
+        RequireCount(invocation, 0, "WHEN() { query = ... }");
+        var used = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var branch = ReadConditionalBranch(invocation, string.Empty, used);
+        ValidateNoUnusedWhenOptions(invocation, used);
+        return new ConditionalBehaviorDefinition(branch, systemQueries);
+    }
+
+    private static BehaviorOutputBranch ReadConditionalBranch(
+        BehaviorInvocationProfile invocation,
+        string prefix,
+        ISet<string> used)
+    {
+        var query = SystemQueryKeys.Normalize(ReadUsedOption(invocation, prefix + "query", used));
+        var @operator = ParseConditionOperator(ReadUsedOption(invocation, prefix + "operator", used));
+        var expected = ReadUsedOption(invocation, prefix + "expected", used);
+        var condition = new SystemQueryCondition(query, @operator, expected);
+
+        var thenBranch = ReadOutputBranch(invocation, prefix + "then_", used, required: true)!;
+        var elseBranch = ReadOutputBranch(invocation, prefix + "else_", used, required: false);
+        return BehaviorOutputBranch.When(condition, thenBranch, elseBranch);
+    }
+
+    private static BehaviorOutputBranch? ReadOutputBranch(
+        BehaviorInvocationProfile invocation,
+        string prefix,
+        ISet<string> used,
+        bool required)
+    {
+        var kindKey = prefix + "kind";
+        if (!invocation.Options.TryGetValue(kindKey, out var rawKind))
+        {
+            if (required)
+                throw new InvalidDataException($"WHEN requires option '{kindKey}'.");
+            return null;
+        }
+        used.Add(kindKey);
+
+        var kind = rawKind.Trim().ToUpperInvariant();
+        if (kind == "WHEN")
+            return ReadConditionalBranch(invocation, prefix, used);
+
+        var value = ReadUsedOption(invocation, prefix + "value", used);
+        BehaviorAction action = kind switch
+        {
+            "KEY" => BehaviorAction.SendKey(new KeyId(value)),
+            "UNICODE" => BehaviorAction.SendUnicode(value),
+            "TEXT" => BehaviorAction.SendText(value),
+            "SHELL" => BehaviorAction.Shell(value),
+            "QUERY" => BehaviorAction.Query(value),
+            "EXEC" => BehaviorAction.Exec(value, ReadIndexedOptions(invocation, prefix + "arg", used)),
+            _ => throw new InvalidDataException(
+                $"Unsupported WHEN branch kind '{rawKind}'. Use key, unicode, text, exec, shell, query, or when.")
+        };
+        return BehaviorOutputBranch.Action(action);
+    }
+
+    private static SystemQueryConditionOperator ParseConditionOperator(string value)
+        => value.Trim().ToLowerInvariant() switch
+        {
+            "equals" or "==" => SystemQueryConditionOperator.Equals,
+            "not_equals" or "!=" => SystemQueryConditionOperator.NotEquals,
+            _ => throw new InvalidDataException(
+                $"Unknown condition operator '{value}'. Use equals or not_equals.")
+        };
+
+    private static string ReadUsedOption(
+        BehaviorInvocationProfile invocation,
+        string name,
+        ISet<string> used)
+    {
+        if (!invocation.Options.TryGetValue(name, out var value))
+            throw new InvalidDataException($"WHEN requires option '{name}'.");
+        used.Add(name);
+        return value;
+    }
+
+    private static void ValidateNoUnusedWhenOptions(
+        BehaviorInvocationProfile invocation,
+        ISet<string> used)
+    {
+        foreach (var option in invocation.Options.Keys)
+        {
+            if (!used.Contains(option))
+                throw new InvalidDataException($"WHEN does not support or consume option '{option}'.");
         }
     }
 
@@ -183,7 +306,10 @@ public static class BehaviorDefinitionFactory
         }
     }
 
-    private static IReadOnlyList<string> ReadIndexedOptions(BehaviorInvocationProfile invocation, string prefix)
+    private static IReadOnlyList<string> ReadIndexedOptions(
+        BehaviorInvocationProfile invocation,
+        string prefix,
+        ISet<string>? used = null)
     {
         var indexed = new SortedDictionary<int, string>();
         foreach (var option in invocation.Options)
@@ -195,6 +321,7 @@ public static class BehaviorDefinitionFactory
             }
 
             indexed[index] = option.Value;
+            used?.Add(option.Key);
         }
 
         if (indexed.Count == 0)
@@ -205,7 +332,8 @@ public static class BehaviorDefinitionFactory
         foreach (var pair in indexed)
         {
             if (pair.Key != expected)
-                throw new InvalidDataException($"EXEC arguments must use contiguous options arg0..argN; missing arg{expected}.");
+                throw new InvalidDataException(
+                    $"Arguments must use contiguous options {prefix}0..{prefix}N; missing {prefix}{expected}.");
             result[expected++] = pair.Value;
         }
         return result;
