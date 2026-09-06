@@ -3,7 +3,7 @@ using iKeyd.Core.Input;
 
 namespace iKeyd.Windows.Clipboard;
 
-public sealed class WindowsClipboardController : IDisposable
+public sealed class WindowsClipboardController : IClipboardHistoryActions, IDisposable
 {
     private const ushort VkShift = 0x10;
     private const ushort VkInsert = 0x2D;

@@ -33,12 +33,6 @@ internal sealed class IKeydApplicationContext : ApplicationContext
         _keyboard = new WindowsKeyboardBackend();
         var desktop = new WindowsDesktopBackend();
         var send = new LegacySendOutput(_keyboard, desktop);
-        _runtime = new IKeydRuntimeHandler(
-            configuration,
-            new WindowsInputMethod(),
-            _keyboard.State,
-            send,
-            desktop);
 
         _clipboardService = new WindowsClipboardService();
         _clipboard = new WindowsClipboardController(
@@ -46,6 +40,14 @@ internal sealed class IKeydApplicationContext : ApplicationContext
             new ClipboardHistory(),
             new WindowsClipboardPicker(),
             _keyboard);
+
+        _runtime = new IKeydRuntimeHandler(
+            configuration,
+            new WindowsInputMethod(),
+            _keyboard.State,
+            send,
+            desktop,
+            _clipboard);
 
         _macroExecutor = new MacroExecutor(send, _runtime);
 
