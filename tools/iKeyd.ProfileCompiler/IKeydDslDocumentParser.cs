@@ -38,11 +38,12 @@ internal static class IKeydDslDocumentParser
         {
             foreach (var mapping in keymap.BehaviorMappings)
             {
-                if (!RequiresCompileTimeValidation(mapping.Invocation.Name) &&
-                    !profile.BehaviorDefinitions.ContainsKey(mapping.Invocation.Name))
-                {
+                // User-defined behavior invocation options have an older compatibility
+                // surface and are not globally revalidated here. Shared-state syntax
+                // inside their definitions is already typed/validated by the state
+                // lowering pass. Keep this pass scoped to first-class helpers.
+                if (!RequiresCompileTimeValidation(mapping.Invocation.Name))
                     continue;
-                }
 
                 try
                 {
