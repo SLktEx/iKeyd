@@ -71,7 +71,10 @@ internal sealed class IKeydApplicationContext : ApplicationContext
             send,
             WindowsWindowCommand.PostCommand,
             _keyboardHandler);
-        _suspendHandler = new LegacySuspendToggleHandler(_keyboard.State, _contextualHotkeys);
+        _suspendHandler = new LegacySuspendToggleHandler(
+            _keyboard.State,
+            _contextualHotkeys,
+            _runtime.SetPointerSuspended);
 
         _macroExecutor = new MacroExecutor(send, _runtime);
         _legacyMacroSlots = new LegacyMacroSlotController(
