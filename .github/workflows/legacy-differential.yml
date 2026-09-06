@@ -187,6 +187,7 @@ jobs:
             --filter 'Category=HostedLegacyDifferentialE2E'
 
       - name: Run AHK v1 source differential
+        if: always()
         shell: powershell
         env:
           IKEYD_AHK_V1_EXE: ${{ steps.ahk.outputs.path }}
