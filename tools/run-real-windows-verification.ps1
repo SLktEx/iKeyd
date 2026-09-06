@@ -268,9 +268,11 @@ $inventoryIds = @($plan.checks | ForEach-Object { @($_.inventoryIds) })
 $uniqueInventoryIds = @($inventoryIds | Sort-Object -Unique)
 $statuses = @($checkResults | ForEach-Object { $_.status })
 $manualComplete = $statuses.Count -gt 0 -and @($statuses | Where-Object { $_ -ne "pass" }).Count -eq 0
+$clipboardAttemptedSafely = $automated.clipboardCompatibility.status -in @("pass", "skipped")
 $complete = (
     $automated.legacyDifferential.status -eq "pass" -and
     $automated.backendCompatibility.status -eq "pass" -and
+    $clipboardAttemptedSafely -and
     $manualComplete -and
     -not [string]::IsNullOrWhiteSpace($iKeydSha) -and
     $japaneseImeConfigured -and
