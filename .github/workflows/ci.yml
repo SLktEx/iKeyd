@@ -33,4 +33,11 @@ jobs:
             tests/tooling/fixtures/behaviors.ikeyd `
             "$env:RUNNER_TEMP/Behaviors.g.cs" `
             --emit-json "$env:RUNNER_TEMP/behaviors.json"
+      - name: Compile automation action DSL
+        shell: pwsh
+        run: |
+          dotnet tools/iKeyd.ProfileCompiler/bin/Release/net8.0/iKeyd.ProfileCompiler.dll `
+            tests/tooling/fixtures/automation-actions.ikeyd `
+            "$env:RUNNER_TEMP/AutomationActions.g.cs" `
+            --emit-json "$env:RUNNER_TEMP/automation-actions.json"
       - run: dotnet test iKeyd.sln --no-build --configuration Release

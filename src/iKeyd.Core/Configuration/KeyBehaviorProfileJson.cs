@@ -134,8 +134,27 @@ internal static class KeyBehaviorProfileJson
             "window" => KeyBehaviorAction.Window(ParseChoice(value, location, "Minimize", "ToggleMaximize", "LeftHalf", "RightHalf", "TopHalf", "BottomHalf", "ToggleTopMost", "OpacityUp", "OpacityDown", "ToggleCaption", "ActivateBottomSameClass")),
             "clipboard" => KeyBehaviorAction.Clipboard(ParseChoice(value, location, "History")),
             "macro" => KeyBehaviorAction.Macro(value),
+            "exec" => ParseExec(element, value, location),
+            "shell" => KeyBehaviorAction.Shell(value),
+            "query" => KeyBehaviorAction.Query(value),
             _ => throw new InvalidDataException($"{location}.kind '{kindText}' is unsupported.")
         };
+    }
+
+    private static KeyBehaviorAction ParseExec(JsonElement element, string executable, string location)
+    {
+        if (!element.TryGetProperty("args", out var argsElement))
+            return KeyBehaviorAction.Exec(executable);
+        if (argsElement.ValueKind != JsonValueKind.Array)
+            throw new InvalidDataException($"{location}.args must be an array of strings.");
+        var args = new List<string>();
+        foreach (var item in argsElement.EnumerateArray())
+        {
+            if (item.ValueKind != JsonValueKind.String)
+                throw new InvalidDataException($"{location}.args must contain only strings.");
+            args.Add(item.GetString()!);
+        }
+        return KeyBehaviorAction.Exec(executable, args);
     }
 
     private static KeyBehaviorAction ParseMouseMove(string value, string location)
@@ -167,6 +186,14 @@ internal static class KeyBehaviorProfileJson
         writer.WriteStartObject();
         writer.WriteString("kind", ActionKindName(action.Kind));
         writer.WriteString("value", action.Value);
+        if (action.Kind == KeyBehaviorActionKind.Exec)
+        {
+            writer.WritePropertyName("args");
+            writer.WriteStartArray();
+            foreach (var argument in action.GetArguments())
+                writer.WriteStringValue(argument);
+            writer.WriteEndArray();
+        }
         writer.WriteEndObject();
     }
 
@@ -183,6 +210,9 @@ internal static class KeyBehaviorProfileJson
         KeyBehaviorActionKind.Window => "window",
         KeyBehaviorActionKind.Clipboard => "clipboard",
         KeyBehaviorActionKind.Macro => "macro",
+        KeyBehaviorActionKind.Exec => "exec",
+        KeyBehaviorActionKind.Shell => "shell",
+        KeyBehaviorActionKind.Query => "query",
         _ => throw new ArgumentOutOfRangeException(nameof(kind))
     };
 }

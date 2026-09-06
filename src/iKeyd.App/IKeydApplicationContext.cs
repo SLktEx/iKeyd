@@ -1,7 +1,10 @@
+using System.Diagnostics;
+using iKeyd.Core.Automation;
 using iKeyd.Core.Clipboard;
 using iKeyd.Core.Configuration;
 using iKeyd.Core.Macros;
 using iKeyd.Core.Modes;
+using iKeyd.Windows.Automation;
 using iKeyd.Windows.Clipboard;
 using iKeyd.Windows.Desktop;
 using iKeyd.Windows.Input;
@@ -13,6 +16,8 @@ internal sealed class IKeydApplicationContext : ApplicationContext
 {
     private readonly WindowsKeyboardBackend _keyboard;
     private readonly IKeydRuntimeHandler _runtime;
+    private readonly WindowsCommandActionQueue _commandActions;
+    private readonly WindowsSystemQueryProvider _systemQueries;
     private readonly WindowsClipboardService _clipboardService;
     private readonly WindowsClipboardController _clipboard;
     private readonly NotifyIcon _notifyIcon;
@@ -36,12 +41,16 @@ internal sealed class IKeydApplicationContext : ApplicationContext
         _keyboard = new WindowsKeyboardBackend();
         var desktop = new WindowsDesktopBackend();
         var send = new LegacySendOutput(_keyboard, desktop);
+        var inputMethod = new WindowsInputMethod();
         _runtime = new IKeydRuntimeHandler(
             configuration,
-            new WindowsInputMethod(),
+            inputMethod,
             _keyboard.State,
             send,
             desktop);
+        _commandActions = new WindowsCommandActionQueue();
+        _systemQueries = new WindowsSystemQueryProvider(inputMethod);
+        _commandActions.Completed += OnCommandCompleted;
 
         _clipboardService = new WindowsClipboardService();
         _clipboard = new WindowsClipboardController(
@@ -110,6 +119,8 @@ internal sealed class IKeydApplicationContext : ApplicationContext
         }
         finally
         {
+            _commandActions.Completed -= OnCommandCompleted;
+            _commandActions.Dispose();
             _clipboard.Dispose();
             _clipboardService.Dispose();
             _runtime.Dispose();
@@ -126,10 +137,51 @@ internal sealed class IKeydApplicationContext : ApplicationContext
 
     private void PostConfiguredHostAction(KeyBehaviorAction action)
     {
-        if (_stopping || _uiDispatcher.IsDisposed)
+        if (_stopping)
             return;
 
+        switch (action.Kind)
+        {
+            case KeyBehaviorActionKind.Exec:
+                if (!_commandActions.TryEnqueue(CommandRequest.Exec(action.Value, action.GetArguments())))
+                    Trace.WriteLine($"iKeyd command queue is full; dropped exec '{action.Value}'.");
+                return;
+            case KeyBehaviorActionKind.Shell:
+                if (!_commandActions.TryEnqueue(CommandRequest.Shell(action.Value)))
+                    Trace.WriteLine("iKeyd command queue is full; dropped shell action.");
+                return;
+            case KeyBehaviorActionKind.Query:
+                ThreadPool.QueueUserWorkItem(_ => RunConfiguredQuery(action.Value));
+                return;
+        }
+
+        if (_uiDispatcher.IsDisposed)
+            return;
         _uiDispatcher.BeginInvoke((Action)(() => DispatchConfiguredHostAction(action)));
+    }
+
+    private void RunConfiguredQuery(string query)
+    {
+        if (_stopping)
+            return;
+        try
+        {
+            var value = _systemQueries.GetValue(query);
+            if (!_stopping)
+                _keyboard.SendText(value);
+        }
+        catch (Exception exception)
+        {
+            Trace.WriteLine($"iKeyd system query '{query}' failed: {exception.Message}");
+        }
+    }
+
+    private static void OnCommandCompleted(CommandResult result)
+    {
+        if (result.Succeeded)
+            return;
+        var detail = result.Error ?? $"exit code {result.ExitCode}: {result.StandardError.Trim()}";
+        Trace.WriteLine($"iKeyd command '{result.Request.Command}' failed: {detail}");
     }
 
     private void DispatchConfiguredHostAction(KeyBehaviorAction action)

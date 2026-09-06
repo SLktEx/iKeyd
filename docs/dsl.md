@@ -249,19 +249,24 @@ behavior POS.Henkan {
 }
 ```
 
-Supported actions in this first behavior model are:
+Supported output actions include:
 
 ```text
 key(Left)
 text("literal text")
-layer(NAV)
-modifier(Ctrl)
-modifier(Shift)
-modifier(Alt)
-modifier(Gui)
+mouse_move(-30, 0)
+mouse_click(Left)
+scroll(Up)
+media(PlayPause)
+window(LeftHalf)
+clipboard(History)
+macro("hello{Enter}")
+exec("code", ".")
+shell("echo hello && echo world")
+query(foreground.process)
 ```
 
-Tap actions may be `key(...)` or `text(...)`. Hold actions may be `layer(...)` or `modifier(...)`. Layer mappings currently emit `key(...)` or `text(...)`.
+Hold actions are `layer(...)` or `modifier(...)`. Output actions can be used by behavior taps and layer mappings.
 
 ### Tap/hold timing
 
@@ -292,6 +297,48 @@ Multiple resolved modifier holds may overlap, so home-row-mod style rolls can pr
 When layers are active, the most recently activated layer that defines the pressed key wins. Keys absent from active behavior layers are transparent and continue through the normal input path unless an active configured modifier applies to them.
 
 `text(...)` is literal output. Virtual held modifiers do not transform the literal text. `key(...)` output does participate in configured held modifiers.
+
+### Command and system-query actions
+
+`exec(...)` launches an executable directly and preserves each argument as a separate argv entry:
+
+```text
+layer TOOLS {
+    POS.T = exec("wt.exe")
+    POS.C = exec("code", ".")
+    POS.G = exec("git", "status", "--short")
+}
+```
+
+`exec(...)` does not invoke a command shell and does not concatenate arguments into a command string. Characters such as spaces, `&`, quotes, and shell metacharacters therefore remain literal argv content.
+
+`shell(...)` is the explicit escape hatch when shell syntax is intentionally required:
+
+```text
+POS.S = shell("echo hello && echo world")
+```
+
+On Windows the shell action uses the configured command interpreter (`ComSpec`, normally `cmd.exe`). It does not request privilege elevation.
+
+Command actions never start a process inline in the keyboard callback. They are offered to a bounded queue with a non-blocking write and executed by a worker. If the queue is full, the action is dropped rather than delaying keyboard input. Completion is represented with a typed result containing exit code, stdout, stderr, and launch error information.
+
+`query(...)` exposes small platform context values without adding a general-purpose scripting language:
+
+```text
+POS.O = query(system.os)
+POS.A = query(system.architecture)
+POS.H = query(system.hostname)
+POS.U = query(system.username)
+POS.P = query(foreground.process)
+POS.I = query(foreground.pid)
+POS.T = query(foreground.title)
+POS.K = query(ime.kana_active)
+POS.C = query(keyboard.capslock)
+POS.N = query(keyboard.numlock)
+POS.L = query(keyboard.scrolllock)
+```
+
+Unknown query names are compile errors. In the first implementation, a query result is emitted as literal text. Windows system/foreground/IME work is scheduled outside the low-level keyboard callback before the text is emitted.
 
 ### Compatibility boundary
 
@@ -347,4 +394,4 @@ The Python `tools/compile-ikeyd-dsl.py` implementation remains an independent au
 
 The DSL is an authoring format, not a runtime scripting language. Runtime startup does not parse DSL or JSON; the release binary uses generated static profile data.
 
-The language now covers the existing hotkeySKG S/K single-stroke and chord profile plus generic tap/hold, layer and modifier behaviors. Mouse, media, window, clipboard and general macro actions remain follow-up behavior actions rather than reasons to turn the DSL into a general-purpose scripting language.
+The language covers the existing hotkeySKG S/K single-stroke and chord profile plus generic tap/hold, layer/modifier, desktop, clipboard, macro, command and system-query actions. These remain bounded declarative actions rather than a general-purpose language with arbitrary loops, functions, or implicit shell evaluation.

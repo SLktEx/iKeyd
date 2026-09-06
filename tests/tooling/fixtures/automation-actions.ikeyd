@@ -1,0 +1,19 @@
+profile automationActions {
+    chord_window = 40ms
+}
+
+keyboard JIS109
+
+layer TOOLS {
+    POS.Q = exec("tool.exe", "hello world", "&literal")
+    POS.W = shell("echo hello && echo world")
+    POS.E = query(foreground.process)
+}
+
+keymap S {
+    Q = q
+}
+
+keymap K {
+    Q = q
+}
