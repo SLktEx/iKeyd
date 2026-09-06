@@ -13,6 +13,27 @@ from pathlib import Path
 IDENT = r"[A-Za-z0-9_]+"
 KEY_REF = rf"{IDENT}(?:\[\s*\d+\s*,\s*\d+\s*\]|\.{IDENT})?"
 
+# OADG-style JIS 109 physical keyboard. NumpadComma is intentionally not part
+# of the 109-key preset even though iKeyd supports it as an extra compact key.
+JIS109_LAYOUT: list[list[str]] = [
+    ["Escape", "F1", "F2", "F3", "F4", "F5", "F6", "F7", "F8", "F9", "F10", "F11", "F12", "PrintScreen", "ScrollLock", "Pause"],
+    ["ZenkakuHankaku", "1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "Minus", "Caret", "Yen", "Backspace"],
+    ["Tab", "Q", "W", "E", "R", "T", "Y", "U", "I", "O", "P", "AT", "LeftBracket"],
+    ["CapsLock", "A", "S", "D", "F", "G", "H", "J", "K", "L", "SColon", "Colon", "RightBracket", "Enter"],
+    ["LeftShift", "Z", "X", "C", "V", "B", "N", "M", "Comma", "Dot", "Slash", "Ro", "RightShift"],
+    ["LeftControl", "LeftGui", "LeftAlt", "Muhenkan", "Space", "Henkan", "KatakanaHiragana", "RightAlt", "RightGui", "Menu", "RightControl"],
+    ["Insert", "Home", "PageUp"],
+    ["Delete", "End", "PageDown"],
+    ["Left", "Up", "Down", "Right"],
+    ["NumLock", "NumpadSlash", "NumpadAsterisk", "NumpadMinus"],
+    ["Numpad7", "Numpad8", "Numpad9", "NumpadPlus"],
+    ["Numpad4", "Numpad5", "Numpad6"],
+    ["Numpad1", "Numpad2", "Numpad3", "NumpadEnter"],
+    ["Numpad0", "NumpadDot"],
+]
+
+BUILTIN_KEYBOARDS: dict[str, list[list[str]]] = {"JIS109": JIS109_LAYOUT}
+
 
 class DslError(ValueError):
     def __init__(self, path: Path, line: int, message: str):
@@ -119,6 +140,13 @@ def parse_layout_row(path: Path, lineno: int, value: str) -> list[str]:
     return keys
 
 
+def find_layout(layouts: dict[str, list[list[str]]], name: str) -> tuple[str, list[list[str]]] | None:
+    for existing_name, layout in layouts.items():
+        if existing_name.casefold() == name.casefold():
+            return existing_name, layout
+    return None
+
+
 def resolve_key_ref(path: Path, lineno: int, value: str, layouts: dict[str, list[list[str]]]) -> str:
     value = value.strip()
     direct = re.fullmatch(IDENT, value)
@@ -129,11 +157,12 @@ def resolve_key_ref(path: Path, lineno: int, value: str, layouts: dict[str, list
     if named:
         layout_name, requested_key = named.group(1), named.group(2)
         resolved_layout_name = layout_name
-        if layout_name == "POS" and "POS" not in layouts and "BASE" in layouts:
+        if layout_name.casefold() == "pos" and find_layout(layouts, "POS") is None and find_layout(layouts, "BASE") is not None:
             resolved_layout_name = "BASE"
-        layout = layouts.get(resolved_layout_name)
-        if layout is None:
+        resolved = find_layout(layouts, resolved_layout_name)
+        if resolved is None:
             raise DslError(path, lineno, f"unknown layout '{layout_name}' in key reference '{value}'")
+        _, layout = resolved
         for key in (key for row in layout for key in row):
             if key.casefold() == requested_key.casefold():
                 return key
@@ -150,12 +179,13 @@ def resolve_key_ref(path: Path, lineno: int, value: str, layouts: dict[str, list
         raise DslError(path, lineno, f"key positions are 1-based: '{value}'")
 
     resolved_layout_name = layout_name
-    if layout_name == "POS" and "POS" not in layouts and "BASE" in layouts:
+    if layout_name.casefold() == "pos" and find_layout(layouts, "POS") is None and find_layout(layouts, "BASE") is not None:
         resolved_layout_name = "BASE"
 
-    layout = layouts.get(resolved_layout_name)
-    if layout is None:
+    resolved = find_layout(layouts, resolved_layout_name)
+    if resolved is None:
         raise DslError(path, lineno, f"unknown layout '{layout_name}' in key reference '{value}'")
+    _, layout = resolved
     if row > len(layout):
         raise DslError(path, lineno, f"row {row} is out of range for layout '{layout_name}'")
     if column > len(layout[row - 1]):
@@ -205,6 +235,7 @@ def compile_dsl(text: str, path: Path) -> dict[str, object]:
     section: tuple[str, str | None] | None = None
     map_row_index = 0
     saw_profile = False
+    keyboard_preset: str | None = None
     lines = text.splitlines()
 
     for lineno, raw in enumerate(lines, 1):
@@ -219,7 +250,9 @@ def compile_dsl(text: str, path: Path) -> dict[str, object]:
                     mode = block[1]
                     layout_name = keymap_layouts[mode]
                     assert layout_name is not None
-                    expected_rows = len(layouts[layout_name])
+                    resolved = find_layout(layouts, layout_name)
+                    assert resolved is not None
+                    expected_rows = len(resolved[1])
                     if map_row_index != expected_rows:
                         raise DslError(path, lineno, f"map for keymap '{mode}' has {map_row_index} rows; layout '{layout_name}' has {expected_rows}")
                 section = None
@@ -239,10 +272,24 @@ def compile_dsl(text: str, path: Path) -> dict[str, object]:
                 block = ("profile", profile.group(1))
                 continue
 
+            keyboard = re.fullmatch(rf"keyboard\s+({IDENT})\s*;?", line)
+            if keyboard:
+                requested = keyboard.group(1)
+                if keyboard_preset is not None:
+                    raise DslError(path, lineno, f"keyboard preset already declared as '{keyboard_preset}'")
+                canonical = next((name for name in BUILTIN_KEYBOARDS if name.casefold() == requested.casefold()), None)
+                if canonical is None:
+                    raise DslError(path, lineno, f"unknown keyboard preset '{requested}'")
+                if find_layout(layouts, canonical) is not None:
+                    raise DslError(path, lineno, f"layout '{canonical}' is already defined")
+                layouts[canonical] = [row.copy() for row in BUILTIN_KEYBOARDS[canonical]]
+                keyboard_preset = canonical
+                continue
+
             layout = re.fullmatch(rf"layout\s+({IDENT})\s*\{{", line)
             if layout:
                 layout_name = layout.group(1)
-                if layout_name in layouts:
+                if find_layout(layouts, layout_name) is not None:
                     raise DslError(path, lineno, f"duplicate layout '{layout_name}'")
                 layouts[layout_name] = []
                 block = ("layout", layout_name)
@@ -253,7 +300,7 @@ def compile_dsl(text: str, path: Path) -> dict[str, object]:
                 mode, layout_name = keymap.group(1), keymap.group(2)
                 if mode in single:
                     raise DslError(path, lineno, f"duplicate keymap '{mode}'")
-                if layout_name is not None and layout_name not in layouts:
+                if layout_name is not None and find_layout(layouts, layout_name) is None:
                     raise DslError(path, lineno, f"unknown layout '{layout_name}'")
                 single[mode] = OrderedDict()
                 chords[mode] = []
@@ -305,7 +352,9 @@ def compile_dsl(text: str, path: Path) -> dict[str, object]:
                 if section_kind == "map":
                     layout_name = keymap_layouts[name]
                     assert layout_name is not None
-                    layout = layouts[layout_name]
+                    resolved = find_layout(layouts, layout_name)
+                    assert resolved is not None
+                    layout = resolved[1]
                     match = re.fullmatch(r"row\s+(.+)", line)
                     if not match:
                         raise DslError(path, lineno, f"unknown map statement: {line}")
