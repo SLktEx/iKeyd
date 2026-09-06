@@ -163,8 +163,8 @@ public readonly struct KeyId : IEquatable<KeyId>, IComparable<KeyId>
         if (string.IsNullOrWhiteSpace(value))
             throw new ArgumentException("Key id must not be empty.", nameof(value));
 
-        var normalized = value.Trim().ToUpperInvariant();
-        if (TryParseCompactNormalized(normalized, out var code))
+        var trimmed = value.AsSpan().Trim();
+        if (TryParseCompact(trimmed, out var code))
         {
             Code = code;
             _customValue = null;
@@ -172,7 +172,7 @@ public readonly struct KeyId : IEquatable<KeyId>, IComparable<KeyId>
         else
         {
             Code = KeyCode.Custom;
-            _customValue = normalized;
+            _customValue = trimmed.ToString().ToUpperInvariant();
         }
     }
 
@@ -195,7 +195,104 @@ public readonly struct KeyId : IEquatable<KeyId>, IComparable<KeyId>
             return false;
         }
 
-        return TryParseCompactNormalized(value.Trim().ToUpperInvariant(), out code);
+        return TryParseCompact(value.AsSpan(), out code);
+    }
+
+    /// <summary>
+    /// Allocation-free parser for the canonical key universe. This overload is
+    /// used by input/output hot paths that already operate on spans.
+    /// </summary>
+    public static bool TryParseCompact(ReadOnlySpan<char> value, out KeyCode code)
+    {
+        var normalized = value.Trim();
+        if (normalized.IsEmpty)
+        {
+            code = KeyCode.None;
+            return false;
+        }
+
+        if (normalized.Length == 1)
+        {
+            var character = char.ToUpperInvariant(normalized[0]);
+            if (character is >= 'A' and <= 'Z')
+            {
+                code = (KeyCode)((int)KeyCode.A + character - 'A');
+                return true;
+            }
+
+            if (character is >= '0' and <= '9')
+            {
+                code = (KeyCode)((int)KeyCode.Digit0 + character - '0');
+                return true;
+            }
+        }
+
+        // Enum.TryParse(ReadOnlySpan<char>) is allocation-free and covers every
+        // canonical enum spelling (F1, NumpadEnter, RightCtrl, ...). Reject
+        // numeric enum syntax so strings such as "42" cannot accidentally become
+        // physical key identities.
+        if (!char.IsDigit(normalized[0]) && normalized[0] is not ('+' or '-') &&
+            Enum.TryParse<KeyCode>(normalized, ignoreCase: true, out var parsed) &&
+            IsCompactCode(parsed))
+        {
+            code = parsed;
+            return true;
+        }
+
+        if (Equals(normalized, "SEMICOLON")) { code = KeyCode.SColon; return true; }
+        if (Equals(normalized, "PERIOD")) { code = KeyCode.Dot; return true; }
+        if (Equals(normalized, "HAT")) { code = KeyCode.Caret; return true; }
+        if (Equals(normalized, "BACKSLASH")) { code = KeyCode.Yen; return true; }
+        if (Equals(normalized, "LEFTBRACKET")) { code = KeyCode.LBracket; return true; }
+        if (Equals(normalized, "RIGHTBRACKET")) { code = KeyCode.RBracket; return true; }
+        if (Equals(normalized, "OEM102")) { code = KeyCode.Ro; return true; }
+
+        if (Equals(normalized, "RETURN")) { code = KeyCode.Enter; return true; }
+        if (Equals(normalized, "BS")) { code = KeyCode.Backspace; return true; }
+        if (Equals(normalized, "ESC")) { code = KeyCode.Escape; return true; }
+        if (Equals(normalized, "CAPS")) { code = KeyCode.CapsLock; return true; }
+        if (Equals(normalized, "HIRAGANA") || Equals(normalized, "KATAKANAHIRAGANA") || Equals(normalized, "KATAKANAHIRAGANAROMAJI")) { code = KeyCode.Kana; return true; }
+        if (Equals(normalized, "HENKAN")) { code = KeyCode.Convert; return true; }
+        if (Equals(normalized, "MUHENKAN")) { code = KeyCode.NonConvert; return true; }
+        if (Equals(normalized, "ZENKAKUHANKAKU")) { code = KeyCode.HankakuZenkaku; return true; }
+
+        if (Equals(normalized, "INS")) { code = KeyCode.Insert; return true; }
+        if (Equals(normalized, "DEL")) { code = KeyCode.Delete; return true; }
+        if (Equals(normalized, "PGUP")) { code = KeyCode.PageUp; return true; }
+        if (Equals(normalized, "PGDN")) { code = KeyCode.PageDown; return true; }
+        if (Equals(normalized, "ARROWLEFT")) { code = KeyCode.Left; return true; }
+        if (Equals(normalized, "ARROWUP")) { code = KeyCode.Up; return true; }
+        if (Equals(normalized, "ARROWRIGHT")) { code = KeyCode.Right; return true; }
+        if (Equals(normalized, "ARROWDOWN")) { code = KeyCode.Down; return true; }
+
+        if (Equals(normalized, "SHIFT") || Equals(normalized, "LSHIFT")) { code = KeyCode.LeftShift; return true; }
+        if (Equals(normalized, "RSHIFT")) { code = KeyCode.RightShift; return true; }
+        if (Equals(normalized, "CTRL") || Equals(normalized, "CONTROL") || Equals(normalized, "LCTRL") || Equals(normalized, "LCONTROL") || Equals(normalized, "LEFTCONTROL")) { code = KeyCode.LeftCtrl; return true; }
+        if (Equals(normalized, "RCTRL") || Equals(normalized, "RCONTROL") || Equals(normalized, "RIGHTCONTROL")) { code = KeyCode.RightCtrl; return true; }
+        if (Equals(normalized, "ALT") || Equals(normalized, "LALT")) { code = KeyCode.LeftAlt; return true; }
+        if (Equals(normalized, "RALT") || Equals(normalized, "ALTGR")) { code = KeyCode.RightAlt; return true; }
+        if (Equals(normalized, "WIN") || Equals(normalized, "GUI") || Equals(normalized, "LWIN")) { code = KeyCode.LeftWin; return true; }
+        if (Equals(normalized, "RWIN")) { code = KeyCode.RightWin; return true; }
+        if (Equals(normalized, "APPSKEY") || Equals(normalized, "MENU")) { code = KeyCode.Apps; return true; }
+        if (Equals(normalized, "PRTSC") || Equals(normalized, "PRTSCN")) { code = KeyCode.PrintScreen; return true; }
+        if (Equals(normalized, "SCROLL")) { code = KeyCode.ScrollLock; return true; }
+        if (Equals(normalized, "BREAK")) { code = KeyCode.Pause; return true; }
+
+        if (Equals(normalized, "NUMPADDOT")) { code = KeyCode.NumpadDecimal; return true; }
+        if (Equals(normalized, "NUMPADSLASH")) { code = KeyCode.NumpadDivide; return true; }
+        if (Equals(normalized, "NUMPADASTERISK")) { code = KeyCode.NumpadMultiply; return true; }
+        if (Equals(normalized, "NUMPADMINUS")) { code = KeyCode.NumpadSubtract; return true; }
+        if (Equals(normalized, "NUMPADPLUS")) { code = KeyCode.NumpadAdd; return true; }
+
+        if (Equals(normalized, "VOLUME_UP")) { code = KeyCode.VolumeUp; return true; }
+        if (Equals(normalized, "VOLUME_DOWN")) { code = KeyCode.VolumeDown; return true; }
+        if (Equals(normalized, "VOLUME_MUTE")) { code = KeyCode.VolumeMute; return true; }
+        if (Equals(normalized, "MEDIA_PLAY_PAUSE")) { code = KeyCode.MediaPlayPause; return true; }
+        if (Equals(normalized, "MEDIA_NEXT")) { code = KeyCode.MediaNext; return true; }
+        if (Equals(normalized, "MEDIAPREV") || Equals(normalized, "MEDIA_PREV") || Equals(normalized, "MEDIA_PREVIOUS")) { code = KeyCode.MediaPrevious; return true; }
+
+        code = KeyCode.None;
+        return false;
     }
 
     public static bool TryFromCharacter(char character, out KeyId key)
@@ -246,110 +343,8 @@ public readonly struct KeyId : IEquatable<KeyId>, IComparable<KeyId>
     private static bool IsCompactCode(KeyCode code)
         => code is >= KeyCode.A and <= LastCompactCode;
 
-    private static bool TryParseCompactNormalized(string normalized, out KeyCode code)
-    {
-        if (normalized.Length == 1)
-        {
-            var character = normalized[0];
-            if (character is >= 'A' and <= 'Z')
-            {
-                code = (KeyCode)((int)KeyCode.A + character - 'A');
-                return true;
-            }
-
-            if (character is >= '0' and <= '9')
-            {
-                code = (KeyCode)((int)KeyCode.Digit0 + character - '0');
-                return true;
-            }
-        }
-
-        if (normalized.Length is 2 or 3 && normalized[0] == 'F' &&
-            int.TryParse(normalized.AsSpan(1), out var functionNumber) &&
-            functionNumber is >= 1 and <= 12)
-        {
-            code = (KeyCode)((int)KeyCode.F1 + functionNumber - 1);
-            return true;
-        }
-
-        code = normalized switch
-        {
-            "SCOLON" or "SEMICOLON" => KeyCode.SColon,
-            "COLON" => KeyCode.Colon,
-            "COMMA" => KeyCode.Comma,
-            "DOT" or "PERIOD" => KeyCode.Dot,
-            "SLASH" => KeyCode.Slash,
-            "AT" => KeyCode.At,
-            "MINUS" => KeyCode.Minus,
-            "CARET" or "HAT" => KeyCode.Caret,
-            "YEN" or "BACKSLASH" => KeyCode.Yen,
-            "LBRACKET" or "LEFTBRACKET" => KeyCode.LBracket,
-            "RBRACKET" or "RIGHTBRACKET" => KeyCode.RBracket,
-            "RO" or "OEM102" => KeyCode.Ro,
-
-            "SPACE" => KeyCode.Space,
-            "TAB" => KeyCode.Tab,
-            "ENTER" or "RETURN" => KeyCode.Enter,
-            "BS" or "BACKSPACE" => KeyCode.Backspace,
-            "ESC" or "ESCAPE" => KeyCode.Escape,
-            "CAPS" or "CAPSLOCK" => KeyCode.CapsLock,
-            "KANA" or "HIRAGANA" or "KATAKANAHIRAGANA" or "KATAKANAHIRAGANAROMAJI" => KeyCode.Kana,
-            "CONVERT" or "HENKAN" => KeyCode.Convert,
-            "NONCONVERT" or "MUHENKAN" => KeyCode.NonConvert,
-            "HANKAKUZENKAKU" or "ZENKAKUHANKAKU" => KeyCode.HankakuZenkaku,
-
-            "INS" or "INSERT" => KeyCode.Insert,
-            "DEL" or "DELETE" => KeyCode.Delete,
-            "HOME" => KeyCode.Home,
-            "END" => KeyCode.End,
-            "PGUP" or "PAGEUP" => KeyCode.PageUp,
-            "PGDN" or "PAGEDOWN" => KeyCode.PageDown,
-            "LEFT" or "ARROWLEFT" => KeyCode.Left,
-            "UP" or "ARROWUP" => KeyCode.Up,
-            "RIGHT" or "ARROWRIGHT" => KeyCode.Right,
-            "DOWN" or "ARROWDOWN" => KeyCode.Down,
-
-            "SHIFT" or "LSHIFT" or "LEFTSHIFT" => KeyCode.LeftShift,
-            "RSHIFT" or "RIGHTSHIFT" => KeyCode.RightShift,
-            "CTRL" or "CONTROL" or "LCTRL" or "LCONTROL" or "LEFTCTRL" or "LEFTCONTROL" => KeyCode.LeftCtrl,
-            "RCTRL" or "RCONTROL" or "RIGHTCTRL" or "RIGHTCONTROL" => KeyCode.RightCtrl,
-            "ALT" or "LALT" or "LEFTALT" => KeyCode.LeftAlt,
-            "RALT" or "RIGHTALT" or "ALTGR" => KeyCode.RightAlt,
-            "WIN" or "GUI" or "LWIN" or "LEFTWIN" => KeyCode.LeftWin,
-            "RWIN" or "RIGHTWIN" => KeyCode.RightWin,
-            "APPS" or "APPSKEY" or "MENU" => KeyCode.Apps,
-            "PRINTSCREEN" or "PRTSC" or "PRTSCN" => KeyCode.PrintScreen,
-            "SCROLLLOCK" or "SCROLL" => KeyCode.ScrollLock,
-            "PAUSE" or "BREAK" => KeyCode.Pause,
-
-            "NUMLOCK" => KeyCode.NumLock,
-            "NUMPAD0" => KeyCode.Numpad0,
-            "NUMPAD1" => KeyCode.Numpad1,
-            "NUMPAD2" => KeyCode.Numpad2,
-            "NUMPAD3" => KeyCode.Numpad3,
-            "NUMPAD4" => KeyCode.Numpad4,
-            "NUMPAD5" => KeyCode.Numpad5,
-            "NUMPAD6" => KeyCode.Numpad6,
-            "NUMPAD7" => KeyCode.Numpad7,
-            "NUMPAD8" => KeyCode.Numpad8,
-            "NUMPAD9" => KeyCode.Numpad9,
-            "NUMPADDECIMAL" or "NUMPADDOT" => KeyCode.NumpadDecimal,
-            "NUMPADDIVIDE" or "NUMPADSLASH" => KeyCode.NumpadDivide,
-            "NUMPADMULTIPLY" or "NUMPADASTERISK" => KeyCode.NumpadMultiply,
-            "NUMPADSUBTRACT" or "NUMPADMINUS" => KeyCode.NumpadSubtract,
-            "NUMPADADD" or "NUMPADPLUS" => KeyCode.NumpadAdd,
-            "NUMPADENTER" => KeyCode.NumpadEnter,
-
-            "VOLUMEUP" or "VOLUME_UP" => KeyCode.VolumeUp,
-            "VOLUMEDOWN" or "VOLUME_DOWN" => KeyCode.VolumeDown,
-            "VOLUMEMUTE" or "VOLUME_MUTE" => KeyCode.VolumeMute,
-            "MEDIAPLAYPAUSE" or "MEDIA_PLAY_PAUSE" => KeyCode.MediaPlayPause,
-            "MEDIANEXT" or "MEDIA_NEXT" => KeyCode.MediaNext,
-            "MEDIAPREV" or "MEDIAPREVIOUS" or "MEDIA_PREV" or "MEDIA_PREVIOUS" => KeyCode.MediaPrevious,
-            _ => KeyCode.None
-        };
-        return code != KeyCode.None;
-    }
+    private static bool Equals(ReadOnlySpan<char> value, string expected)
+        => value.Equals(expected, StringComparison.OrdinalIgnoreCase);
 
     private static string GetCompactName(KeyCode code)
     {
