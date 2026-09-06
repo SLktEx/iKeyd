@@ -149,11 +149,18 @@ public sealed class HostedTModeLegacyRunner : ICompatibilityScenarioRunner
                     await Task.Delay(HookStartupDelay, cancellationToken);
 
                     var digits = ResolveModeSelectionDigits(requestedKeymap);
-                    for (var index = 0; index < digits.Count; index++)
+                    // Repeat the idempotent mode-selection sequence once. The legacy
+                    // process can become visible just before every hotkey is ready.
+                    for (var attempt = 0; attempt < 2; attempt++)
                     {
-                        SendModeSelectionChord(digits[index]);
-                        if (index + 1 < digits.Count)
-                            await Task.Delay(TimeSpan.FromMilliseconds(80), cancellationToken);
+                        for (var index = 0; index < digits.Count; index++)
+                        {
+                            SendModeSelectionChord(digits[index]);
+                            if (index + 1 < digits.Count)
+                                await Task.Delay(TimeSpan.FromMilliseconds(80), cancellationToken);
+                        }
+                        if (attempt == 0)
+                            await Task.Delay(TimeSpan.FromMilliseconds(120), cancellationToken);
                     }
 
                     return;
