@@ -11,7 +11,7 @@ from collections import OrderedDict
 from pathlib import Path
 
 IDENT = r"[A-Za-z0-9_]+"
-KEY_REF = rf"{IDENT}(?:\[\s*\d+\s*,\s*\d+\s*\])?"
+KEY_REF = rf"{IDENT}(?:\[\s*\d+\s*,\s*\d+\s*\]|\.{IDENT})?"
 
 
 class DslError(ValueError):
@@ -124,6 +124,20 @@ def resolve_key_ref(path: Path, lineno: int, value: str, layouts: dict[str, list
     direct = re.fullmatch(IDENT, value)
     if direct:
         return direct.group(0)
+
+    named = re.fullmatch(rf"({IDENT})\.({IDENT})", value)
+    if named:
+        layout_name, requested_key = named.group(1), named.group(2)
+        resolved_layout_name = layout_name
+        if layout_name == "POS" and "POS" not in layouts and "BASE" in layouts:
+            resolved_layout_name = "BASE"
+        layout = layouts.get(resolved_layout_name)
+        if layout is None:
+            raise DslError(path, lineno, f"unknown layout '{layout_name}' in key reference '{value}'")
+        for key in (key for row in layout for key in row):
+            if key.casefold() == requested_key.casefold():
+                return key
+        raise DslError(path, lineno, f"layout '{layout_name}' has no key named '{requested_key}'")
 
     coordinate = re.fullmatch(rf"({IDENT})\[\s*(\d+)\s*,\s*(\d+)\s*\]", value)
     if not coordinate:
