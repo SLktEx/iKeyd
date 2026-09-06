@@ -525,41 +525,26 @@ internal sealed class IKeydRuntimeHandler : IKeyboardEventHandler, IMacroActionD
 
     private bool SendWithFuncKey(string state, string m = "", string mh = "", string hm = "", string ms = "")
     {
-        var (output, heldModifier) = state switch
+        string? output = state switch
         {
-            "M" => (m, (string?)null),
-            "MH" => (mh, (string?)null),
-            "HM" => (hm, (string?)null),
-            "MS" => (ms, (string?)null),
-            "KM" => (m, "CTRL"),
-            "KMH" => (mh, "CTRL"),
-            "KHM" => (hm, "CTRL"),
-            "KMS" => (ms, "CTRL"),
-            "AM" => (m, "ALT"),
-            "AMH" => (mh, "ALT"),
-            "AHM" => (hm, "ALT"),
-            "AMS" => (ms, "ALT"),
-            _ => ((string?)null, (string?)null)
+            "M" => m,
+            "MH" => mh,
+            "HM" => hm,
+            "MS" => ms,
+            "KM" => "^" + m,
+            "KMH" => "^" + mh,
+            "KHM" => "^" + hm,
+            "KMS" => "^" + ms,
+            "AM" => "!" + m,
+            "AMH" => "!" + mh,
+            "AHM" => "!" + hm,
+            "AMS" => "!" + ms,
+            _ => null
         };
 
         if (output is null)
             return false;
-
-        if (heldModifier is null)
-        {
-            _send.Send(output);
-            return true;
-        }
-
-        _send.Send($"{{{heldModifier} DOWN}}");
-        try
-        {
-            _send.Send(output);
-        }
-        finally
-        {
-            _send.Send($"{{{heldModifier} UP}}");
-        }
+        _send.Send(output);
         return true;
     }
 
