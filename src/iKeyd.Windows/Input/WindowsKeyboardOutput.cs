@@ -70,7 +70,10 @@ public sealed class WindowsKeyboardOutput : IKeyboardOutput
         ushort virtualKey = key.VirtualKey;
         ushort scanCode = key.ScanCode;
 
-        if (scanCode != 0)
+        // Generic scan-code injection intentionally asks Windows to resolve the
+        // virtual key from the physical scan code. Explicit AHK vk+sc tokens are
+        // different: AHK preserves both wVk and wScan without KEYEVENTF_SCANCODE.
+        if (scanCode != 0 && !key.PreserveVirtualKeyWithScanCode)
         {
             virtualKey = 0;
             flags |= KeyEventScanCode;

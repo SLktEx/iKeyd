@@ -1,47 +1,4 @@
-from pathlib import Path
-
-
-def replace_once(path: str, old: str, new: str) -> None:
-    file = Path(path)
-    text = file.read_text(encoding="utf-8")
-    count = text.count(old)
-    if count != 1:
-        raise SystemExit(f"{path}: expected one exact match, found {count}")
-    file.write_text(text.replace(old, new, 1), encoding="utf-8")
-
-
-replace_once(
-    "src/iKeyd.Core/Input/KeyboardContracts.cs",
-    "public readonly record struct KeyboardKey(ushort VirtualKey, ushort ScanCode, bool IsExtended = false);",
-    "public readonly record struct KeyboardKey(ushort VirtualKey, ushort ScanCode, bool IsExtended = false, bool PreserveVirtualKeyWithScanCode = false);",
-)
-
-replace_once(
-    "src/iKeyd.App/WindowsKeyMap.cs",
-    "        key = new KeyboardKey(virtualKey, scanCode, IsExtended(virtualKey));\n        return true;",
-    "        key = new KeyboardKey(virtualKey, scanCode, IsExtended(virtualKey), PreserveVirtualKeyWithScanCode: true);\n        return true;",
-)
-
-replace_once(
-    "src/iKeyd.Windows/Input/WindowsKeyboardOutput.cs",
-    '''        if (scanCode != 0)\n        {\n            virtualKey = 0;\n            flags |= KeyEventScanCode;\n        }''',
-    '''        // Generic scan-code injection intentionally asks Windows to resolve the\n        // virtual key from the physical scan code. Explicit AHK vk+sc tokens are\n        // different: AHK preserves both wVk and wScan without KEYEVENTF_SCANCODE.\n        if (scanCode != 0 && !key.PreserveVirtualKeyWithScanCode)\n        {\n            virtualKey = 0;\n            flags |= KeyEventScanCode;\n        }''',
-)
-
-compat = "tests/iKeyd.Windows.Tests/LegacySendOutputCompatibilityTests.cs"
-replace_once(compat, "new KeyboardKey(0x1C, 0x79)", "new KeyboardKey(0x1C, 0x79, PreserveVirtualKeyWithScanCode: true)")
-replace_once(compat, "new KeyboardKey(0x1D, 0x7B)", "new KeyboardKey(0x1D, 0x7B, PreserveVirtualKeyWithScanCode: true)")
-replace_once(compat, "new KeyboardKey(0xF3, 0x29)", "new KeyboardKey(0xF3, 0x29, PreserveVirtualKeyWithScanCode: true)")
-
-keyboard_tests = "tests/iKeyd.Windows.Tests/WindowsKeyboardOutputTests.cs"
-replace_once(
-    keyboard_tests,
-    '''    [Fact]\n    public void Extended_key_up_sets_extended_and_keyup_flags()''',
-    '''    [Fact]\n    public void Explicit_vk_sc_output_preserves_both_identifiers_without_scan_code_mode()\n    {\n        var input = WindowsKeyboardOutput.BuildKeyInput(\n            new KeyboardKey(0xF3, 0x29, PreserveVirtualKeyWithScanCode: true),\n            KeyEventKind.Down);\n\n        Assert.Equal((ushort)0xF3, input.Data.Keyboard.VirtualKey);\n        Assert.Equal((ushort)0x29, input.Data.Keyboard.ScanCode);\n        Assert.Equal(0u, input.Data.Keyboard.Flags & 0x0008u);\n        Assert.Equal(WindowsKeyboardOutput.InjectionMarker, input.Data.Keyboard.ExtraInfo);\n    }\n\n    [Fact]\n    public void Extended_key_up_sets_extended_and_keyup_flags()''',
-)
-
-Path("tests/iKeyd.Windows.Tests/WindowsKeyboardOutputNativeIdentityTests.cs").write_text(
-    r'''using System.ComponentModel;
+using System.ComponentModel;
 using System.Runtime.InteropServices;
 using iKeyd.Core.Input;
 using iKeyd.Windows.Input;
@@ -254,6 +211,3 @@ public sealed class WindowsKeyboardOutputNativeIdentityTests
         public static extern nint GetModuleHandleW(string? moduleName);
     }
 }
-''',
-    encoding="utf-8",
-)
