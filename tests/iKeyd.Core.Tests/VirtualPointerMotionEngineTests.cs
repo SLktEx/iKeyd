@@ -89,6 +89,20 @@ public sealed class VirtualPointerMotionEngineTests
     }
 
     [Fact]
+    public void Default_release_has_no_visible_tail_at_the_8ms_motion_cadence()
+    {
+        var engine = new VirtualPointerMotionEngine();
+        engine.SetDirection(1, 0);
+        engine.Step(1.0, 0); // settle the virtual stick without adding motion remainder
+
+        engine.SetDirection(0, 0);
+        var delta = engine.Step(0.008, 4400);
+
+        Assert.Equal(0, delta.X);
+        Assert.InRange(Math.Abs(engine.AxisX), 0, 0.02);
+    }
+
+    [Fact]
     public void Reversing_direction_crosses_smoothly_instead_of_resetting_a_hold_timer()
     {
         var engine = new VirtualPointerMotionEngine(new VirtualPointerMotionOptions
