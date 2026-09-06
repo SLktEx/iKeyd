@@ -1,6 +1,6 @@
 # iKeyd DSL
 
-The `.ikeyd` format is the human-authored configuration for iKeyd. The normal app build now treats the DSL as the production profile source, compiles it to canonical JSON under `obj/`, and then feeds that JSON into the existing static profile compiler.
+The `.ikeyd` format is the human-authored configuration for iKeyd. The normal app build treats the DSL as the production profile source, compiles it to canonical JSON under `obj/`, and then feeds that JSON into the static profile compiler.
 
 The language deliberately favors keyboard-specific constructs over a general-purpose scripting syntax.
 
@@ -16,7 +16,7 @@ profile hotkeySKG {
 
 ## Physical layout
 
-A layout gives stable names to physical positions and lets keymaps be written as rows instead of repetitive key/value declarations.
+A layout gives stable names to positions and lets keymaps be written as rows instead of repetitive key/value declarations.
 
 ```text
 layout BASE {
@@ -33,7 +33,7 @@ BASE[1,1]
 BASE[2,4]
 ```
 
-Named physical references are also supported:
+Named references are also supported:
 
 ```text
 BASE.Q
@@ -46,7 +46,7 @@ BASE.SColon
 2. the selected built-in physical keyboard such as `keyboard JIS109`
 3. `BASE` for legacy DSL files that do not declare a keyboard preset
 
-This means existing files keep their old `POS -> BASE` behavior, while a JIS109 profile can use `POS.Ro` or `POS.Muhenkan` without coupling physical combos to a small logical `BASE` layout.
+This means existing files keep their old `POS -> BASE` behavior, while a JIS109 profile can use `POS.Ro` or `POS.Muhenkan` without coupling physical behaviors to a small logical `BASE` layout.
 
 ### Built-in JIS109 keyboard
 
@@ -72,7 +72,7 @@ POS.Muhenkan
 POS.NumpadEnter
 ```
 
-For example, a compact logical layout can coexist with the full physical keyboard:
+A compact logical layout can coexist with the full physical keyboard:
 
 ```text
 profile myProfile {
@@ -102,7 +102,7 @@ You can still declare custom `layout` blocks alongside a keyboard preset. A deli
 
 ### JIS physical keys
 
-iKeyd treats JIS-specific keys as compact physical key identities rather than migration-only string names. They can therefore participate in normal single mappings and combos without falling back to dictionary lookup.
+iKeyd treats JIS-specific keys as compact physical key identities rather than migration-only string names. They can therefore participate in normal mappings, combos, and behaviors without falling back to string-backed input identities.
 
 Canonical names include:
 
@@ -136,7 +136,7 @@ On Windows, physical keyboard events are resolved from scan code plus the extend
 
 ## Keymaps
 
-For a keymap that follows a declared physical layout, use `using` and `map`:
+For a keymap that follows a declared layout, use `using` and `map`:
 
 ```text
 keymap S using BASE {
@@ -164,10 +164,9 @@ Keys outside the visual layout can stay explicit:
 1 = 1
 F1 = {F1}
 Ro = Backslash
-Yen = layer_symbol
 ```
 
-Direct physical-position references are also valid:
+Direct position references are also valid:
 
 ```text
 BASE[1,1] = q
@@ -200,6 +199,106 @@ Grouped combos are only syntax sugar. Declaration order is preserved exactly.
 
 Legacy hotkeySKG intentionally contains duplicate unordered chord pairs. iKeyd preserves those declarations and keeps the legacy first-declaration-wins behavior instead of silently deduplicating the source.
 
+## Tap / hold / layer / modifier behaviors
+
+Behavior definitions are independent of the S/K text keymaps. They operate on physical keys and run before the legacy hotkeySKG layer state machine when they are configured.
+
+A behavior layer maps physical keys to output actions:
+
+```text
+layer NAV {
+    POS.H = key(Left)
+    POS.J = key(Down)
+    POS.K = key(Up)
+    POS.L = key(Right)
+}
+```
+
+The QMK/ZMK-style shorthand forms cover the common cases:
+
+```text
+behavior POS.Space = layer_tap(NAV, Space)
+behavior POS.A = mod_tap(Ctrl, A)
+```
+
+`layer_tap(NAV, Space)` means:
+
+- a quick tap emits `Space`
+- holding activates `NAV`
+
+`mod_tap(Ctrl, A)` means:
+
+- a quick tap emits `A`
+- holding makes subsequent keys use the Control modifier
+
+A layer or modifier can also be hold-only and activate immediately on key down:
+
+```text
+behavior POS.Yen = layer(SYMBOL)
+behavior POS.Muhenkan = modifier(Ctrl)
+```
+
+Use block form when timing or interruption policy needs to be explicit:
+
+```text
+behavior POS.Henkan {
+    tap = key(Enter)
+    hold = modifier(Shift)
+    timeout = 200ms
+    interrupt = tap
+}
+```
+
+Supported actions in this first behavior model are:
+
+```text
+key(Left)
+text("literal text")
+layer(NAV)
+modifier(Ctrl)
+modifier(Shift)
+modifier(Alt)
+modifier(Gui)
+```
+
+Tap actions may be `key(...)` or `text(...)`. Hold actions may be `layer(...)` or `modifier(...)`. Layer mappings currently emit `key(...)` or `text(...)`.
+
+### Tap/hold timing
+
+The default timeout is `180ms` and the default interrupt policy is `hold`.
+
+```text
+behavior POS.Space {
+    tap = key(Space)
+    hold = layer(NAV)
+    timeout = 180ms
+    interrupt = hold
+}
+```
+
+The policies mean:
+
+- `interrupt = hold`: if another key is pressed while the tap/hold decision is pending, activate the hold before processing that next key.
+- `interrupt = tap`: if another key is pressed while pending, resolve the behavior as a tap before processing the next key.
+
+If the timeout has already elapsed when the next event arrives, the behavior resolves as a hold first. Releasing after the timeout produces no tap.
+
+The resolver does not need a background timer thread. It advances from physical event timestamps; a hold has no observable keyboard effect until another event or the release occurs.
+
+### Layer and modifier composition
+
+Multiple resolved modifier holds may overlap, so home-row-mod style rolls can produce combinations such as Control+Shift without physically pressing those original modifier keys.
+
+When layers are active, the most recently activated layer that defines the pressed key wins. Keys absent from active behavior layers are transparent and continue through the normal input path unless an active configured modifier applies to them.
+
+`text(...)` is literal output. Virtual held modifiers do not transform the literal text. `key(...)` output does participate in configured held modifiers.
+
+### Compatibility boundary
+
+The current hotkeySKG production profile does not define configurable behaviors yet, so the behavior dispatcher immediately falls through to the existing hotkeySKG state machine. This preserves the legacy `Muhenkan` / `Henkan` / `Space` / `Kana` semantics while new profiles can opt into the generic behavior model key by key.
+
+Configured behavior state is compiled into the generated C# profile. Runtime startup does not parse the DSL or behavior JSON.
+
 ## Comments
 
 `//` comments are supported outside quoted strings.
@@ -223,9 +322,9 @@ The app build performs this pipeline automatically:
 
 ```text
 config/hotkeySKG.ikeyd
-  -> iKeyd.ProfileCompiler DSL parser
+  -> iKeyd.ProfileCompiler DSL + behavior parser
   -> obj/.../hotkeySKG.behavior.generated.json
-  -> existing JSON profile validation/compiler
+  -> typed profile validation/compiler
   -> obj/.../GeneratedProfile.g.cs
   -> iKeyd.exe
 ```
@@ -242,10 +341,10 @@ dotnet tools/iKeyd.ProfileCompiler/bin/Release/net8.0/iKeyd.ProfileCompiler.dll 
   --check-against config/hotkeySKG.behavior.json
 ```
 
-The Python `tools/compile-ikeyd-dsl.py` implementation remains useful as an independent authoring/reference compiler while the DSL is being stabilized; the production build does not depend on Python.
+The Python `tools/compile-ikeyd-dsl.py` implementation remains an independent authoring/reference compiler while the DSL is being stabilized; the production build does not depend on Python.
 
 ## Design boundary
 
 The DSL is an authoring format, not a runtime scripting language. Runtime startup does not parse DSL or JSON; the release binary uses generated static profile data.
 
-The current language focuses on the existing hotkeySKG S/K single-stroke and chord profile. Layer behaviors, tap/hold, mouse, media, window, clipboard and macro syntax remain follow-up language work.
+The language now covers the existing hotkeySKG S/K single-stroke and chord profile plus generic tap/hold, layer and modifier behaviors. Mouse, media, window, clipboard and general macro actions remain follow-up behavior actions rather than reasons to turn the DSL into a general-purpose scripting language.
