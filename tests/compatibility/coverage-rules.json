@@ -77,10 +77,10 @@
       "evidence": ["tests/iKeyd.LegacySpec.Tests/LegacyRuntimeSpecTests.cs","tests/iKeyd.Windows.Tests","tests/COMPATIBILITY.md"]
     },
     {
-      "name": "process/application-specific legacy branches are not assumed covered",
+      "name": "process/application-specific legacy branches are explicitly handed to compatibility-fix work",
       "match": {"tag": "process-specific"},
-      "set": {"implementation":"unknown","unit":"unknown","scenario":"missing","exeDiff":"missing","ahkDiff":"missing","realWindows":"required","intentionalDifference":"unknown"},
-      "evidence": ["tests/COMPATIBILITY.md"]
+      "set": {"implementation":"unknown","unit":"unknown","scenario":"deferred:#57","exeDiff":"missing","ahkDiff":"missing","realWindows":"required","intentionalDifference":"unknown"},
+      "evidence": ["issue:#57","tests/COMPATIBILITY.md"]
     },
     {
       "name": "unlinked window/mouse long-tail is explicitly handed to compatibility-fix work",
