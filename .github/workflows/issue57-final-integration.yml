@@ -1,0 +1,195 @@
+name: Validate final hotkeySKG integration
+
+on:
+  push:
+    branches: [issue-57-final-integration]
+    paths:
+      - .github/workflows/issue57-final-integration.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: issue57-final-integration
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: issue-57-final-integration
+          fetch-depth: 0
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Fetch proven compatibility branch
+        shell: bash
+        run: git fetch origin issue-46-hotkeyskg-full-compat:refs/remotes/origin/issue-46-hotkeyskg-full-compat
+
+      - name: Apply focused final integration
+        run: python -B tools/issue57_final_integration.py
+
+      - name: Restore
+        run: dotnet restore iKeyd.sln
+
+      - name: Build
+        run: dotnet build iKeyd.sln --no-restore --configuration Release
+
+      - name: Full .NET test suite
+        run: dotnet test iKeyd.sln --no-build --configuration Release
+
+      - name: Tooling tests
+        run: python -B -m unittest discover tests/tooling
+
+      - name: Resolve bundled GnuPG
+        id: gpg
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $gpg = Join-Path $env:ProgramFiles 'Git\usr\bin\gpg.exe'
+          if (-not (Test-Path -LiteralPath $gpg -PathType Leaf)) {
+            $command = Get-Command gpg.exe -ErrorAction SilentlyContinue
+            if ($null -eq $command) { throw 'GnuPG was not found.' }
+            $gpg = $command.Source
+          }
+          "path=$gpg" >> $env:GITHUB_OUTPUT
+
+      - name: Decrypt pinned compiled legacy executable
+        id: legacy
+        shell: powershell
+        env:
+          LEGACY_EXE_GPG_PASSPHRASE: ${{ secrets.LEGACY_EXE_GPG_PASSPHRASE }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ([string]::IsNullOrWhiteSpace($env:LEGACY_EXE_GPG_PASSPHRASE)) {
+            throw 'Repository secret LEGACY_EXE_GPG_PASSPHRASE is not configured.'
+          }
+          $encrypted = Join-Path $PWD 'tests\legacy-binary\hotkeySKG.exe.gpg'
+          $path = Join-Path $env:RUNNER_TEMP 'compiled-hotkeySKG.exe'
+          & '${{ steps.gpg.outputs.path }}' --batch --yes --pinentry-mode loopback `
+            --passphrase $env:LEGACY_EXE_GPG_PASSPHRASE --output $path --decrypt $encrypted
+          if ($LASTEXITCODE -ne 0) { throw "GnuPG failed to decrypt compiled EXE: $LASTEXITCODE" }
+          $actual = (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant()
+          $expected = '5492198ce403d796c8588b17419bce82a0e6de3961bb40896a875ee5dee359ea'
+          if ($actual -ne $expected) { throw "Compiled EXE hash mismatch: $actual" }
+          "path=$path" >> $env:GITHUB_OUTPUT
+
+      - name: Decrypt pinned legacy AHK source
+        id: source
+        shell: powershell
+        env:
+          LEGACY_EXE_GPG_PASSPHRASE: ${{ secrets.LEGACY_EXE_GPG_PASSPHRASE }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $encrypted = Join-Path $PWD 'tests\legacy-binary\hotkeySKG.ahk.gpg.asc'
+          $path = Join-Path $env:RUNNER_TEMP 'hotkeySKG.ahk'
+          & '${{ steps.gpg.outputs.path }}' --batch --yes --pinentry-mode loopback `
+            --passphrase $env:LEGACY_EXE_GPG_PASSPHRASE --output $path --decrypt $encrypted
+          if ($LASTEXITCODE -ne 0) { throw "GnuPG failed to decrypt AHK source: $LASTEXITCODE" }
+          $actual = (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant()
+          $expected = 'fde46d179a2cfb8123a314d4ea6b8de714a65302867d4b3a654af07f9472bab7'
+          if ($actual -ne $expected) { throw "AHK source hash mismatch: $actual" }
+          "path=$path" >> $env:GITHUB_OUTPUT
+
+      - name: Generate and gate final compatibility matrix
+        shell: powershell
+        env:
+          IKEYD_LEGACY_AHK: ${{ steps.source.outputs.path }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $outputDir = Join-Path $PWD 'TestResults\compatibility-inventory'
+          New-Item -ItemType Directory -Force -Path $outputDir | Out-Null
+          $matrix = Join-Path $outputDir 'compatibility-matrix.json'
+          $markdown = Join-Path $outputDir 'compatibility-matrix.md'
+          python -B tools/analyze-legacy-compatibility.py $env:IKEYD_LEGACY_AHK `
+            --coverage tests/compatibility/coverage-rules.json `
+            --profile config/hotkeySKG.behavior.json `
+            --scenarios tests/iKeyd.Compatibility.Tests/Scenarios `
+            --json $matrix --markdown $markdown
+          python -B tools/apply-scenario-coverage.py `
+            --matrix $matrix `
+            --scenarios tests/iKeyd.Compatibility.Tests/Scenarios `
+            --links tests/iKeyd.Compatibility.Tests/ScenarioInventoryLinks.json `
+            --markdown $markdown
+          python -B tools/validate-scenario-inventory-links.py `
+            --matrix $matrix `
+            --scenarios tests/iKeyd.Compatibility.Tests/Scenarios `
+            --links tests/iKeyd.Compatibility.Tests/ScenarioInventoryLinks.json `
+            --json (Join-Path $outputDir 'scenario-inventory-links.json') `
+            --markdown (Join-Path $outputDir 'scenario-inventory-links.md')
+          python -B tools/analyze-send-syntax.py `
+            --matrix $matrix --source $env:IKEYD_LEGACY_AHK `
+            --json (Join-Path $outputDir 'send-syntax-inventory.json') `
+            --markdown (Join-Path $outputDir 'send-syntax-inventory.md')
+          $data = Get-Content -LiteralPath $matrix -Raw | ConvertFrom-Json
+          Write-Host "FINAL_MATRIX featureCount=$($data.summary.featureCount) unknownCount=$($data.summary.unknownCount) missingCount=$($data.summary.missingCount) scenarioCount=$($data.summary.scenarioCount) linkedScenarioCount=$($data.summary.linkedScenarioCount)"
+          if ([int]$data.summary.unknownCount -ne 0) { throw "Final matrix has $($data.summary.unknownCount) unknown entries." }
+          if ([int]$data.summary.missingCount -ne 0) { throw "Final matrix has $($data.summary.missingCount) missing entries." }
+          $stale = Select-String -Path $matrix -Pattern 'deferred:#57|pending:#57'
+          if ($stale) { throw 'Final matrix still contains stale #57 handoff markers.' }
+
+      - name: Download pinned AutoHotkey v1.1.16.05 interpreter
+        id: ahk
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $url = 'https://raw.githubusercontent.com/2wayne/AutoHotkey_LPortable/2fca5b7f6b84e8c9574b78b01c101831068016e5/App/AutoHotkey/AutoHotkey.exe'
+          $path = Join-Path $env:RUNNER_TEMP 'AutoHotkey-v1.1.16.05.exe'
+          Invoke-WebRequest -Uri $url -OutFile $path -MaximumRedirection 10
+          if ((Get-Item -LiteralPath $path).Length -ne 910848) { throw 'Unexpected AHK interpreter size.' }
+          $gitBlob = (& git hash-object $path).Trim().ToLowerInvariant()
+          if ($gitBlob -ne 'a776454e1eccfdcb92b7ab5214bca2832d52a1e8') { throw "AHK interpreter blob mismatch: $gitBlob" }
+          "path=$path" >> $env:GITHUB_OUTPUT
+
+      - name: Compiled EXE differential
+        shell: powershell
+        env:
+          IKEYD_LEGACY_EXE: ${{ steps.legacy.outputs.path }}
+          IKEYD_LEGACY_EXE_SHA256: 5492198ce403d796c8588b17419bce82a0e6de3961bb40896a875ee5dee359ea
+          IKEYD_DIFFERENTIAL_REPORT_DIR: ${{ github.workspace }}\TestResults\legacy-differential\compiled-exe
+        run: |
+          dotnet test tests/iKeyd.Windows.Tests/iKeyd.Windows.Tests.csproj `
+            --no-restore --configuration Release --filter 'Category=HostedLegacyDifferentialE2E'
+
+      - name: AHK v1 source differential
+        shell: powershell
+        env:
+          IKEYD_AHK_V1_EXE: ${{ steps.ahk.outputs.path }}
+          IKEYD_LEGACY_AHK: ${{ steps.source.outputs.path }}
+          IKEYD_DIFFERENTIAL_REPORT_DIR: ${{ github.workspace }}\TestResults\legacy-differential\ahk-source
+        run: |
+          $args = @(
+            'test', 'tests/iKeyd.Windows.Tests/iKeyd.Windows.Tests.csproj',
+            '--no-restore', '--configuration', 'Release',
+            '--filter', 'Category=HostedAhkSourceDifferentialE2E'
+          )
+          & dotnet @args
+          if ($LASTEXITCODE -ne 0) {
+            Write-Warning 'AHK hosted differential failed once; retrying once for an ephemeral hosted runner/IME startup timeout.'
+            Start-Sleep -Seconds 2
+            & dotnet @args
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
+
+      - name: Commit validated integration
+        shell: bash
+        run: |
+          set -e
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add .gitignore src tests
+          if git diff --cached --quiet; then
+            echo 'No integration changes to commit.'
+            exit 1
+          fi
+          git commit -m 'feat: finish hotkeySKG hosted compatibility (#57)'
+          git push origin HEAD:issue-57-final-integration
