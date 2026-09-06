@@ -64,6 +64,24 @@ def parse_string_list(path: Path, lineno: int, value: str) -> list[str]:
     return parsed
 
 
+def parse_bool(path: Path, lineno: int, value: str, setting: str) -> bool:
+    token = value.strip().rstrip(";").strip().lower()
+    if token == "true":
+        return True
+    if token == "false":
+        return False
+    raise DslError(path, lineno, f"clipboard.{setting} must be true or false")
+
+
+def parse_clipboard_token(path: Path, lineno: int, value: str, setting: str) -> str:
+    value = value.strip().rstrip(";").strip()
+    if value.startswith('"'):
+        return parse_json_string(path, lineno, value)
+    if not re.fullmatch(r"[A-Za-z0-9_-]+", value):
+        raise DslError(path, lineno, f"invalid clipboard.{setting} value '{value}'")
+    return value
+
+
 def parse_behavior_invocation(path: Path, lineno: int, value: str) -> dict[str, object] | None:
     value = value.strip().rstrip(";").strip()
     match = re.fullmatch(rf"({IDENT})\s*\((.*)\)", value)
@@ -371,11 +389,14 @@ def compile_dsl(text: str, path: Path) -> dict[str, object]:
     chords: OrderedDict[str, list[list[str]]] = OrderedDict()
     behaviors: OrderedDict[str, OrderedDict[str, dict[str, object]]] = OrderedDict()
     duplicate_flags: list[dict[str, object]] = []
+    clipboard: OrderedDict[str, object] | None = None
+    clipboard_seen: set[str] = set()
 
     block: tuple[str, str | None] | None = None
     parent_block: tuple[str, str | None] | None = None
     pending_behavior: tuple[str, str] | None = None
     saw_profile = False
+    saw_clipboard = False
 
     for lineno, raw in enumerate(text.splitlines(), 1):
         line = strip_comment(raw).strip()
@@ -400,6 +421,21 @@ def compile_dsl(text: str, path: Path) -> dict[str, object]:
                     raise DslError(path, lineno, "only one profile block is allowed")
                 saw_profile = True
                 block = ("profile", profile.group(1))
+                continue
+
+            if re.fullmatch(r"clipboard\s*\{", line):
+                if saw_clipboard:
+                    raise DslError(path, lineno, "only one clipboard block is allowed")
+                saw_clipboard = True
+                clipboard = OrderedDict([
+                    ("history", True),
+                    ("maxItems", 20),
+                    ("persist", True),
+                    ("images", True),
+                    ("encryption", "user"),
+                    ("cipher", "auto"),
+                ])
+                block = ("clipboard", None)
                 continue
 
             layout = re.fullmatch(rf"layout\s+({IDENT})\s*\{{", line)
@@ -458,6 +494,52 @@ def compile_dsl(text: str, path: Path) -> dict[str, object]:
                 source["chordWindowMs"] = int(match.group(1))
                 continue
             raise DslError(path, lineno, f"unknown profile setting: {line}")
+
+        if kind == "clipboard":
+            assert clipboard is not None
+            match = re.fullmatch(rf"({IDENT})\s*=\s*(.+)", line)
+            if not match:
+                raise DslError(path, lineno, f"unknown clipboard setting: {line}")
+            setting = match.group(1)
+            raw_value = match.group(2)
+            if setting in clipboard_seen:
+                raise DslError(path, lineno, f"duplicate clipboard setting '{setting}'")
+            clipboard_seen.add(setting)
+
+            if setting == "history":
+                clipboard["history"] = parse_bool(path, lineno, raw_value, setting)
+                continue
+            if setting == "max_items":
+                token = raw_value.strip().rstrip(";").strip()
+                if not re.fullmatch(r"\d+", token) or int(token) <= 0:
+                    raise DslError(path, lineno, "clipboard.max_items must be a positive integer")
+                clipboard["maxItems"] = int(token)
+                continue
+            if setting == "persist":
+                clipboard["persist"] = parse_bool(path, lineno, raw_value, setting)
+                continue
+            if setting == "images":
+                clipboard["images"] = parse_bool(path, lineno, raw_value, setting)
+                continue
+            if setting == "encryption":
+                value = parse_clipboard_token(path, lineno, raw_value, setting).lower()
+                if value != "user":
+                    raise DslError(path, lineno, "clipboard.encryption currently supports only 'user'")
+                clipboard["encryption"] = "user"
+                continue
+            if setting == "cipher":
+                value = parse_clipboard_token(path, lineno, raw_value, setting).lower().replace("_", "-")
+                if value not in {"auto", "chacha20-poly1305"}:
+                    raise DslError(path, lineno, "clipboard.cipher currently supports 'auto' or 'chacha20_poly1305'")
+                clipboard["cipher"] = value
+                continue
+            if setting == "directory":
+                directory = parse_json_string(path, lineno, raw_value)
+                if not directory.strip():
+                    raise DslError(path, lineno, "clipboard.directory must not be empty")
+                clipboard["directory"] = directory
+                continue
+            raise DslError(path, lineno, f"unknown clipboard setting '{setting}'")
 
         if kind == "layout":
             assert name is not None
@@ -541,11 +623,11 @@ def compile_dsl(text: str, path: Path) -> dict[str, object]:
     if not single:
         raise DslError(path, 1, "at least one keymap is required")
 
-    result = OrderedDict([
-        ("source", source),
-        ("singleStroke", single),
-        ("chords", chords),
-    ])
+    result = OrderedDict([("source", source)])
+    if clipboard is not None:
+        result["clipboard"] = clipboard
+    result["singleStroke"] = single
+    result["chords"] = chords
     if any(behaviors_by_mode for behaviors_by_mode in behaviors.values()):
         result["behaviors"] = behaviors
     if user_behavior_definitions:
