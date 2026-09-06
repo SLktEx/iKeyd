@@ -1,99 +1,30 @@
 {
-  "k-chord-f-u-duplicate": {
-    "inventoryIds": [
-      "legacy-chord-1a818bdefb",
-      "legacy-chord-f063e4bdf2"
-    ],
-    "requiredEnvironment": ["hosted-windows"],
-    "oracleTargets": ["compiled-exe", "ahk-source", "ikeyd"]
-  },
-  "k-chord-h-v": {
-    "inventoryIds": ["legacy-chord-51156704be"],
-    "requiredEnvironment": ["hosted-windows"],
-    "oracleTargets": ["compiled-exe", "ahk-source", "ikeyd"]
-  },
-  "k-chord-j-r": {
-    "inventoryIds": ["legacy-chord-9cfd95863f"],
-    "requiredEnvironment": ["hosted-windows"],
-    "oracleTargets": ["compiled-exe", "ahk-source", "ikeyd"]
-  },
-  "k-chord-scolon-v-duplicate": {
-    "inventoryIds": [
-      "legacy-chord-723040d61b",
-      "legacy-chord-e789b6f341"
-    ],
-    "requiredEnvironment": ["hosted-windows"],
-    "oracleTargets": ["compiled-exe", "ahk-source", "ikeyd"]
-  },
-  "k-single-q": {
-    "inventoryIds": ["legacy-single-stroke-b0434eef54"],
-    "requiredEnvironment": ["hosted-windows"],
-    "oracleTargets": ["compiled-exe", "ahk-source", "ikeyd"]
-  },
-  "runtime-media-volume-up-ms-q": {
-    "inventoryIds": ["legacy-send-ee1a14ac1f"],
-    "requiredEnvironment": ["deterministic-windows-runtime"],
-    "oracleTargets": ["ikeyd-runtime"]
-  },
-  "runtime-mouse-left-click-ms-u": {
-    "inventoryIds": ["legacy-mouse-operation-577e9f6675"],
-    "requiredEnvironment": ["deterministic-windows-runtime"],
-    "oracleTargets": ["ikeyd-runtime"]
-  },
-  "runtime-mouse-move-left-30-ms-d-j": {
-    "inventoryIds": [
-      "legacy-input-state-operation-fbe6596626",
-      "legacy-mouse-operation-1d121fa683"
-    ],
-    "requiredEnvironment": ["deterministic-windows-runtime"],
-    "oracleTargets": ["ikeyd-runtime"]
-  },
-  "runtime-window-caption-ms-t": {
-    "inventoryIds": ["legacy-window-operation-45574cea8e"],
-    "requiredEnvironment": ["deterministic-windows-runtime"],
-    "oracleTargets": ["ikeyd-runtime"]
-  },
-  "runtime-window-maximize-m-r": {
-    "inventoryIds": [
-      "legacy-window-operation-d83958e830",
-      "legacy-window-operation-d0984d9943"
-    ],
-    "requiredEnvironment": ["deterministic-windows-runtime"],
-    "oracleTargets": ["ikeyd-runtime"]
-  },
-  "runtime-window-minimize-m-e": {
-    "inventoryIds": ["legacy-window-operation-bea22b324d"],
-    "requiredEnvironment": ["deterministic-windows-runtime"],
-    "oracleTargets": ["ikeyd-runtime"]
-  },
-  "runtime-window-topmost-m-t": {
-    "inventoryIds": ["legacy-window-operation-688970d281"],
-    "requiredEnvironment": ["deterministic-windows-runtime"],
-    "oracleTargets": ["ikeyd-runtime"]
-  },
-  "s-chord-i-v": {
-    "inventoryIds": ["legacy-chord-6f6dff24ea"],
-    "requiredEnvironment": ["hosted-windows"],
-    "oracleTargets": ["compiled-exe", "ahk-source", "ikeyd"]
-  },
-  "s-chord-k-5": {
-    "inventoryIds": ["legacy-chord-f2fa0da67b"],
-    "requiredEnvironment": ["hosted-windows"],
-    "oracleTargets": ["compiled-exe", "ahk-source", "ikeyd"]
-  },
-  "s-chord-o-b": {
-    "inventoryIds": ["legacy-chord-ba1e4711c8"],
-    "requiredEnvironment": ["hosted-windows"],
-    "oracleTargets": ["compiled-exe", "ahk-source", "ikeyd"]
-  },
-  "s-single-k": {
-    "inventoryIds": ["legacy-single-stroke-0532fd9ed9"],
-    "requiredEnvironment": ["hosted-windows"],
-    "oracleTargets": ["compiled-exe", "ahk-source", "ikeyd"]
-  },
-  "s-single-w": {
-    "inventoryIds": ["legacy-single-stroke-e1cb2619ec"],
-    "requiredEnvironment": ["hosted-windows"],
-    "oracleTargets": ["compiled-exe", "ahk-source", "ikeyd"]
-  }
+  "k-chord-f-u-duplicate": {"inventoryIds":["legacy-chord-1a818bdefb","legacy-chord-f063e4bdf2"],"requiredEnvironment":["hosted-windows"],"oracleTargets":["compiled-exe","ahk-source","ikeyd"]},
+  "k-chord-h-v": {"inventoryIds":["legacy-chord-51156704be"],"requiredEnvironment":["hosted-windows"],"oracleTargets":["compiled-exe","ahk-source","ikeyd"]},
+  "k-chord-j-r": {"inventoryIds":["legacy-chord-9cfd95863f"],"requiredEnvironment":["hosted-windows"],"oracleTargets":["compiled-exe","ahk-source","ikeyd"]},
+  "k-chord-scolon-v-duplicate": {"inventoryIds":["legacy-chord-723040d61b","legacy-chord-e789b6f341"],"requiredEnvironment":["hosted-windows"],"oracleTargets":["compiled-exe","ahk-source","ikeyd"]},
+  "k-single-q": {"inventoryIds":["legacy-single-stroke-b0434eef54"],"requiredEnvironment":["hosted-windows"],"oracleTargets":["compiled-exe","ahk-source","ikeyd"]},
+  "runtime-media-next-track-sm-r": {"inventoryIds":["legacy-send-871d185fb0"],"requiredEnvironment":["deterministic-windows-runtime"],"oracleTargets":["ikeyd-runtime"]},
+  "runtime-media-play-pause-sm-f": {"inventoryIds":["legacy-send-ce6f77e826"],"requiredEnvironment":["deterministic-windows-runtime"],"oracleTargets":["ikeyd-runtime"]},
+  "runtime-media-previous-track-sm-v": {"inventoryIds":["legacy-send-4b4effd7c8"],"requiredEnvironment":["deterministic-windows-runtime"],"oracleTargets":["ikeyd-runtime"]},
+  "runtime-media-volume-down-sm-z": {"inventoryIds":["legacy-send-f5708426fb"],"requiredEnvironment":["deterministic-windows-runtime"],"oracleTargets":["ikeyd-runtime"]},
+  "runtime-media-volume-mute-sm-a": {"inventoryIds":["legacy-send-310d9f2ed1"],"requiredEnvironment":["deterministic-windows-runtime"],"oracleTargets":["ikeyd-runtime"]},
+  "runtime-media-volume-up-ms-q": {"inventoryIds":["legacy-send-ee1a14ac1f"],"requiredEnvironment":["deterministic-windows-runtime"],"oracleTargets":["ikeyd-runtime"]},
+  "runtime-mouse-left-click-ms-u": {"inventoryIds":["legacy-mouse-operation-577e9f6675"],"requiredEnvironment":["deterministic-windows-runtime"],"oracleTargets":["ikeyd-runtime"]},
+  "runtime-mouse-middle-click-sm-comma": {"inventoryIds":["legacy-mouse-operation-0420bf2ff9"],"requiredEnvironment":["deterministic-windows-runtime"],"oracleTargets":["ikeyd-runtime"]},
+  "runtime-mouse-move-left-30-ms-d-j": {"inventoryIds":["legacy-input-state-operation-fbe6596626","legacy-mouse-operation-1d121fa683"],"requiredEnvironment":["deterministic-windows-runtime"],"oracleTargets":["ikeyd-runtime"]},
+  "runtime-mouse-right-click-sm-o": {"inventoryIds":["legacy-mouse-operation-dac810445a"],"requiredEnvironment":["deterministic-windows-runtime"],"oracleTargets":["ikeyd-runtime"]},
+  "runtime-mouse-scroll-down-ctrl-sm-colon": {"inventoryIds":["legacy-send-8c6cd49965"],"requiredEnvironment":["deterministic-windows-runtime"],"oracleTargets":["ikeyd-runtime"]},
+  "runtime-mouse-scroll-down-sm-scolon": {"inventoryIds":["legacy-mouse-operation-20254f934d"],"requiredEnvironment":["deterministic-windows-runtime"],"oracleTargets":["ikeyd-runtime"]},
+  "runtime-mouse-scroll-up-ctrl-sm-at": {"inventoryIds":["legacy-send-1e1aeb34cd"],"requiredEnvironment":["deterministic-windows-runtime"],"oracleTargets":["ikeyd-runtime"]},
+  "runtime-mouse-scroll-up-sm-p": {"inventoryIds":["legacy-mouse-operation-7fe316eacd"],"requiredEnvironment":["deterministic-windows-runtime"],"oracleTargets":["ikeyd-runtime"]},
+  "runtime-window-caption-ms-t": {"inventoryIds":["legacy-window-operation-45574cea8e"],"requiredEnvironment":["deterministic-windows-runtime"],"oracleTargets":["ikeyd-runtime"]},
+  "runtime-window-maximize-m-r": {"inventoryIds":["legacy-window-operation-d83958e830","legacy-window-operation-d0984d9943"],"requiredEnvironment":["deterministic-windows-runtime"],"oracleTargets":["ikeyd-runtime"]},
+  "runtime-window-minimize-m-e": {"inventoryIds":["legacy-window-operation-bea22b324d"],"requiredEnvironment":["deterministic-windows-runtime"],"oracleTargets":["ikeyd-runtime"]},
+  "runtime-window-topmost-m-t": {"inventoryIds":["legacy-window-operation-688970d281"],"requiredEnvironment":["deterministic-windows-runtime"],"oracleTargets":["ikeyd-runtime"]},
+  "s-chord-i-v": {"inventoryIds":["legacy-chord-6f6dff24ea"],"requiredEnvironment":["hosted-windows"],"oracleTargets":["compiled-exe","ahk-source","ikeyd"]},
+  "s-chord-k-5": {"inventoryIds":["legacy-chord-f2fa0da67b"],"requiredEnvironment":["hosted-windows"],"oracleTargets":["compiled-exe","ahk-source","ikeyd"]},
+  "s-chord-o-b": {"inventoryIds":["legacy-chord-ba1e4711c8"],"requiredEnvironment":["hosted-windows"],"oracleTargets":["compiled-exe","ahk-source","ikeyd"]},
+  "s-single-k": {"inventoryIds":["legacy-single-stroke-0532fd9ed9"],"requiredEnvironment":["hosted-windows"],"oracleTargets":["compiled-exe","ahk-source","ikeyd"]},
+  "s-single-w": {"inventoryIds":["legacy-single-stroke-e1cb2619ec"],"requiredEnvironment":["hosted-windows"],"oracleTargets":["compiled-exe","ahk-source","ikeyd"]}
 }

@@ -1,0 +1,11 @@
+{
+  "id": "runtime-mouse-right-click-sm-o",
+  "description": "Space then M plus O emits a right mouse click.",
+  "initialState": { "mode": "S", "ime": "off", "layers": ["S", "M"] },
+  "input": [
+    { "atMs": 10, "kind": "keyDown", "key": "O" },
+    { "atMs": 11, "kind": "keyUp", "key": "O" }
+  ],
+  "expected": { "actions": [ { "kind": "mouse", "value": "click:right" } ] },
+  "tags": ["legacy", "runtime-long-tail", "mouse", "deterministic"]
+}
