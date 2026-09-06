@@ -16,7 +16,12 @@ spec.loader.exec_module(module)
 
 
 class ProcessSpecificHandoffTests(unittest.TestCase):
-    def test_uncovered_process_specific_entry_is_explicitly_routed_to_issue_57(self):
+    def rules(self):
+        return json.loads(
+            (ROOT / "tests" / "compatibility" / "coverage-rules.json").read_text(encoding="utf-8")
+        )
+
+    def test_implemented_console_hotkey_is_no_longer_deferred_to_issue_57(self):
         feature = module.Feature(
             "hotkey",
             1,
@@ -26,18 +31,35 @@ class ProcessSpecificHandoffTests(unittest.TestCase):
             ["send", "process-specific", "hotkey"],
         )
         module.stable_ids([feature])
-        rules = json.loads(
-            (ROOT / "tests" / "compatibility" / "coverage-rules.json").read_text(encoding="utf-8")
-        )
 
-        module.apply_coverage([feature], rules)
+        module.apply_coverage([feature], self.rules())
 
-        self.assertEqual("deferred:#57", feature.coverage["scenario"])
-        self.assertEqual("deferred:#57", feature.coverage["implementation"])
-        self.assertEqual("deferred:#57", feature.coverage["exeDiff"])
-        self.assertEqual("deferred:#57", feature.coverage["ahkDiff"])
+        self.assertEqual("implemented", feature.coverage["implementation"])
+        self.assertEqual("covered", feature.coverage["unit"])
+        self.assertEqual("regression", feature.coverage["scenario"])
         self.assertEqual("real-windows-verification-required", feature.classification)
-        self.assertIn("issue:#57", feature.evidence)
+        self.assertNotIn("#57", json.dumps(feature.coverage))
+        self.assertIn("src/iKeyd.App/LegacyContextualHotkeyHandler.cs", feature.evidence)
+
+    def test_remaining_context_only_surface_is_explicitly_routed_to_issue_59(self):
+        feature = module.Feature(
+            "context",
+            1,
+            "#IfWinActive ahk_class MacroDialogClass",
+            "global",
+            "#IfWinActive ahk_class MacroDialogClass",
+            ["process-specific", "context"],
+        )
+        module.stable_ids([feature])
+
+        module.apply_coverage([feature], self.rules())
+
+        self.assertEqual("partial", feature.coverage["implementation"])
+        self.assertEqual("real-windows:#59", feature.coverage["scenario"])
+        self.assertEqual("required", feature.coverage["realWindows"])
+        self.assertEqual("real-windows-verification-required", feature.classification)
+        self.assertNotIn("#57", json.dumps(feature.coverage))
+        self.assertIn("issue:#59", feature.evidence)
 
 
 if __name__ == "__main__":
