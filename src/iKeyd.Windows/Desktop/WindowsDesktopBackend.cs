@@ -191,8 +191,9 @@ public sealed class WindowsDesktopBackend : IDesktopBackend
 
     public void MovePointerBy(int deltaX, int deltaY)
     {
-        var current = GetPointerPosition();
-        MovePointer(new DesktopPoint(current.X + deltaX, current.Y + deltaY));
+        if (deltaX == 0 && deltaY == 0)
+            return;
+        _native.SendMouseMove(deltaX, deltaY);
     }
 
     public bool IsMouseButtonDown(DesktopMouseButton button)
