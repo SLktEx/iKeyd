@@ -12,19 +12,12 @@ public sealed class LegacySendOutputCompatibilityTests
     {
         var keyboard = new RecordingKeyboardOutput();
         var output = new LegacySendOutput(keyboard);
-
         output.Send("^+{TAB}");
-
-        Assert.Equal(
-        [
-            Event(WindowsKeyMap.Control, KeyEventKind.Down),
-            Event(WindowsKeyMap.Shift, KeyEventKind.Down),
-            Event(WindowsKeyMap.Tab, KeyEventKind.Down),
-            Event(WindowsKeyMap.Tab, KeyEventKind.Up),
-            Event(WindowsKeyMap.Shift, KeyEventKind.Up),
-            Event(WindowsKeyMap.Control, KeyEventKind.Up)
-        ],
-        keyboard.Events);
+        Assert.Equal([
+            Event(WindowsKeyMap.Control, KeyEventKind.Down), Event(WindowsKeyMap.Shift, KeyEventKind.Down),
+            Event(WindowsKeyMap.Tab, KeyEventKind.Down), Event(WindowsKeyMap.Tab, KeyEventKind.Up),
+            Event(WindowsKeyMap.Shift, KeyEventKind.Up), Event(WindowsKeyMap.Control, KeyEventKind.Up)
+        ], keyboard.Events);
     }
 
     [Fact]
@@ -32,15 +25,14 @@ public sealed class LegacySendOutputCompatibilityTests
     {
         var keyboard = new RecordingKeyboardOutput();
         var output = new LegacySendOutput(keyboard);
-
         output.Send("{CTRL}{vk1Csc079}{vk1Dsc07B}{vkF3sc029}{VOLUME_UP}{VOLUME_MUTE}{VOLUME_DOWN}{MEDIA_NEXT}{MEDIA_PLAY_PAUSE}{MEDIA_PREV}");
 
         Assert.Equal(20, keyboard.Events.Count);
         Assert.Equal(Event(WindowsKeyMap.Control, KeyEventKind.Down), keyboard.Events[0]);
         Assert.Equal(Event(WindowsKeyMap.Control, KeyEventKind.Up), keyboard.Events[1]);
-        Assert.Equal(new KeyboardKey(0x1C, 0x79), keyboard.Events[2].Key);
-        Assert.Equal(new KeyboardKey(0x1D, 0x7B), keyboard.Events[4].Key);
-        Assert.Equal(new KeyboardKey(0xF3, 0x29), keyboard.Events[6].Key);
+        Assert.Equal(new KeyboardKey(0x1C, 0x79, PreserveVirtualKeyWithScanCode: true), keyboard.Events[2].Key);
+        Assert.Equal(new KeyboardKey(0x1D, 0x7B, PreserveVirtualKeyWithScanCode: true), keyboard.Events[4].Key);
+        Assert.Equal(new KeyboardKey(0xF3, 0x29, PreserveVirtualKeyWithScanCode: true), keyboard.Events[6].Key);
         Assert.Equal(Event(WindowsKeyMap.VolumeUp, KeyEventKind.Down), keyboard.Events[8]);
         Assert.Equal(Event(WindowsKeyMap.VolumeMute, KeyEventKind.Down), keyboard.Events[10]);
         Assert.Equal(Event(WindowsKeyMap.VolumeDown, KeyEventKind.Down), keyboard.Events[12]);
@@ -55,9 +47,7 @@ public sealed class LegacySendOutputCompatibilityTests
     {
         var keyboard = new RecordingKeyboardOutput();
         var output = new LegacySendOutput(keyboard);
-
         output.Send("{LEFT 3}{ENTER 2}{SHIFT DOWN}{HOME}{SHIFT UP}{{}{}}{!}{#}{^}");
-
         Assert.Equal(14, keyboard.Events.Count);
         Assert.Equal(Event(WindowsKeyMap.Left, KeyEventKind.Down), keyboard.Events[0]);
         Assert.Equal(Event(WindowsKeyMap.Left, KeyEventKind.Up), keyboard.Events[1]);
@@ -77,30 +67,23 @@ public sealed class LegacySendOutputCompatibilityTests
     {
         var keyboard = new RecordingKeyboardOutput();
         var output = new LegacySendOutput(keyboard);
-
         output.Send("{END}+{HOME}^x\\begin{{}^v{}}{ENTER 2}\\end{{}^v{}}{UP}");
-
-        Assert.Contains("\\begin", keyboard.Text);
-        Assert.Contains("{", keyboard.Text);
-        Assert.Contains("}", keyboard.Text);
-        Assert.Contains("\\end", keyboard.Text);
+        Assert.Contains("\\begin", keyboard.Text); Assert.Contains("{", keyboard.Text); Assert.Contains("}", keyboard.Text); Assert.Contains("\\end", keyboard.Text);
         Assert.Equal(2, keyboard.Events.Count(item => item.Key.VirtualKey == WindowsKeyMap.Enter && item.Kind == KeyEventKind.Down));
         Assert.Contains(keyboard.Events, item => item.Key.VirtualKey == (ushort)'X');
         Assert.Contains(keyboard.Events, item => item.Key.VirtualKey == (ushort)'V');
     }
 
     [Fact]
-    public void Jis_punctuation_with_outer_modifiers_keeps_required_shift()
+    public void Punctuation_with_outer_modifiers_keeps_layout_required_shift()
     {
         var keyboard = new RecordingKeyboardOutput();
         var output = new LegacySendOutput(keyboard);
-
         output.Send("^$!_^{!}");
-
         Assert.Contains(keyboard.Events, item => item.Key.VirtualKey == WindowsKeyMap.Control && item.Kind == KeyEventKind.Down);
         Assert.Contains(keyboard.Events, item => item.Key.VirtualKey == WindowsKeyMap.Shift && item.Kind == KeyEventKind.Down);
         Assert.Contains(keyboard.Events, item => item.Key.VirtualKey == (ushort)'4');
-        Assert.Contains(keyboard.Events, item => item.Key.VirtualKey == 0xE2);
+        Assert.Contains(keyboard.Events, item => item.Key.VirtualKey is 0xBD or 0xE2);
         Assert.Contains(keyboard.Events, item => item.Key.VirtualKey == (ushort)'1');
     }
 
@@ -110,12 +93,8 @@ public sealed class LegacySendOutputCompatibilityTests
         var keyboard = new RecordingKeyboardOutput();
         var desktop = new RecordingDesktopBackend();
         var output = new LegacySendOutput(keyboard, desktop);
-
         output.Send("^{Click,WU}^{Click,WD}");
-
-        Assert.Empty(keyboard.Events);
-        Assert.Empty(keyboard.Text);
-        Assert.Equal([(120, true), (-120, true)], desktop.Scrolls);
+        Assert.Empty(keyboard.Events); Assert.Empty(keyboard.Text); Assert.Equal([(120, true), (-120, true)], desktop.Scrolls);
     }
 
     [Fact]
@@ -123,9 +102,7 @@ public sealed class LegacySendOutputCompatibilityTests
     {
         var desktop = new RecordingDesktopBackend();
         var output = new LegacySendOutput(new RecordingKeyboardOutput(), desktop);
-
         output.Send("{Click,123,456,Right,Down}");
-
         Assert.Equal(new DesktopPoint(123, 456), desktop.Pointer);
         Assert.Equal([(DesktopMouseButton.Right, true)], desktop.ButtonStates);
     }
@@ -135,17 +112,11 @@ public sealed class LegacySendOutputCompatibilityTests
     {
         var keyboard = new RecordingKeyboardOutput();
         var output = new LegacySendOutput(keyboard);
-
         output.Send("!{Space}ep");
-
-        Assert.Equal(
-        [
-            Event(WindowsKeyMap.Alt, KeyEventKind.Down),
-            Event(WindowsKeyMap.Space, KeyEventKind.Down),
-            Event(WindowsKeyMap.Space, KeyEventKind.Up),
-            Event(WindowsKeyMap.Alt, KeyEventKind.Up)
-        ],
-        keyboard.Events);
+        Assert.Equal([
+            Event(WindowsKeyMap.Alt, KeyEventKind.Down), Event(WindowsKeyMap.Space, KeyEventKind.Down),
+            Event(WindowsKeyMap.Space, KeyEventKind.Up), Event(WindowsKeyMap.Alt, KeyEventKind.Up)
+        ], keyboard.Events);
         Assert.Equal(["ep"], keyboard.Text);
     }
 
@@ -153,30 +124,19 @@ public sealed class LegacySendOutputCompatibilityTests
     public void Unsupported_brace_tokens_fail_with_a_diagnostic_instead_of_becoming_literal_text()
     {
         var output = new LegacySendOutput(new RecordingKeyboardOutput());
-
         var error = Assert.Throws<InvalidDataException>(() => output.Send("{BogusLegacyToken}"));
-
         Assert.Contains("Unsupported hotkeySKG legacy Send syntax", error.Message);
         Assert.Contains("BogusLegacyToken", error.Message);
     }
 
-    private static RecordedKeyboardEvent Event(ushort virtualKey, KeyEventKind kind)
-        => new(WindowsKeyMap.Keyboard(virtualKey), kind);
+    private static RecordedKeyboardEvent Event(ushort virtualKey, KeyEventKind kind) => new(WindowsKeyMap.Keyboard(virtualKey), kind);
 
     private sealed class RecordingKeyboardOutput : IKeyboardOutput
     {
         public List<RecordedKeyboardEvent> Events { get; } = [];
         public List<string> Text { get; } = [];
-
-        public void SendKey(KeyboardKey key, KeyEventKind kind)
-            => Events.Add(new RecordedKeyboardEvent(key, kind));
-
-        public void SendKeyPress(KeyboardKey key)
-        {
-            SendKey(key, KeyEventKind.Down);
-            SendKey(key, KeyEventKind.Up);
-        }
-
+        public void SendKey(KeyboardKey key, KeyEventKind kind) => Events.Add(new RecordedKeyboardEvent(key, kind));
+        public void SendKeyPress(KeyboardKey key) { SendKey(key, KeyEventKind.Down); SendKey(key, KeyEventKind.Up); }
         public void SendText(string text) => Text.Add(text);
         public bool IsToggleOn(ushort virtualKey) => false;
     }
@@ -186,27 +146,19 @@ public sealed class LegacySendOutputCompatibilityTests
         public List<(int Delta, bool Control)> Scrolls { get; } = [];
         public List<(DesktopMouseButton Button, bool Down)> ButtonStates { get; } = [];
         public DesktopPoint Pointer { get; private set; }
-
         public WindowHandle GetActiveWindow() => throw new NotSupportedException();
         public DesktopWindowState GetWindowState(WindowHandle window) => throw new NotSupportedException();
         public DesktopRect GetWindowBounds(WindowHandle window) => throw new NotSupportedException();
         public DesktopRect GetPrimaryWorkArea() => throw new NotSupportedException();
         public string? GetWindowClass(WindowHandle window) => throw new NotSupportedException();
         public bool IsWindow(WindowHandle window) => throw new NotSupportedException();
-        public void Minimize(WindowHandle window) => throw new NotSupportedException();
-        public void Maximize(WindowHandle window) => throw new NotSupportedException();
-        public void Restore(WindowHandle window) => throw new NotSupportedException();
-        public void MoveResize(WindowHandle window, DesktopRect bounds) => throw new NotSupportedException();
-        public void Activate(WindowHandle window) => throw new NotSupportedException();
-        public IReadOnlyList<WindowHandle> EnumerateTopLevelWindows() => throw new NotSupportedException();
-        public bool IsTopMost(WindowHandle window) => throw new NotSupportedException();
-        public void SetTopMost(WindowHandle window, bool enabled) => throw new NotSupportedException();
-        public byte? GetOpacity(WindowHandle window) => throw new NotSupportedException();
-        public void SetOpacity(WindowHandle window, byte? opacity) => throw new NotSupportedException();
-        public bool HasCaption(WindowHandle window) => throw new NotSupportedException();
-        public void SetCaption(WindowHandle window, bool enabled) => throw new NotSupportedException();
-        public DesktopPoint GetPointerPosition() => Pointer;
-        public void MovePointer(DesktopPoint position) => Pointer = position;
+        public void Minimize(WindowHandle window) => throw new NotSupportedException(); public void Maximize(WindowHandle window) => throw new NotSupportedException();
+        public void Restore(WindowHandle window) => throw new NotSupportedException(); public void MoveResize(WindowHandle window, DesktopRect bounds) => throw new NotSupportedException();
+        public void Activate(WindowHandle window) => throw new NotSupportedException(); public IReadOnlyList<WindowHandle> EnumerateTopLevelWindows() => throw new NotSupportedException();
+        public bool IsTopMost(WindowHandle window) => throw new NotSupportedException(); public void SetTopMost(WindowHandle window, bool enabled) => throw new NotSupportedException();
+        public byte? GetOpacity(WindowHandle window) => throw new NotSupportedException(); public void SetOpacity(WindowHandle window, byte? opacity) => throw new NotSupportedException();
+        public bool HasCaption(WindowHandle window) => throw new NotSupportedException(); public void SetCaption(WindowHandle window, bool enabled) => throw new NotSupportedException();
+        public DesktopPoint GetPointerPosition() => Pointer; public void MovePointer(DesktopPoint position) => Pointer = position;
         public void MovePointerBy(int deltaX, int deltaY) => throw new NotSupportedException();
         public bool IsMouseButtonDown(DesktopMouseButton button) => ButtonStates.LastOrDefault(item => item.Button == button).Down;
         public void SetMouseButton(DesktopMouseButton button, bool down) => ButtonStates.Add((button, down));
