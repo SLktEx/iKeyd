@@ -1,0 +1,50 @@
+name: Validate Windows input E2E serialization
+
+on:
+  push:
+    branches: [fix/windows-global-input-e2e-serialization]
+    paths:
+      - .github/workflows/issue59-windows-input-e2e-serialization.yml
+      - tools/issue59_serialize_windows_input_e2e.py
+
+permissions:
+  contents: write
+
+jobs:
+  validate:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/windows-global-input-e2e-serialization
+          fetch-depth: 0
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+      - name: Apply serialization patch
+        run: python tools/issue59_serialize_windows_input_e2e.py
+      - name: Tooling tests
+        run: python -m unittest discover tests/tooling -p 'test_*.py' -v
+      - name: Restore
+        run: dotnet restore iKeyd.sln
+      - name: Build
+        run: dotnet build iKeyd.sln --no-restore --configuration Release
+      - name: Repeat full .NET suite three times
+        shell: powershell
+        run: |
+          1..3 | ForEach-Object {
+            Write-Host "=== full suite attempt $_ ==="
+            dotnet test iKeyd.sln --no-build --configuration Release
+            if ($LASTEXITCODE -ne 0) { throw "full test suite attempt $_ failed" }
+          }
+      - name: Commit validated stabilization
+        shell: powershell
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add tests/iKeyd.Windows.Tests/WindowsGlobalInputE2ECollection.cs tests/iKeyd.Windows.Tests/WindowsKeyboardE2ETests.cs tests/iKeyd.Windows.Tests/WindowsScenarioRunnerTests.cs
+          git commit -m "test: serialize global Windows input E2E"
+          git push origin HEAD:fix/windows-global-input-e2e-serialization
