@@ -35,6 +35,60 @@ public sealed class OneShotLayerBehaviorRoutingTests
     }
 
     [Fact]
+    public void Different_key_pressed_while_consumed_key_is_held_does_not_inherit_one_shot()
+    {
+        var keyboard = new RecordingKeyboardOutput();
+        var fallback = new RecordingHandler();
+        using var router = Router(
+            [
+                Keymap("S", behaviors: [Behavior("A", "OSL", "NUM")]),
+                Keymap(
+                    "NUM",
+                    singles:
+                    [
+                        new SingleMapping<string>("B", "num-b"),
+                        new SingleMapping<string>("C", "num-c")
+                    ])
+            ],
+            keyboard,
+            fallback);
+
+        Press(router, 'A', 0);
+        Assert.Equal(KeyboardDisposition.Suppress, router.OnKeyboardEvent(Physical('B', KeyEventKind.Down, 20)));
+        Assert.Equal(KeyboardDisposition.PassThrough, router.OnKeyboardEvent(Physical('C', KeyEventKind.Down, 21)));
+        Assert.Equal(KeyboardDisposition.PassThrough, router.OnKeyboardEvent(Physical('C', KeyEventKind.Up, 22)));
+        Assert.Equal(KeyboardDisposition.Suppress, router.OnKeyboardEvent(Physical('B', KeyEventKind.Up, 23)));
+
+        Assert.Equal(["num-b"], keyboard.Text);
+        Assert.Equal(2, fallback.Events.Count);
+    }
+
+    [Fact]
+    public void Newly_armed_one_shot_survives_cleanup_of_previous_consumed_key()
+    {
+        var keyboard = new RecordingKeyboardOutput();
+        var fallback = new RecordingHandler();
+        using var router = Router(
+            [
+                Keymap("S", behaviors: [Behavior("A", "OSL", "NUM")]),
+                Keymap("NUM", behaviors: [Behavior("B", "OSL", "NAV")]),
+                Keymap("NAV", singles: [new SingleMapping<string>("C", "nav-c")])
+            ],
+            keyboard,
+            fallback);
+
+        Press(router, 'A', 0);
+        Press(router, 'B', 20);
+        Press(router, 'C', 40);
+
+        Assert.Equal(["nav-c"], keyboard.Text);
+        Assert.Empty(fallback.Events);
+
+        Assert.Equal(KeyboardDisposition.PassThrough, router.OnKeyboardEvent(Physical('C', KeyEventKind.Down, 60)));
+        Assert.Single(fallback.Events);
+    }
+
+    [Fact]
     public void Transparent_next_key_still_consumes_one_shot()
     {
         var keyboard = new RecordingKeyboardOutput();
