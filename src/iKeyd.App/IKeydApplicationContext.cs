@@ -61,13 +61,17 @@ internal sealed class IKeydApplicationContext : ApplicationContext
             clipboardSettings.Images);
 
         var inputMethod = new WindowsInputMethod();
+        var clipboardHotkeys = new DeferredClipboardHistoryActions(
+            _clipboard,
+            SynchronizationContext.Current ?? new WindowsFormsSynchronizationContext(),
+            ShowClipboardHistory);
         _runtime = new IKeydRuntimeHandler(
             configuration,
             inputMethod,
             _keyboard.State,
             send,
             desktop,
-            _clipboard);
+            clipboardHotkeys);
         _inputDiagnosticsAutoLog = new InputDiagnosticsAutoLog(_runtime.ExportInputDiagnostics);
         _keyboardHandler = new BehaviorWindowsInputRouter(
             configuration.Profile,
