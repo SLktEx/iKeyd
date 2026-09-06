@@ -1,5 +1,7 @@
+using System.Globalization;
 using iKeyd.Core.Chords;
 using iKeyd.Core.Configuration;
+using iKeyd.Core.Desktop;
 using iKeyd.Core.Input;
 using iKeyd.Core.Runtime;
 
@@ -22,13 +24,17 @@ internal sealed class ConfiguredBehaviorDispatcher
     private readonly KeyBehaviorProfile _profile;
     private readonly ConfiguredKeyBehaviorRuntime _runtime;
     private readonly LegacySendOutput _send;
+    private readonly IDesktopBackend _desktop;
+    private readonly DesktopActionService _desktopActions;
     private readonly List<ushort> _modifiers = new(4);
 
-    public ConfiguredBehaviorDispatcher(KeyBehaviorProfile profile, LegacySendOutput send)
+    public ConfiguredBehaviorDispatcher(KeyBehaviorProfile profile, LegacySendOutput send, IDesktopBackend desktop)
     {
         _profile = profile ?? throw new ArgumentNullException(nameof(profile));
         _runtime = new ConfiguredKeyBehaviorRuntime(profile);
         _send = send ?? throw new ArgumentNullException(nameof(send));
+        _desktop = desktop ?? throw new ArgumentNullException(nameof(desktop));
+        _desktopActions = new DesktopActionService(desktop);
     }
 
     public bool Enabled => !_profile.IsEmpty;
@@ -60,24 +66,10 @@ internal sealed class ConfiguredBehaviorDispatcher
         {
             var transition = transitions[index];
             if (transition.Kind == KeyBehaviorTransitionKind.Tap)
-                SendTap(transition.Action);
-        }
-    }
-
-    private void SendTap(KeyBehaviorAction action)
-    {
-        switch (action.Kind)
-        {
-            case KeyBehaviorActionKind.Key:
-                if (!WindowsKeyMap.TryResolveNamedKey(action.Value, out var key))
-                    throw new InvalidOperationException($"Configured behavior output key '{action.Value}' is not supported on Windows.");
-                _send.SendKey(key.VirtualKey);
-                break;
-            case KeyBehaviorActionKind.Text:
-                _send.Send(action.Value);
-                break;
-            default:
-                throw new InvalidOperationException($"Configured tap action '{action.Kind}' cannot be emitted directly.");
+            {
+                CollectModifiers();
+                EmitOutputAction(transition.Action, applyModifiersToKey: true);
+            }
         }
     }
 
@@ -98,21 +90,7 @@ internal sealed class ConfiguredBehaviorDispatcher
         CollectModifiers();
         if (mapped is { } mappedAction)
         {
-            if (mappedAction.Kind == KeyBehaviorActionKind.Text)
-            {
-                // text(...) is literal output by design; virtual held modifiers do
-                // not transform its characters.
-                _send.Send(mappedAction.Value);
-                return true;
-            }
-
-            if (mappedAction.Kind != KeyBehaviorActionKind.Key ||
-                !WindowsKeyMap.TryResolveNamedKey(mappedAction.Value, out var mappedKey))
-            {
-                throw new InvalidOperationException($"Configured layer output '{mappedAction.Kind}:{mappedAction.Value}' is not supported on Windows.");
-            }
-
-            SendKeyWithModifiers(mappedKey.VirtualKey);
+            EmitOutputAction(mappedAction, applyModifiersToKey: true);
             return true;
         }
 
@@ -122,6 +100,123 @@ internal sealed class ConfiguredBehaviorDispatcher
         SendKeyWithModifiers(physicalKey.VirtualKey);
         return true;
     }
+
+    private void EmitOutputAction(KeyBehaviorAction action, bool applyModifiersToKey)
+    {
+        switch (action.Kind)
+        {
+            case KeyBehaviorActionKind.Key:
+                if (!WindowsKeyMap.TryResolveNamedKey(action.Value, out var key))
+                    throw new InvalidOperationException($"Configured behavior output key '{action.Value}' is not supported on Windows.");
+                if (applyModifiersToKey)
+                    SendKeyWithModifiers(key.VirtualKey);
+                else
+                    _send.SendKey(key.VirtualKey);
+                return;
+
+            case KeyBehaviorActionKind.Text:
+                // text(...) is literal output by design; virtual held modifiers do
+                // not transform its characters.
+                _send.Send(action.Value);
+                return;
+
+            case KeyBehaviorActionKind.MouseMove:
+                ParseMouseMove(action.Value, out var deltaX, out var deltaY);
+                _desktop.MovePointerBy(deltaX, deltaY);
+                return;
+
+            case KeyBehaviorActionKind.MouseClick:
+                _desktop.Click(ParseMouseButton(action.Value));
+                return;
+
+            case KeyBehaviorActionKind.Scroll:
+                _desktop.ScrollVertical(string.Equals(action.Value, "Up", StringComparison.OrdinalIgnoreCase) ? 120 : -120);
+                return;
+
+            case KeyBehaviorActionKind.Media:
+                _desktop.SendMediaCommand(ParseMediaCommand(action.Value));
+                return;
+
+            case KeyBehaviorActionKind.Window:
+                DispatchWindowAction(action.Value);
+                return;
+
+            default:
+                throw new InvalidOperationException($"Configured output action '{action.Kind}:{action.Value}' cannot be emitted directly.");
+        }
+    }
+
+    private void DispatchWindowAction(string command)
+    {
+        switch (command.ToLowerInvariant())
+        {
+            case "minimize":
+                _desktopActions.MinimizeActive();
+                break;
+            case "togglemaximize":
+                _desktopActions.ToggleMaximizeActive();
+                break;
+            case "lefthalf":
+                _desktopActions.PlaceActive(DesktopPlacement.LeftHalf);
+                break;
+            case "righthalf":
+                _desktopActions.PlaceActive(DesktopPlacement.RightHalf);
+                break;
+            case "tophalf":
+                _desktopActions.PlaceActive(DesktopPlacement.TopHalf);
+                break;
+            case "bottomhalf":
+                _desktopActions.PlaceActive(DesktopPlacement.BottomHalf);
+                break;
+            case "toggletopmost":
+                _desktopActions.ToggleTopMostActive();
+                break;
+            case "opacityup":
+                _desktopActions.AdjustOpacityActive(30);
+                break;
+            case "opacitydown":
+                _desktopActions.AdjustOpacityActive(-30);
+                break;
+            case "togglecaption":
+                _desktopActions.ToggleCaptionActive();
+                break;
+            case "activatebottomsameclass":
+                _desktopActions.ActivateBottomWindowOfActiveClass();
+                break;
+            default:
+                throw new InvalidOperationException($"Configured window action '{command}' is not supported.");
+        }
+    }
+
+    private static void ParseMouseMove(string value, out int deltaX, out int deltaY)
+    {
+        var parts = value.Split(',', StringSplitOptions.TrimEntries);
+        if (parts.Length != 2 ||
+            !int.TryParse(parts[0], NumberStyles.Integer, CultureInfo.InvariantCulture, out deltaX) ||
+            !int.TryParse(parts[1], NumberStyles.Integer, CultureInfo.InvariantCulture, out deltaY))
+            throw new InvalidOperationException($"Invalid configured mouse movement '{value}'.");
+    }
+
+    private static DesktopMouseButton ParseMouseButton(string value)
+        => value.ToLowerInvariant() switch
+        {
+            "left" => DesktopMouseButton.Left,
+            "right" => DesktopMouseButton.Right,
+            "middle" => DesktopMouseButton.Middle,
+            _ => throw new InvalidOperationException($"Configured mouse button '{value}' is not supported.")
+        };
+
+    private static DesktopMediaCommand ParseMediaCommand(string value)
+        => value.ToLowerInvariant() switch
+        {
+            "volumeup" => DesktopMediaCommand.VolumeUp,
+            "volumemute" => DesktopMediaCommand.VolumeMute,
+            "volumedown" => DesktopMediaCommand.VolumeDown,
+            "nexttrack" => DesktopMediaCommand.NextTrack,
+            "playpause" => DesktopMediaCommand.PlayPause,
+            "previoustrack" => DesktopMediaCommand.PreviousTrack,
+            _ => throw new InvalidOperationException($"Configured media command '{value}' is not supported.")
+        };
 
     private void CollectModifiers()
     {
