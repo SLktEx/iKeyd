@@ -35,6 +35,40 @@ BASE[2,4]
 
 `POS[row,col]` aliases `BASE[row,col]` unless a dedicated `POS` layout is declared. This provides a physical-position spelling that stays useful when logical layouts change later.
 
+### JIS physical keys
+
+iKeyd treats JIS-specific keys as compact physical key identities rather than migration-only string names. They can therefore participate in normal single mappings and combos without falling back to dictionary lookup.
+
+Canonical names include:
+
+```text
+Ro
+Yen
+Henkan
+Muhenkan
+KatakanaHiragana
+ZenkakuHankaku
+Caret
+LeftBracket
+RightBracket
+```
+
+QMK/HID-style aliases are accepted at the key-ID boundary where useful, for example `INT1` for `Ro`, `INT3` for `Yen`, `INT4` for `Henkan`, `INT5` for `Muhenkan`, and `LANG5` for `ZenkakuHankaku`.
+
+Full-size physical keys are also compact identities, including left/right modifiers, navigation keys, and the numeric keypad. Examples:
+
+```text
+LShift RShift
+LCtrl RCtrl
+LAlt RAlt
+LGui RGui
+Enter NumpadEnter
+Home Numpad7
+NumpadComma
+```
+
+On Windows, physical keyboard events are resolved from scan code plus the extended-key bit when available. This keeps distinctions such as `Enter` vs `NumpadEnter`, left vs right modifiers, and JIS-specific physical keys independent of the active logical keyboard layout. Virtual-key mapping remains a fallback for events without a usable scan code.
+
 ## Keymaps
 
 For a keymap that follows a declared physical layout, use `using` and `map`:
@@ -64,6 +98,8 @@ Keys outside the visual layout can stay explicit:
 ```text
 1 = 1
 F1 = {F1}
+Ro = Backslash
+Yen = layer_symbol
 ```
 
 Direct physical-position references are also valid:
@@ -80,6 +116,7 @@ A one-off combo can be written directly:
 ```text
 combo K + Q = fa
 combo POS[2,8] + BASE[1,1] = fa
+combo Muhenkan + Ro = Escape
 ```
 
 When many combos share one key, group them:
