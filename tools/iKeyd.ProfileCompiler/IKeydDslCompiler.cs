@@ -411,6 +411,17 @@ internal static class IKeydDslCompiler
         mappings.Add(new ChordEntry(first, second, output));
     }
 
+    private static string? ResolvePosLayout(Dictionary<string, List<List<string>>> layouts)
+    {
+        if (layouts.ContainsKey("POS"))
+            return "POS";
+        if (layouts.ContainsKey("JIS109"))
+            return "JIS109";
+        if (layouts.ContainsKey("BASE"))
+            return "BASE";
+        return null;
+    }
+
     private static string ResolveKeyRef(
         string path,
         int lineNumber,
@@ -427,8 +438,12 @@ internal static class IKeydDslCompiler
             var layoutName = named.Groups[1].Value;
             var requestedKey = named.Groups[2].Value;
             var resolvedLayoutName = layoutName;
-            if (string.Equals(layoutName, "POS", StringComparison.OrdinalIgnoreCase) && !layouts.ContainsKey("POS") && layouts.ContainsKey("BASE"))
-                resolvedLayoutName = "BASE";
+            if (string.Equals(layoutName, "POS", StringComparison.OrdinalIgnoreCase))
+            {
+                var posLayout = ResolvePosLayout(layouts);
+                if (posLayout is not null)
+                    resolvedLayoutName = posLayout;
+            }
             if (!layouts.TryGetValue(resolvedLayoutName, out var namedLayout))
                 throw Error(path, lineNumber, $"unknown layout '{layoutName}' in key reference '{value}'");
 
@@ -452,8 +467,12 @@ internal static class IKeydDslCompiler
             throw Error(path, lineNumber, $"key positions are 1-based: '{value}'");
 
         var resolvedCoordinateLayoutName = coordinateLayoutName;
-        if (string.Equals(coordinateLayoutName, "POS", StringComparison.OrdinalIgnoreCase) && !layouts.ContainsKey("POS") && layouts.ContainsKey("BASE"))
-            resolvedCoordinateLayoutName = "BASE";
+        if (string.Equals(coordinateLayoutName, "POS", StringComparison.OrdinalIgnoreCase))
+        {
+            var posLayout = ResolvePosLayout(layouts);
+            if (posLayout is not null)
+                resolvedCoordinateLayoutName = posLayout;
+        }
         if (!layouts.TryGetValue(resolvedCoordinateLayoutName, out var layout))
             throw Error(path, lineNumber, $"unknown layout '{coordinateLayoutName}' in key reference '{value}'");
         if (row > layout.Count)
