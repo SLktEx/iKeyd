@@ -1,0 +1,33 @@
+{
+  "id": "runtime-ahm-m-prefix-scope",
+  "description": "A+H+M with letter M probes whether the legacy Alt prefix remains held across {HOME}+{END}.",
+  "initialState": { "mode": "S", "ime": "off", "modifiers": [] },
+  "input": [
+    { "atMs": 0, "kind": "keyDown", "key": "ALT" },
+    { "atMs": 20, "kind": "keyDown", "key": "KANA" },
+    { "atMs": 30, "kind": "keyUp", "key": "KANA" },
+    { "atMs": 40, "kind": "keyUp", "key": "ALT" },
+    { "atMs": 60, "kind": "keyDown", "key": "CONVERT" },
+    { "atMs": 80, "kind": "keyDown", "key": "NONCONVERT" },
+    { "atMs": 100, "kind": "keyDown", "key": "M" },
+    { "atMs": 120, "kind": "keyUp", "key": "M" },
+    { "atMs": 140, "kind": "keyUp", "key": "NONCONVERT" },
+    { "atMs": 160, "kind": "keyUp", "key": "CONVERT" }
+  ],
+  "expected": {
+    "text": "",
+    "events": [
+      { "kind": "keyDown", "key": "CTRL" },
+      { "kind": "keyUp", "key": "CTRL" },
+      { "kind": "keyDown", "key": "ALT" },
+      { "kind": "keyDown", "key": "HOME" },
+      { "kind": "keyUp", "key": "HOME" },
+      { "kind": "keyDown", "key": "SHIFT" },
+      { "kind": "keyDown", "key": "END" },
+      { "kind": "keyUp", "key": "END" },
+      { "kind": "keyUp", "key": "SHIFT" },
+      { "kind": "keyUp", "key": "ALT" }
+    ]
+  },
+  "tags": ["hosted-legacy", "hosted-legacy-runtime", "function-prefix", "long-tail"]
+}
