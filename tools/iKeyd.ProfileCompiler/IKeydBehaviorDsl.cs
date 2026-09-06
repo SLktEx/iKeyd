@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
@@ -320,6 +321,19 @@ internal static class IKeydBehaviorDsl
                 {
                     throw Error(path, lineNumber, $"text(...) requires a quoted string: {exception.Message}");
                 }
+            case "mouse_move":
+                return ParseMouseMove(path, lineNumber, argument);
+            case "mouse_click":
+                return Action("mouse_click", NormalizeChoice(path, lineNumber, "mouse button", argument, "Left", "Right", "Middle"));
+            case "scroll":
+                return Action("scroll", NormalizeChoice(path, lineNumber, "scroll direction", argument, "Up", "Down"));
+            case "media":
+                return Action("media", NormalizeChoice(path, lineNumber, "media command", argument,
+                    "VolumeUp", "VolumeMute", "VolumeDown", "NextTrack", "PlayPause", "PreviousTrack"));
+            case "window":
+                return Action("window", NormalizeChoice(path, lineNumber, "window command", argument,
+                    "Minimize", "ToggleMaximize", "LeftHalf", "RightHalf", "TopHalf", "BottomHalf",
+                    "ToggleTopMost", "OpacityUp", "OpacityDown", "ToggleCaption", "ActivateBottomSameClass"));
             case "layer" when allowHoldActions:
                 if (!Regex.IsMatch(argument, $@"^{Ident}$", RegexOptions.CultureInvariant))
                     throw Error(path, lineNumber, "layer(...) expects one layer name");
@@ -328,9 +342,28 @@ internal static class IKeydBehaviorDsl
                 return Action("modifier", NormalizeModifier(path, lineNumber, argument));
             default:
                 throw Error(path, lineNumber, allowHoldActions
-                    ? "action must be key(...), text(...), layer(...) or modifier(...)"
-                    : "action must be key(...) or text(...)");
+                    ? "action must be key(...), text(...), mouse_move(...), mouse_click(...), scroll(...), media(...), window(...), layer(...) or modifier(...)"
+                    : "action must be key(...), text(...), mouse_move(...), mouse_click(...), scroll(...), media(...) or window(...)");
         }
+    }
+
+    private static JsonObject ParseMouseMove(string path, int lineNumber, string argument)
+    {
+        var parts = argument.Split(',', StringSplitOptions.TrimEntries);
+        if (parts.Length != 2 ||
+            !int.TryParse(parts[0], NumberStyles.Integer, CultureInfo.InvariantCulture, out var deltaX) ||
+            !int.TryParse(parts[1], NumberStyles.Integer, CultureInfo.InvariantCulture, out var deltaY))
+            throw Error(path, lineNumber, "mouse_move(...) expects two integer deltas, for example mouse_move(-30, 0)");
+        return Action("mouse_move", $"{deltaX.ToString(CultureInfo.InvariantCulture)},{deltaY.ToString(CultureInfo.InvariantCulture)}");
+    }
+
+    private static string NormalizeChoice(string path, int lineNumber, string description, string value, params string[] choices)
+    {
+        var trimmed = value.Trim();
+        foreach (var choice in choices)
+            if (string.Equals(trimmed, choice, StringComparison.OrdinalIgnoreCase))
+                return choice;
+        throw Error(path, lineNumber, $"unknown {description} '{trimmed}'; expected one of: {string.Join(", ", choices)}");
     }
 
     private static JsonObject Action(string kind, string value) => new()
@@ -350,7 +383,7 @@ internal static class IKeydBehaviorDsl
         if (draft["hold"] is not JsonObject hold)
             throw Error(path, lineNumber, $"behavior '{trigger}' requires hold = layer(...) or modifier(...)");
         if (draft["tap"] is JsonObject tap && tap["kind"]!.GetValue<string>() is "layer" or "modifier")
-            throw Error(path, lineNumber, $"behavior '{trigger}' tap action must be key or text");
+            throw Error(path, lineNumber, $"behavior '{trigger}' tap action cannot be layer or modifier");
 
         if (validateLayerReference && hold["kind"]!.GetValue<string>() == "layer")
         {
@@ -401,8 +434,8 @@ internal static class IKeydBehaviorDsl
         var resolvedName = ResolveLayoutName(coordinate.Groups[1].Value, layouts);
         if (resolvedName is null || !layouts.TryGetValue(resolvedName, out var resolved))
             throw Error(path, lineNumber, $"unknown layout '{coordinate.Groups[1].Value}' in key reference '{value}'");
-        var row = int.Parse(coordinate.Groups[2].Value, System.Globalization.CultureInfo.InvariantCulture);
-        var column = int.Parse(coordinate.Groups[3].Value, System.Globalization.CultureInfo.InvariantCulture);
+        var row = int.Parse(coordinate.Groups[2].Value, CultureInfo.InvariantCulture);
+        var column = int.Parse(coordinate.Groups[3].Value, CultureInfo.InvariantCulture);
         if (row < 1 || row > resolved.Count)
             throw Error(path, lineNumber, $"row {row} is out of range for layout '{coordinate.Groups[1].Value}'");
         if (column < 1 || column > resolved[row - 1].Count)
