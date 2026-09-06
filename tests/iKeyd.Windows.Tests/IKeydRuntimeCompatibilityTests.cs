@@ -72,21 +72,29 @@ public sealed class IKeydRuntimeCompatibilityTests
     }
 
     [Fact]
-    public void KmFunction_HoldsControlAcrossWholeOutputSequence()
+    public void KhmFunction_AppliesControlOnlyToFirstLegacySendKey()
     {
         using var fixture = new RuntimeFixture();
 
         fixture.Down(WindowsKeyMap.Kana);       // K toggle on
-        fixture.Down(WindowsKeyMap.NonConvert); // KM
+        fixture.Down(WindowsKeyMap.Convert);    // KH
+        fixture.Down(WindowsKeyMap.NonConvert); // KHM
         fixture.Keyboard.Clear();
 
-        Assert.Equal(KeyboardDisposition.Suppress, fixture.Down((ushort)'A'));
+        Assert.Equal(KeyboardDisposition.Suppress, fixture.Down((ushort)'M'));
 
         Assert.Empty(fixture.Keyboard.Text);
-        Assert.NotEmpty(fixture.Keyboard.Events);
-        Assert.Equal(Down(WindowsKeyMap.Control), fixture.Keyboard.Events[0]);
-        Assert.Contains(Press(WindowsKeyMap.Left), fixture.Keyboard.Events);
-        Assert.Equal(Up(WindowsKeyMap.Control), fixture.Keyboard.Events[^1]);
+        Assert.Equal(
+            new[]
+            {
+                Down(WindowsKeyMap.Control),
+                Press(WindowsKeyMap.Home),
+                Up(WindowsKeyMap.Control),
+                Down(WindowsKeyMap.Shift),
+                Press(WindowsKeyMap.End),
+                Up(WindowsKeyMap.Shift)
+            },
+            fixture.Keyboard.Events);
     }
 
     [Fact]
