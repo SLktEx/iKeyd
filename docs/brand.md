@@ -27,11 +27,13 @@ The Windows executable and tray icon use `src/iKeyd.App/Assets/ikeyd.ico`, gener
 The visual language should feel like a real developer tool, not an AI-product mascot brand.
 
 - Dark, restrained developer-workspace imagery.
-- A real keyboard is the visual protagonist.
-- Use one cool blue accent rather than rainbow/neon effects.
+- A keyboard or its physical key geometry should remain the visual protagonist.
+- Use one cool blue/cyan accent rather than rainbow effects.
 - Prefer crisp interface annotations, keymaps, layers, combos, and code over decorative illustration.
 - Keep typography simple, spacious, and technical.
 - Avoid 3D mascots, glossy robot characters, excessive gradients, floating magic particles, or generic “AI future” imagery.
+
+The supporting art should harmonize with the official icon without trying to redraw it. The icon remains the identity; README/website artwork supplies the environment around it.
 
 ## Core palette
 
@@ -39,10 +41,11 @@ The visual language should feel like a real developer tool, not an AI-product ma
 | --- | --- |
 | Background | `#0B0F14` |
 | Primary blue | `#2563FF` |
+| Cyan accent | `#55E6F3` |
 | Primary text | `#E5E7EB` |
 | Secondary text | `#6B7280` |
 
-The palette is intentionally small. Blue is for focus, active keys, links, and small brand marks. The official icon keeps its original cyan-to-blue treatment and should not be flattened to the UI accent color.
+The palette is intentionally small. Blue/cyan is for focus, active keys, links, and small brand marks. The official icon keeps its original cyan-to-blue treatment and should not be flattened to the UI accent color.
 
 ## Typography
 
@@ -62,12 +65,32 @@ Secondary:
 
 - **Good Keys. Better Developers.**
 
+## README visual set
+
+The README uses a small family of matching illustrations instead of one isolated hero image.
+
+<p align="center">
+  <img src="assets/brand/readme-hero.svg" alt="iKeyd README hero" width="100%">
+</p>
+
+<p align="center">
+  <img src="assets/brand/readme-features.svg" alt="iKeyd feature overview" width="100%">
+</p>
+
+<p align="center">
+  <img src="assets/brand/readme-dsl.svg" alt="iKeyd DSL compilation flow" width="100%">
+</p>
+
 ## Assets
 
 Brand assets live in `docs/assets/brand/`.
 
 - `ikeyd-icon.png` — official iKeyd icon / primary brand mark.
-- `readme-hero.jpg` — supporting GitHub README hero.
+- `readme-hero.svg` — main README hero using the dark/cyan developer-tool visual system.
+- `readme-features.svg` — feature overview for keyboard, layers/combos, mouse, clipboard, and commands.
+- `readme-dsl.svg` — authoring DSL → compiled profile → runtime flow.
+- `ogp.svg` — social/OGP composition in the same visual system.
+- `readme-hero.jpg` — legacy supporting hero retained for reference.
 - `src/iKeyd.App/Assets/ikeyd.ico` — Windows executable and tray icon source.
 
 Future website, release, and OGP images should reuse this same visual system and make the official mark the primary identifier rather than inventing a separate logo for each surface.
