@@ -42,7 +42,7 @@ public sealed class MouseMotionConfigurationTests
     }
 
     [Fact]
-    public void Bootstrapped_profile_controls_new_motion_controller_tap_nudge()
+    public void Explicit_profile_controls_motion_controller_tap_nudge()
     {
         var custom = new MouseMotionProfile(
             "virtual_stick",
@@ -60,19 +60,11 @@ public sealed class MouseMotionConfigurationTests
         var desktop = new RecordingDesktopBackend();
         var keyboard = new KeyboardState();
 
-        KeyboardMouseMotion.ConfigureDefaultProfile(custom);
-        try
-        {
-            using var motion = new KeyboardMouseMotion(desktop, keyboard);
+        using var motion = new KeyboardMouseMotion(desktop, keyboard, custom);
 
-            Assert.True(motion.TryStart(new KeyId(KeyCode.J), (ushort)'J'));
-            Assert.Equal([new PointerMotionDelta(-3, 0)], desktop.Moves);
-            Assert.True(motion.TryRelease((ushort)'J'));
-        }
-        finally
-        {
-            KeyboardMouseMotion.ConfigureDefaultProfile(MouseMotionProfile.Default);
-        }
+        Assert.True(motion.TryStart(new KeyId(KeyCode.J), (ushort)'J'));
+        Assert.Equal([new PointerMotionDelta(-3, 0)], desktop.Moves);
+        Assert.True(motion.TryRelease((ushort)'J'));
     }
 
     private sealed class RecordingDesktopBackend : IDesktopBackend
