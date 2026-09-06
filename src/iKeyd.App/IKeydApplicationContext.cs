@@ -1,3 +1,4 @@
+using iKeyd.Core.Behaviors;
 using iKeyd.Core.Clipboard;
 using iKeyd.Core.Macros;
 using iKeyd.Core.Modes;
@@ -17,6 +18,7 @@ internal sealed class IKeydApplicationContext : ApplicationContext
     private readonly WindowsClipboardService _clipboardService;
     private readonly WindowsClipboardHistoryPersistence? _clipboardPersistence;
     private readonly WindowsClipboardController _clipboard;
+    private readonly Control _behaviorHostDispatcher;
     private readonly NotifyIcon _notifyIcon;
     private readonly ContextMenuStrip _menu;
     private readonly Dictionary<InputMode, ToolStripMenuItem> _modeItems = [];
@@ -65,13 +67,6 @@ internal sealed class IKeydApplicationContext : ApplicationContext
             send,
             desktop,
             _clipboard);
-        _keyboardHandler = new BehaviorWindowsInputRouter(
-            configuration.Profile,
-            () => _runtime.Mode.Route(inputMethod).Keymap?.ToString(),
-            send,
-            _keyboard,
-            _runtime);
-        _suspendHandler = new LegacySuspendToggleHandler(_keyboard.State, _keyboardHandler);
 
         _macroExecutor = new MacroExecutor(send, _runtime);
         _legacyMacroSlots = new LegacyMacroSlotController(
@@ -79,6 +74,20 @@ internal sealed class IKeydApplicationContext : ApplicationContext
             _macroEditor,
             ShowError);
         _runtime.AttachMacroSlotActions(_legacyMacroSlots);
+
+        _behaviorHostDispatcher = new Control();
+        _ = _behaviorHostDispatcher.Handle;
+        var hostActions = new DelegateBehaviorHostActionSink(PostBehaviorHostAction);
+
+        _keyboardHandler = new BehaviorWindowsInputRouter(
+            configuration.Profile,
+            () => _runtime.Mode.Route(inputMethod).Keymap?.ToString(),
+            send,
+            _keyboard,
+            _runtime,
+            desktop,
+            hostActions);
+        _suspendHandler = new LegacySuspendToggleHandler(_keyboard.State, _keyboardHandler);
 
         _menu = new ContextMenuStrip();
         _menu.Items.Add(new ToolStripMenuItem("iKeyd") { Enabled = false });
@@ -142,6 +151,7 @@ internal sealed class IKeydApplicationContext : ApplicationContext
             _keyboardHandler.Dispose();
             _runtime.Dispose();
             _keyboard.Dispose();
+            _behaviorHostDispatcher.Dispose();
             _notifyIcon.Dispose();
             _menu.Dispose();
             _macroCancellation?.Dispose();
@@ -149,6 +159,77 @@ internal sealed class IKeydApplicationContext : ApplicationContext
         }
 
         base.ExitThreadCore();
+    }
+
+    private void PostBehaviorHostAction(BehaviorAction action)
+    {
+        if (_stopping || _behaviorHostDispatcher.IsDisposed)
+            return;
+
+        try
+        {
+            _behaviorHostDispatcher.BeginInvoke((Action)(() => DispatchBehaviorHostAction(action)));
+        }
+        catch (InvalidOperationException) when (_stopping || _behaviorHostDispatcher.IsDisposed)
+        {
+        }
+    }
+
+    private void DispatchBehaviorHostAction(BehaviorAction action)
+    {
+        if (_stopping)
+            return;
+
+        switch (action.Kind)
+        {
+            case BehaviorActionKind.Clipboard:
+                DispatchClipboardBehavior(action.Name);
+                break;
+            case BehaviorActionKind.Macro:
+                _ = RunConfiguredMacroAsync(action.Name ?? string.Empty);
+                break;
+            default:
+                throw new InvalidOperationException($"Unsupported host behavior action '{action.Kind}'.");
+        }
+    }
+
+    private void DispatchClipboardBehavior(string? command)
+    {
+        try
+        {
+            switch (command?.ToUpperInvariant())
+            {
+                case "HISTORY": _clipboard.ShowPickerAndPaste(); break;
+                case "CAPTURE": _clipboard.CaptureLatest(); break;
+                case "PASTE": _clipboard.PasteCaptured(); break;
+                default: throw new InvalidOperationException($"Unknown clipboard behavior command '{command}'.");
+            }
+        }
+        catch (Exception exception)
+        {
+            ShowError("Clipboard behavior failed.", exception);
+        }
+    }
+
+    private async Task RunConfiguredMacroAsync(string template)
+    {
+        if (_macroCancellation is not null || _stopping)
+            return;
+
+        try
+        {
+            _macroCancellation = new CancellationTokenSource();
+            await _macroExecutor.ExecuteAsync(template, MacroRepeat.Once, _macroCancellation.Token);
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            ShowError("Configured macro failed.", exception);
+        }
+        finally
+        {
+            _macroCancellation?.Dispose();
+            _macroCancellation = null;
+        }
     }
 
     private void ChangeMode(InputMode mode)

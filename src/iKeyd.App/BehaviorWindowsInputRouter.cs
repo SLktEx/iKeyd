@@ -1,6 +1,7 @@
 using iKeyd.Core.Behaviors;
 using iKeyd.Core.Chords;
 using iKeyd.Core.Configuration;
+using iKeyd.Core.Desktop;
 using iKeyd.Core.Input;
 using iKeyd.Core.Keymaps;
 
@@ -19,6 +20,9 @@ internal sealed class BehaviorWindowsInputRouter : IKeyboardEventHandler, IDispo
     private readonly LegacySendOutput _send;
     private readonly IKeyboardOutput _keyboard;
     private readonly IKeyboardEventHandler _fallback;
+    private readonly IDesktopBackend? _desktop;
+    private readonly DesktopActionService? _desktopActions;
+    private readonly IBehaviorHostActionSink? _hostActions;
     private readonly Dictionary<string, BehaviorRuntime> _behaviorRuntimes;
     private readonly Dictionary<string, Keymap<string>> _keymaps;
     private readonly List<string> _activeLayers = [];
@@ -31,13 +35,18 @@ internal sealed class BehaviorWindowsInputRouter : IKeyboardEventHandler, IDispo
         Func<string?> baseKeymapName,
         LegacySendOutput send,
         IKeyboardOutput keyboard,
-        IKeyboardEventHandler fallback)
+        IKeyboardEventHandler fallback,
+        IDesktopBackend? desktop = null,
+        IBehaviorHostActionSink? hostActions = null)
     {
         _profile = profile ?? throw new ArgumentNullException(nameof(profile));
         _baseKeymapName = baseKeymapName ?? throw new ArgumentNullException(nameof(baseKeymapName));
         _send = send ?? throw new ArgumentNullException(nameof(send));
         _keyboard = keyboard ?? throw new ArgumentNullException(nameof(keyboard));
         _fallback = fallback ?? throw new ArgumentNullException(nameof(fallback));
+        _desktop = desktop;
+        _desktopActions = desktop is null ? null : new DesktopActionService(desktop);
+        _hostActions = hostActions;
 
         _keymaps = new Dictionary<string, Keymap<string>>(StringComparer.OrdinalIgnoreCase);
         _behaviorRuntimes = new Dictionary<string, BehaviorRuntime>(StringComparer.OrdinalIgnoreCase);
@@ -48,7 +57,7 @@ internal sealed class BehaviorWindowsInputRouter : IKeyboardEventHandler, IDispo
                 _behaviorRuntimes.Add(pair.Key, new BehaviorRuntime(pair.Value.BuildBehaviorBindings(profile.BehaviorDefinitions)));
         }
 
-        ValidateLayerTapTargets();
+        ValidateLayerTargets();
     }
 
     public KeyboardDisposition OnKeyboardEvent(KeyboardEvent keyboardEvent)
@@ -90,14 +99,9 @@ internal sealed class BehaviorWindowsInputRouter : IKeyboardEventHandler, IDispo
 
     private KeyboardDisposition HandleKeyDown(KeyboardEvent keyboardEvent, KeyId keyId)
     {
-        // First let every already-active behavior observe this physical key. An LT
-        // can resolve to hold here, which may change the active named layer before
-        // this very same key is looked up.
         foreach (var activeRuntime in _behaviorRuntimes.Values)
             ApplyActions(activeRuntime.ObserveKeyDown(keyId, keyboardEvent.TimestampMs).Actions);
 
-        // Auto-repeat belongs to the behavior instance that consumed the original
-        // down even if that behavior has since activated a different layer.
         if (_activeBehaviorKeys.Contains(keyId))
             return KeyboardDisposition.Suppress;
 
@@ -115,8 +119,6 @@ internal sealed class BehaviorWindowsInputRouter : IKeyboardEventHandler, IDispo
             }
         }
 
-        // Named layers activated by behaviors are intentionally evaluated before
-        // the existing HotkeySKG state machine. Unmapped keys remain transparent.
         var activeLayer = ActiveLayer;
         if (activeLayer is not null &&
             _keymaps.TryGetValue(activeLayer, out var layerKeymap) &&
@@ -168,6 +170,10 @@ internal sealed class BehaviorWindowsInputRouter : IKeyboardEventHandler, IDispo
                     _keyboard.SendKeyPress(outputKey);
                     break;
 
+                case BehaviorActionKind.SendText:
+                    _keyboard.SendText(action.Name ?? string.Empty);
+                    break;
+
                 case BehaviorActionKind.LayerOn:
                     if (action.Name is null || !_keymaps.ContainsKey(action.Name))
                         throw new InvalidOperationException($"Behavior tried to activate unknown layer '{action.Name}'.");
@@ -187,11 +193,82 @@ internal sealed class BehaviorWindowsInputRouter : IKeyboardEventHandler, IDispo
                     _keyboard.SendKey(ResolveModifier(action.Name), KeyEventKind.Up);
                     break;
 
+                case BehaviorActionKind.MouseMove:
+                    RequireDesktop().MovePointerBy(action.Value1, action.Value2);
+                    break;
+
+                case BehaviorActionKind.MouseClick:
+                    RequireDesktop().Click(ParseMouseButton(action.Name));
+                    break;
+
+                case BehaviorActionKind.Scroll:
+                    RequireDesktop().ScrollVertical(action.Value1);
+                    break;
+
+                case BehaviorActionKind.Media:
+                    RequireDesktop().SendMediaCommand(ParseMediaCommand(action.Name));
+                    break;
+
+                case BehaviorActionKind.Window:
+                    DispatchWindowAction(action.Name);
+                    break;
+
+                case BehaviorActionKind.Clipboard:
+                case BehaviorActionKind.Macro:
+                    if (_hostActions is null)
+                        throw new InvalidOperationException($"Behavior action '{action.Kind}' requires a host-action sink.");
+                    _hostActions.Post(action);
+                    break;
+
                 default:
                     throw new ArgumentOutOfRangeException(nameof(action), action.Kind, "Unknown behavior action.");
             }
         }
     }
+
+    private IDesktopBackend RequireDesktop()
+        => _desktop ?? throw new InvalidOperationException("This behavior requires a desktop backend.");
+
+    private void DispatchWindowAction(string? command)
+    {
+        var desktop = _desktopActions ?? throw new InvalidOperationException("This behavior requires a desktop backend.");
+        switch (command?.ToUpperInvariant())
+        {
+            case "MINIMIZE": desktop.MinimizeActive(); break;
+            case "TOGGLEMAXIMIZE": desktop.ToggleMaximizeActive(); break;
+            case "LEFTHALF": desktop.PlaceActive(DesktopPlacement.LeftHalf); break;
+            case "RIGHTHALF": desktop.PlaceActive(DesktopPlacement.RightHalf); break;
+            case "TOPHALF": desktop.PlaceActive(DesktopPlacement.TopHalf); break;
+            case "BOTTOMHALF": desktop.PlaceActive(DesktopPlacement.BottomHalf); break;
+            case "TOGGLETOPMOST": desktop.ToggleTopMostActive(); break;
+            case "OPACITYUP": desktop.AdjustOpacityActive(30); break;
+            case "OPACITYDOWN": desktop.AdjustOpacityActive(-30); break;
+            case "TOGGLECAPTION": desktop.ToggleCaptionActive(); break;
+            case "ACTIVATEBOTTOMSAMECLASS": desktop.ActivateBottomWindowOfActiveClass(); break;
+            default: throw new InvalidOperationException($"Unknown window behavior command '{command}'.");
+        }
+    }
+
+    private static DesktopMouseButton ParseMouseButton(string? button)
+        => button?.ToUpperInvariant() switch
+        {
+            "LEFT" => DesktopMouseButton.Left,
+            "RIGHT" => DesktopMouseButton.Right,
+            "MIDDLE" => DesktopMouseButton.Middle,
+            _ => throw new InvalidOperationException($"Unknown mouse button '{button}'.")
+        };
+
+    private static DesktopMediaCommand ParseMediaCommand(string? command)
+        => command?.ToUpperInvariant() switch
+        {
+            "VOLUMEUP" => DesktopMediaCommand.VolumeUp,
+            "VOLUMEMUTE" => DesktopMediaCommand.VolumeMute,
+            "VOLUMEDOWN" => DesktopMediaCommand.VolumeDown,
+            "NEXTTRACK" => DesktopMediaCommand.NextTrack,
+            "PREVIOUSTRACK" => DesktopMediaCommand.PreviousTrack,
+            "PLAYPAUSE" => DesktopMediaCommand.PlayPause,
+            _ => throw new InvalidOperationException($"Unknown media command '{command}'.")
+        };
 
     private void RemoveLastLayer(string layer)
     {
@@ -204,13 +281,15 @@ internal sealed class BehaviorWindowsInputRouter : IKeyboardEventHandler, IDispo
         }
     }
 
-    private void ValidateLayerTapTargets()
+    private void ValidateLayerTargets()
     {
         foreach (var keymap in _profile.Keymaps.Values)
         {
             foreach (var mapping in keymap.BehaviorMappings)
             {
-                if (!string.Equals(mapping.Invocation.Name, "LT", StringComparison.OrdinalIgnoreCase) ||
+                var name = mapping.Invocation.Name;
+                if ((!string.Equals(name, "LT", StringComparison.OrdinalIgnoreCase) &&
+                     !string.Equals(name, "MO", StringComparison.OrdinalIgnoreCase)) ||
                     mapping.Invocation.Arguments.Count < 1)
                 {
                     continue;
@@ -218,7 +297,7 @@ internal sealed class BehaviorWindowsInputRouter : IKeyboardEventHandler, IDispo
 
                 var layer = mapping.Invocation.Arguments[0];
                 if (!_profile.Keymaps.ContainsKey(layer))
-                    throw new InvalidDataException($"LT on '{keymap.Name}.{mapping.Key}' references unknown layer '{layer}'.");
+                    throw new InvalidDataException($"{name} on '{keymap.Name}.{mapping.Key}' references unknown layer '{layer}'.");
             }
         }
     }
