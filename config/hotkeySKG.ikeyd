@@ -12,6 +12,28 @@ profile hotkeySKG {
 // while BASE below remains the compact logical geometry used by the legacy S/K map.
 keyboard JIS109
 
+// Full reference for the built-in JIS109 physical layout above.
+// This is intentionally commented out: `keyboard JIS109` is the source of truth,
+// and BASE below must stay compact because the legacy combo coordinates depend on it.
+// POS / JIS109 coordinates are 1-based and resolve against these rows.
+//
+// layout JIS109 {
+//     row Escape F1 F2 F3 F4 F5 F6 F7 F8 F9 F10 F11 F12 PrintScreen ScrollLock Pause
+//     row ZenkakuHankaku 1 2 3 4 5 6 7 8 9 0 Minus Caret Yen Backspace
+//     row Tab Q W E R T Y U I O P AT LeftBracket
+//     row CapsLock A S D F G H J K L SColon Colon RightBracket Enter
+//     row LeftShift Z X C V B N M Comma Dot Slash Ro RightShift
+//     row LeftControl LeftGui LeftAlt Muhenkan Space Henkan KatakanaHiragana RightAlt RightGui Menu RightControl
+//     row Insert Home PageUp
+//     row Delete End PageDown
+//     row Left Up Down Right
+//     row NumLock NumpadSlash NumpadAsterisk NumpadMinus
+//     row Numpad7 Numpad8 Numpad9 NumpadPlus
+//     row Numpad4 Numpad5 Numpad6
+//     row Numpad1 Numpad2 Numpad3 NumpadEnter
+//     row Numpad0 NumpadDot
+// }
+
 // Stable logical geometry for position-based combo definitions.
 // Row 1 intentionally starts at the Q position; the number row stays direct (1..0).
 layout BASE {
