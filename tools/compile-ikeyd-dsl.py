@@ -89,6 +89,17 @@ def parse_behavior_invocation(path: Path, lineno: int, value: str) -> dict[str, 
     ])
 
 
+def parse_behavior_option_value(path: Path, lineno: int, value: str) -> str:
+    value = value.strip().rstrip(";").strip()
+    if not value:
+        raise DslError(path, lineno, "behavior option value must not be empty")
+    if value.startswith('"'):
+        return parse_json_string(path, lineno, value)
+    if not re.fullmatch(r"[-+A-Za-z0-9_.]+", value):
+        raise DslError(path, lineno, f"invalid behavior option value '{value}'")
+    return value
+
+
 def parse_layout_row(path: Path, lineno: int, value: str) -> list[str]:
     value = value.strip().rstrip(";").strip()
     keys = [item for item in re.split(r"[\s,]+", value) if item]
@@ -180,6 +191,8 @@ def compile_dsl(text: str, path: Path) -> dict[str, object]:
     duplicate_flags: list[dict[str, object]] = []
 
     block: tuple[str, str | None] | None = None
+    parent_block: tuple[str, str | None] | None = None
+    pending_behavior: tuple[str, str] | None = None
     saw_profile = False
 
     for lineno, raw in enumerate(text.splitlines(), 1):
@@ -190,7 +203,12 @@ def compile_dsl(text: str, path: Path) -> dict[str, object]:
         if line == "}":
             if block is None:
                 raise DslError(path, lineno, "unexpected '}'")
-            block = None
+            if block[0] == "behavior_options":
+                block = parent_block
+                parent_block = None
+                pending_behavior = None
+            else:
+                block = None
             continue
 
         if block is None:
@@ -229,6 +247,21 @@ def compile_dsl(text: str, path: Path) -> dict[str, object]:
             raise DslError(path, lineno, f"unexpected top-level statement: {line}")
 
         kind, name = block
+        if kind == "behavior_options":
+            if pending_behavior is None:
+                raise DslError(path, lineno, "internal behavior-options state is missing")
+            mode, key = pending_behavior
+            match = re.fullmatch(rf"({IDENT})\s*=\s*(.+)", line)
+            if not match:
+                raise DslError(path, lineno, f"unknown behavior option statement: {line}")
+            option_name = match.group(1)
+            options = behaviors[mode][key].setdefault("options", OrderedDict())
+            assert isinstance(options, OrderedDict)
+            if option_name in options:
+                raise DslError(path, lineno, f"duplicate behavior option '{option_name}'")
+            options[option_name] = parse_behavior_option_value(path, lineno, match.group(2))
+            continue
+
         if kind == "profile":
             match = re.fullmatch(r"runtime\s*=\s*(.+)", line)
             if match:
@@ -282,6 +315,21 @@ def compile_dsl(text: str, path: Path) -> dict[str, object]:
                     second,
                     parse_json_string(path, lineno, match.group(3)),
                 ])
+                continue
+
+            option_block = re.fullmatch(rf"({KEY_REF})\s*=\s*(.+?)\s*\{{", line)
+            if option_block:
+                key = resolve_key_ref(path, lineno, option_block.group(1), layouts)
+                if key in single[name] or key in behaviors[name]:
+                    raise DslError(path, lineno, f"duplicate key mapping '{name}.{key}'")
+                invocation = parse_behavior_invocation(path, lineno, option_block.group(2))
+                if invocation is None:
+                    raise DslError(path, lineno, "option blocks are only valid for behavior invocations")
+                invocation["options"] = OrderedDict()
+                behaviors[name][key] = invocation
+                parent_block = block
+                pending_behavior = (name, key)
+                block = ("behavior_options", name)
                 continue
 
             match = re.fullmatch(rf"({KEY_REF})\s*=\s*(.+)", line)
