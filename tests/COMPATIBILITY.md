@@ -41,6 +41,14 @@ GitHub-hosted Windows sessions do not reliably activate a newly installed Japane
 
 This exercises the real compiled and source implementations while avoiding an artificial hosted-runner IME dependency. It does **not** claim to replace IME-specific tests.
 
+## Real Windows final verification
+
+Issue #59 is tracked separately from hosted CI. `tests/compatibility/real-windows-verification-plan.json` pins the 162 compatibility-matrix entries whose final state requires a real interactive Windows machine and groups them into seven verification areas. Physical-keyboard and CPU-load checks are supplemental completion requirements.
+
+Run `tools/run-real-windows-verification.ps1` on the target Windows machine. It records OS/locale/input-method metadata, verifies binary hashes, runs the real-IME `LegacyDifferentialE2E` smoke comparison, collects manual group results, and writes `TestResults/real-windows/verification-report.json`.
+
+A final report is accepted only when `tools/validate-real-windows-verification.py --require-complete` succeeds. Deterministic or hosted evidence must never be used to mark a #59 group as passed without the corresponding real-machine observation. See `docs/real-windows-verification.md` for the operator flow and cleanup requirements.
+
 ## Failure artifacts
 
 Each differential JSON report contains:
