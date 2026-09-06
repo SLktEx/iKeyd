@@ -7,6 +7,7 @@ public sealed class HostedLegacyDifferentialTests
 {
     private const string HostedLegacyTag = "hosted-legacy";
     private const string RuntimeTag = "hosted-legacy-runtime";
+    private const string NativeOutputTag = "hosted-legacy-native-output";
     private static string ScenarioDirectory => Path.Combine(AppContext.BaseDirectory, "Scenarios");
 
     [Fact]
@@ -33,13 +34,21 @@ public sealed class HostedLegacyDifferentialTests
             try
             {
                 var runtimeScenario = HasTag(scenario, RuntimeTag);
-                ICompatibilityScenarioRunner iKeydRunner = runtimeScenario
-                    ? new HotkeySkgRuntimeScenarioRunner()
-                    : new WindowsScenarioRunner();
-                ICompatibilityScenarioRunner legacyRunner = runtimeScenario
-                    ? new RuntimeEventCaptureRunner(
+                var nativeOutputScenario = HasTag(scenario, NativeOutputTag);
+
+                ICompatibilityScenarioRunner iKeydRunner = nativeOutputScenario
+                    ? new HotkeySkgNativeRuntimeScenarioRunner()
+                    : runtimeScenario
+                        ? new HotkeySkgRuntimeScenarioRunner()
+                        : new WindowsScenarioRunner();
+
+                ICompatibilityScenarioRunner legacyRunner = nativeOutputScenario
+                    ? new NativeLegacyRuntimeEventCaptureRunner(
                         new RuntimeInputInjectionRunner(new HostedTModeLegacyRunner()))
-                    : new HostedTModeLegacyRunner();
+                    : runtimeScenario
+                        ? new RuntimeEventCaptureRunner(
+                            new RuntimeInputInjectionRunner(new HostedTModeLegacyRunner()))
+                        : new HostedTModeLegacyRunner();
 
                 var report = await LegacyDifferentialComparison.RunAsync(
                     scenario,
