@@ -15,9 +15,10 @@ internal sealed class ConfiguredBehaviorKeyboardHandler : IKeyboardEventHandler
         KeyBehaviorProfile profile,
         IKeyboardOutput keyboard,
         IDesktopBackend desktop,
+        IConfiguredHostActionSink hostActions,
         IKeyboardEventHandler fallback)
     {
-        _configured = new ConfiguredBehaviorDispatcher(profile, keyboard, desktop);
+        _configured = new ConfiguredBehaviorDispatcher(profile, keyboard, desktop, hostActions);
         _fallback = fallback ?? throw new ArgumentNullException(nameof(fallback));
     }
 
