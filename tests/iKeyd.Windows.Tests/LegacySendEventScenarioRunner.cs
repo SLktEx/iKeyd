@@ -79,6 +79,10 @@ public sealed class LegacySendEventScenarioRunner : ICompatibilityScenarioRunner
             capture.Start();
 
             var heldLayers = ApplyInitialLayers(scenario.InitialState.Layers);
+            // InitialState is pre-existing state, not scenario output. AHK's Alt
+            // hotkey implementation may inject a menu-mask Ctrl pulse while A is
+            // materialized; discard every setup-side event before observed input.
+            capture.Clear();
             try
             {
                 await Task.Delay(30, cancellationToken);
@@ -340,6 +344,12 @@ public sealed class LegacySendEventScenarioRunner : ICompatibilityScenarioRunner
             _started.Wait();
             if (_startError is not null)
                 throw new InvalidOperationException("Could not start legacy Send-event capture.", _startError);
+        }
+
+        public void Clear()
+        {
+            lock (_gate)
+                _events.Clear();
         }
 
         public bool WaitForCount(int count, TimeSpan timeout)
