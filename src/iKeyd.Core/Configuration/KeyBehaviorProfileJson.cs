@@ -120,6 +120,9 @@ internal static class KeyBehaviorProfileJson
         if (element.ValueKind != JsonValueKind.Object)
             throw new InvalidDataException($"{location} must be an action object.");
         var kindText = element.GetProperty("kind").GetString() ?? throw new InvalidDataException($"{location}.kind must be a string.");
+        if (string.Equals(kindText, "when", StringComparison.OrdinalIgnoreCase))
+            return ParseWhen(element, location);
+
         var value = element.GetProperty("value").GetString() ?? throw new InvalidDataException($"{location}.value must be a string.");
         return kindText.ToLowerInvariant() switch
         {
@@ -139,6 +142,31 @@ internal static class KeyBehaviorProfileJson
             "query" => KeyBehaviorAction.Query(value),
             _ => throw new InvalidDataException($"{location}.kind '{kindText}' is unsupported.")
         };
+    }
+
+    private static KeyBehaviorAction ParseWhen(JsonElement element, string location)
+    {
+        if (!element.TryGetProperty("condition", out var conditionElement) || conditionElement.ValueKind != JsonValueKind.Object)
+            throw new InvalidDataException($"{location}.condition must be an object.");
+        var query = conditionElement.GetProperty("query").GetString()
+            ?? throw new InvalidDataException($"{location}.condition.query must be a string.");
+        var operatorText = conditionElement.GetProperty("operator").GetString()
+            ?? throw new InvalidDataException($"{location}.condition.operator must be a string.");
+        var expected = conditionElement.GetProperty("value").GetString()
+            ?? throw new InvalidDataException($"{location}.condition.value must be a string.");
+        var @operator = operatorText.ToLowerInvariant() switch
+        {
+            "equals" => SystemQueryConditionOperator.Equals,
+            "not_equals" => SystemQueryConditionOperator.NotEquals,
+            _ => throw new InvalidDataException($"{location}.condition.operator must be 'equals' or 'not_equals'.")
+        };
+        if (!element.TryGetProperty("then", out var thenElement))
+            throw new InvalidDataException($"{location}.then is required.");
+        var thenAction = ParseAction(thenElement, $"{location}.then");
+        KeyBehaviorAction? elseAction = null;
+        if (element.TryGetProperty("else", out var elseElement))
+            elseAction = ParseAction(elseElement, $"{location}.else");
+        return KeyBehaviorAction.When(new SystemQueryCondition(query, @operator, expected), thenAction, elseAction);
     }
 
     private static KeyBehaviorAction ParseExec(JsonElement element, string executable, string location)
@@ -185,6 +213,26 @@ internal static class KeyBehaviorProfileJson
     {
         writer.WriteStartObject();
         writer.WriteString("kind", ActionKindName(action.Kind));
+        if (action.Kind == KeyBehaviorActionKind.When)
+        {
+            var conditional = action.GetConditional();
+            writer.WritePropertyName("condition");
+            writer.WriteStartObject();
+            writer.WriteString("query", conditional.Condition.Query);
+            writer.WriteString("operator", conditional.Condition.Operator == SystemQueryConditionOperator.Equals ? "equals" : "not_equals");
+            writer.WriteString("value", conditional.Condition.Expected);
+            writer.WriteEndObject();
+            writer.WritePropertyName("then");
+            WriteAction(conditional.Then, writer);
+            if (conditional.Else is { } elseAction)
+            {
+                writer.WritePropertyName("else");
+                WriteAction(elseAction, writer);
+            }
+            writer.WriteEndObject();
+            return;
+        }
+
         writer.WriteString("value", action.Value);
         if (action.Kind == KeyBehaviorActionKind.Exec)
         {
@@ -213,6 +261,7 @@ internal static class KeyBehaviorProfileJson
         KeyBehaviorActionKind.Exec => "exec",
         KeyBehaviorActionKind.Shell => "shell",
         KeyBehaviorActionKind.Query => "query",
+        KeyBehaviorActionKind.When => "when",
         _ => throw new ArgumentOutOfRangeException(nameof(kind))
     };
 }

@@ -1,3 +1,4 @@
+using iKeyd.Core.Automation;
 using iKeyd.Core.Chords;
 using iKeyd.Core.Configuration;
 using iKeyd.Core.Desktop;
@@ -17,8 +18,19 @@ internal sealed class ConfiguredBehaviorKeyboardHandler : IKeyboardEventHandler
         IDesktopBackend desktop,
         IConfiguredHostActionSink hostActions,
         IKeyboardEventHandler fallback)
+        : this(profile, keyboard, desktop, EmptySystemQuerySnapshot.Instance, hostActions, fallback)
     {
-        _configured = new ConfiguredBehaviorDispatcher(profile, keyboard, desktop, hostActions);
+    }
+
+    public ConfiguredBehaviorKeyboardHandler(
+        KeyBehaviorProfile profile,
+        IKeyboardOutput keyboard,
+        IDesktopBackend desktop,
+        ISystemQuerySnapshot systemQueries,
+        IConfiguredHostActionSink hostActions,
+        IKeyboardEventHandler fallback)
+    {
+        _configured = new ConfiguredBehaviorDispatcher(profile, keyboard, desktop, systemQueries, hostActions);
         _fallback = fallback ?? throw new ArgumentNullException(nameof(fallback));
     }
 

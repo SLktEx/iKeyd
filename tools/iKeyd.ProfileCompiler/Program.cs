@@ -265,6 +265,7 @@ internal static class ProfileCompiler
             KeyBehaviorActionKind.Exec => $"KeyBehaviorAction.Exec({Literal(action.Value)}, {StringArrayLiteral(action.GetArguments())})",
             KeyBehaviorActionKind.Shell => $"KeyBehaviorAction.Shell({Literal(action.Value)})",
             KeyBehaviorActionKind.Query => $"KeyBehaviorAction.Query({Literal(action.Value)})",
+            KeyBehaviorActionKind.When => ConditionalActionExpression(action.GetConditional()),
             KeyBehaviorActionKind.MouseMove or
             KeyBehaviorActionKind.MouseClick or
             KeyBehaviorActionKind.Scroll or
@@ -274,6 +275,15 @@ internal static class ProfileCompiler
             KeyBehaviorActionKind.Macro => $"new KeyBehaviorAction(KeyBehaviorActionKind.{action.Kind}, {Literal(action.Value)})",
             _ => throw new InvalidDataException($"Unsupported behavior action kind '{action.Kind}'.")
         };
+
+    private static string ConditionalActionExpression(ConditionalBehaviorAction conditional)
+    {
+        var condition = conditional.Condition;
+        var elseExpression = conditional.Else is { } elseAction
+            ? BehaviorActionExpression(elseAction)
+            : "null";
+        return $"KeyBehaviorAction.When(new SystemQueryCondition({Literal(condition.Query)}, SystemQueryConditionOperator.{condition.Operator}, {Literal(condition.Expected)}), {BehaviorActionExpression(conditional.Then)}, {elseExpression})";
+    }
 
     private static string StringArrayLiteral(IReadOnlyList<string> values)
         => values.Count == 0

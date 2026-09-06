@@ -1,0 +1,21 @@
+profile conditionalActions {
+    chord_window = 40ms
+}
+
+keyboard JIS109
+
+layer APP {
+    POS.Q = when(foreground.process == "Code.exe", key(Escape), key(F1))
+    POS.W = when(ime.kana_active != false, text("a,b"), text("kana"))
+    POS.E = when(keyboard.capslock == true, exec("tool.exe", "--caps"), key(E))
+    POS.R = when(system.hostname != "host", when(keyboard.numlock == true, key(F2), key(F3)), key(F4))
+    POS.T = when(keyboard.scrolllock == true, key(F5))
+}
+
+keymap S {
+    Q = q
+}
+
+keymap K {
+    Q = q
+}

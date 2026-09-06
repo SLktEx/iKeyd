@@ -114,6 +114,71 @@ def _exec(base: Any, path: Path, lineno: int, arg: str) -> OrderedDict[str, obje
     return OrderedDict(kind="exec", value=values[0], args=values[1:])
 
 
+def _split_top_level(base: Any, path: Path, lineno: int, value: str) -> list[str]:
+    result: list[str] = []
+    start = 0
+    depth = 0
+    in_string = False
+    escaped = False
+    for index, ch in enumerate(value):
+        if in_string:
+            if escaped:
+                escaped = False
+            elif ch == "\\":
+                escaped = True
+            elif ch == '"':
+                in_string = False
+            continue
+        if ch == '"':
+            in_string = True
+        elif ch == "(":
+            depth += 1
+        elif ch == ")":
+            depth -= 1
+            if depth < 0:
+                raise base.DslError(path, lineno, "unbalanced ')' in when(...)")
+        elif ch == "," and depth == 0:
+            result.append(value[start:index].strip())
+            start = index + 1
+    if in_string or depth != 0:
+        raise base.DslError(path, lineno, "unbalanced string or parentheses in when(...)")
+    result.append(value[start:].strip())
+    if any(not item for item in result):
+        raise base.DslError(path, lineno, "when(...) arguments must not be empty")
+    return result
+
+
+def _condition(base: Any, path: Path, lineno: int, expression: str) -> OrderedDict[str, str]:
+    match = re.fullmatch(r"([A-Za-z0-9_.]+)\s*(==|!=)\s*(.+)", expression.strip())
+    if not match:
+        raise base.DslError(path, lineno, "condition must be '<query> == <value>' or '<query> != <value>'")
+    query = next((item for item in SYSTEM_QUERIES if item.casefold() == match.group(1).casefold()), None)
+    if query is None:
+        raise base.DslError(path, lineno, f"unknown system query '{match.group(1)}'")
+    raw = match.group(3).strip()
+    if raw.casefold() in {"true", "false"}:
+        expected = raw.casefold()
+    elif raw.startswith('"'):
+        expected = _quoted(base, path, lineno, "condition", raw)
+    else:
+        raise base.DslError(path, lineno, "condition value must be a quoted string or boolean literal")
+    return OrderedDict(query=query, operator="equals" if match.group(2) == "==" else "not_equals", value=expected)
+
+
+def _when(base: Any, path: Path, lineno: int, arg: str) -> OrderedDict[str, object]:
+    parts = _split_top_level(base, path, lineno, arg)
+    if len(parts) not in {2, 3}:
+        raise base.DslError(path, lineno, "when(...) expects condition, then action, and optional else action")
+    result: OrderedDict[str, object] = OrderedDict(
+        kind="when",
+        condition=_condition(base, path, lineno, parts[0]),
+        then=_action(base, path, lineno, parts[1], allow_hold=False),
+    )
+    if len(parts) == 3:
+        result["else"] = _action(base, path, lineno, parts[2], allow_hold=False)
+    return result
+
+
 def _action(base: Any, path: Path, lineno: int, expression: str, *, allow_hold: bool) -> OrderedDict[str, object]:
     expression = expression.strip().rstrip(";").strip()
     call = re.fullmatch(rf"({base.IDENT})\((.*)\)", expression)
@@ -157,6 +222,10 @@ def _action(base: Any, path: Path, lineno: int, expression: str, *, allow_hold: 
         if query is None:
             raise base.DslError(path, lineno, f"unknown system query '{arg}'")
         return OrderedDict(kind="query", value=query)
+    if kind == "when":
+        if allow_hold:
+            raise base.DslError(path, lineno, "when(...) is an output action and cannot be used as a hold action")
+        return _when(base, path, lineno, arg)
     if kind == "layer" and allow_hold:
         if not re.fullmatch(base.IDENT, arg):
             raise base.DslError(path, lineno, "layer(...) expects one layer name")
@@ -167,7 +236,7 @@ def _action(base: Any, path: Path, lineno: int, expression: str, *, allow_hold: 
         if value is None:
             raise base.DslError(path, lineno, f"unknown modifier '{arg}'")
         return OrderedDict(kind="modifier", value=value)
-    output = "key(...), text(...), mouse_move(...), mouse_click(...), scroll(...), media(...), window(...), clipboard(...), macro(...), exec(...), shell(...) or query(...)"
+    output = "key(...), text(...), mouse_move(...), mouse_click(...), scroll(...), media(...), window(...), clipboard(...), macro(...), exec(...), shell(...), query(...) or when(...)"
     allowed = f"{output}, layer(...) or modifier(...)" if allow_hold else output
     raise base.DslError(path, lineno, f"action must be {allowed}")
 
