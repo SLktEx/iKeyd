@@ -50,6 +50,15 @@ config/hotkeySKG.ikeyd
 
 There is no required `.ikeyd -> JSON -> runtime` hop. Historical JSON tooling remains available for compatibility, migration, and debugging.
 
+The public CLI can validate or compile any `.ikeyd` profile with the same canonical parser/generators used by the normal build:
+
+```bash
+ikeyd check profile.ikeyd
+ikeyd build profile.ikeyd
+```
+
+`build` writes `GeneratedProfile.g.cs` and `GeneratedMouseProfile.g.cs` under `build/<profile-name>/` by default. Pass an explicit output directory as the second argument when needed. The older AHK migration flow remains available through `ikeyd check source.ahk` and `ikeyd import source.ahk output.json`.
+
 ## What iKeyd does
 
 - **Key remapping** — map physical input keys to the output you want.
