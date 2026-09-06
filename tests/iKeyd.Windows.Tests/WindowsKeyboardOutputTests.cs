@@ -25,6 +25,19 @@ public sealed class WindowsKeyboardOutputTests
     }
 
     [Fact]
+    public void Explicit_vk_sc_output_preserves_both_identifiers_without_scan_code_mode()
+    {
+        var input = WindowsKeyboardOutput.BuildKeyInput(
+            new KeyboardKey(0xF3, 0x29, PreserveVirtualKeyWithScanCode: true),
+            KeyEventKind.Down);
+
+        Assert.Equal((ushort)0xF3, input.Data.Keyboard.VirtualKey);
+        Assert.Equal((ushort)0x29, input.Data.Keyboard.ScanCode);
+        Assert.Equal(0u, input.Data.Keyboard.Flags & 0x0008u);
+        Assert.Equal(WindowsKeyboardOutput.InjectionMarker, input.Data.Keyboard.ExtraInfo);
+    }
+
+    [Fact]
     public void Extended_key_up_sets_extended_and_keyup_flags()
     {
         var input = WindowsKeyboardOutput.BuildKeyInput(new KeyboardKey(0x25, 0x4B, true), KeyEventKind.Up);

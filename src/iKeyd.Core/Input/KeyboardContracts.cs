@@ -13,7 +13,7 @@ public enum KeyEventOrigin
     OwnInjected
 }
 
-public readonly record struct KeyboardKey(ushort VirtualKey, ushort ScanCode, bool IsExtended = false);
+public readonly record struct KeyboardKey(ushort VirtualKey, ushort ScanCode, bool IsExtended = false, bool PreserveVirtualKeyWithScanCode = false);
 
 public readonly record struct KeyboardEvent(
     KeyboardKey Key,
