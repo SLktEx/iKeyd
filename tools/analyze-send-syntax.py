@@ -21,10 +21,24 @@ BRACE_RE = re.compile(r"\{([^{}]+)\}")
 MODIFIER_RE = re.compile(r"^([\^!+#]+)")
 KEY_STATE_RE = re.compile(r"^(.+?)\s+(down|up)$", re.I)
 REPEAT_RE = re.compile(r"^(.+?)\s+(\d+)$")
+VK_SC_RE = re.compile(r"^vk[0-9a-f]+sc[0-9a-f]+$", re.I)
+MEDIA_TOKENS = {"volume_up", "volume_down", "volume_mute", "media_next", "media_prev", "media_play_pause"}
 
 
 def load_json(path: Path) -> Any:
     return json.loads(path.read_text(encoding="utf-8"))
+
+
+def strip_ahk_inline_comment(expression: str) -> str:
+    """Strip a legacy command comment introduced by whitespace + semicolon.
+
+    The pinned source has comments after two `Send,!{Space}e*` commands. Those
+    comments are source annotations, not text emitted by AHK Send.
+    """
+    for index, character in enumerate(expression):
+        if character == ";" and (index == 0 or expression[index - 1].isspace()):
+            return expression[:index].rstrip()
+    return expression.strip()
 
 
 def classify_expression(expression: str) -> dict[str, Any]:
@@ -48,16 +62,23 @@ def classify_expression(expression: str) -> dict[str, Any]:
 
     for token in tokens:
         normalized = token.strip()
+        lower = normalized.lower()
         detail: dict[str, Any] = {"token": normalized, "family": "named-or-special-key"}
-        if state := KEY_STATE_RE.fullmatch(normalized):
+        if lower.startswith("click,"):
+            detail.update(family="click")
+            families.add("click-token")
+        elif VK_SC_RE.fullmatch(normalized):
+            detail.update(family="virtual-scan-code")
+            families.add("virtual-scan-code-token")
+        elif lower in MEDIA_TOKENS:
+            detail.update(family="media")
+            families.add("media-token")
+        elif state := KEY_STATE_RE.fullmatch(normalized):
             detail.update(family="key-state", key=state.group(1), state=state.group(2).lower())
             families.add("key-state-token")
         elif repeat := REPEAT_RE.fullmatch(normalized):
             detail.update(family="repeat", key=repeat.group(1), count=int(repeat.group(2)))
             families.add("repeat-token")
-        elif normalized.lower().startswith("click"):
-            detail.update(family="click")
-            families.add("click-token")
         token_details.append(detail)
 
     if not tokens and not modifier and not dynamic:
@@ -76,6 +97,7 @@ def build_inventory(matrix: dict[str, Any]) -> dict[str, Any]:
     send_features = [feature for feature in matrix.get("features", []) if feature.get("kind") == "send"]
     valid: list[dict[str, Any]] = []
     rejected: list[dict[str, Any]] = []
+    normalized_comment_count = 0
 
     for feature in send_features:
         text = str(feature.get("text", "")).strip()
@@ -91,7 +113,10 @@ def build_inventory(matrix: dict[str, Any]) -> dict[str, Any]:
             continue
 
         command = match.group(1)
-        expression = str(feature.get("details", {}).get("expression", match.group(2))).strip()
+        raw_expression = str(feature.get("details", {}).get("expression", match.group(2))).strip()
+        expression = strip_ahk_inline_comment(raw_expression)
+        if expression != raw_expression:
+            normalized_comment_count += 1
         analyzed = classify_expression(expression)
         valid.append({
             "id": feature.get("id"),
@@ -100,6 +125,7 @@ def build_inventory(matrix: dict[str, Any]) -> dict[str, Any]:
             "windowContext": feature.get("windowContext"),
             "command": command,
             "expression": expression,
+            "rawExpression": raw_expression,
             "families": analyzed["families"],
             "dynamic": analyzed["dynamic"],
             "modifierPrefix": analyzed["modifierPrefix"],
@@ -119,11 +145,14 @@ def build_inventory(matrix: dict[str, Any]) -> dict[str, Any]:
             "inventoryIds": [],
             "owners": [],
             "lines": [],
+            "rawExpressions": [],
         })
         group["inventoryIds"].append(item["id"])
         if item["owner"] not in group["owners"]:
             group["owners"].append(item["owner"])
         group["lines"].append(item["line"])
+        if item["rawExpression"] not in group["rawExpressions"]:
+            group["rawExpressions"].append(item["rawExpression"])
 
     expressions = sorted(grouped.values(), key=lambda item: (item["command"].lower(), item["expression"]))
     family_counts = Counter(family for item in expressions for family in item["families"])
@@ -140,6 +169,7 @@ def build_inventory(matrix: dict[str, Any]) -> dict[str, Any]:
             "uniqueExpressionCount": len(expressions),
             "dynamicExpressionCount": sum(item["dynamic"] for item in expressions),
             "staticExpressionCount": sum(not item["dynamic"] for item in expressions),
+            "inlineCommentNormalizedCount": normalized_comment_count,
             "commandCounts": dict(sorted(command_counts.items())),
             "familyCounts": dict(sorted(family_counts.items())),
             "braceTokenCount": len(brace_tokens),
@@ -165,6 +195,7 @@ def render_markdown(report: dict[str, Any]) -> str:
         f"- Unique Send expressions: **{summary['uniqueExpressionCount']}**",
         f"- Static expressions: **{summary['staticExpressionCount']}**",
         f"- Dynamic expressions: **{summary['dynamicExpressionCount']}**",
+        f"- Inline source comments normalized: **{summary['inlineCommentNormalizedCount']}**",
         "",
         "## Syntax families",
         "",
