@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 import sys
 import tempfile
 import unittest
@@ -19,6 +20,7 @@ SAMPLE = r'''
 ; comment
 SMODE := 1
 gmode := SMODE
+macroH := ""
 singleStrokeS_Q=-
 singleStrokeK_Q := o
 flag_Q:=1<<1
@@ -71,6 +73,7 @@ class InventoryTests(unittest.TestCase):
         self.assertIn("send", kinds)
         self.assertIn("window-operation", kinds)
         self.assertIn("clipboard-operation", kinds)
+        self.assertIn("macro-operation", kinds)
         self.assertIn("mouse-operation", kinds)
         self.assertIn("label", kinds)
 
@@ -136,6 +139,21 @@ class InventoryTests(unittest.TestCase):
         self.assertEqual(["fixture"], single.evidence)
         function = next(f for f in features if f.kind == "function")
         self.assertEqual("unknown", function.classification)
+
+    def test_repo_rules_distinguish_regression_coverage_from_shared_scenarios(self):
+        _, features = self.scan()
+        rules = json.loads((ROOT / "tests" / "compatibility" / "coverage-rules.json").read_text(encoding="utf-8"))
+        module.apply_coverage(features, rules)
+
+        macro = next(f for f in features if f.kind == "macro-operation")
+        clipboard = next(f for f in features if f.kind == "clipboard-operation")
+        clipboard_label = next(f for f in features if f.kind == "label" and f.text.lower().startswith("onclipboardchange"))
+
+        self.assertEqual("regression", macro.coverage["scenario"])
+        self.assertEqual("regression", clipboard.coverage["scenario"])
+        self.assertEqual("real-windows-verification-required", macro.classification)
+        self.assertEqual("real-windows-verification-required", clipboard.classification)
+        self.assertNotEqual("regression", clipboard_label.coverage["scenario"])
 
     def test_required_real_windows_is_distinct_from_unverified(self):
         coverage = {

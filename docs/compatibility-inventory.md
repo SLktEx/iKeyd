@@ -25,17 +25,21 @@ Every inventory entry has a stable content-derived `id`, source line, owner (`fu
 
 - `implementation`: iKeyd implementation status
 - `unit`: deterministic/unit regression evidence
-- `scenario`: shared compatibility scenario evidence
+- `scenario`: shared compatibility scenario evidence or an explicitly named deterministic regression layer
 - `exeDiff`: compiled `hotkeySKG.exe` differential evidence
 - `ahkDiff`: original AHK source differential evidence
 - `realWindows`: real Windows / Japanese IME verification requirement or result
 - `intentionalDifference`: whether a remaining difference is explicitly accepted
+
+`scenario: "regression"` means the inventory entry is covered by an explicit deterministic regression layer identified in `evidence`, but is not being claimed as a shared legacy-oracle scenario. This is intentionally distinct from `scenario: "yes"`: it removes a false `scenario-missing` signal without pretending that compiled-EXE/AHK differential evidence exists. `exeDiff`, `ahkDiff`, and `realWindows` remain independent and continue to show the remaining oracle work.
 
 The derived `classification` is one of the categories used by #46/#54, including `unknown`, `implementation-missing`, `scenario-missing`, `implemented-but-untested`, `real-windows-verification-required`, `partially-verified`, and `implemented-and-verified`.
 
 ## Coverage policy
 
 `tests/compatibility/coverage-rules.json` is deliberately conservative. A broad feature area being implemented does not imply every legacy branch is verified. Rules may mark a category `partial`, but exact entries should only be upgraded when there is concrete evidence from tests, differential observations, or real-Windows verification.
+
+A category-level `regression` status must be narrower than the user-facing feature shell. For example, `macro-operation` and `clipboard-operation` entries can point at deterministic parser/executor/history/controller regressions, while interactive `InputBox` UI and the `OnClipboardChange` label remain separate inventory work instead of being swept into the same status.
 
 Later issues should link scenarios back to matrix entries using an `inventoryIds` array in scenario JSON. The scanner already indexes that field when present, so #55 can incrementally make scenario coverage explicit without redesigning the matrix format.
 
