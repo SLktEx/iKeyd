@@ -77,37 +77,41 @@ public sealed class WindowsKeyboardE2ETests
             keyboardState,
             new LegacySendOutput(new NullKeyboardOutput()),
             new NullDesktopBackend());
-        var handler = new SuppressingRuntimeObserver(runtime);
+        var handler = new PhysicalSemanticsRuntimeObserver(runtime);
         hook.Start(handler);
 
         try
         {
-            // Materialize a real M-layer down event through WH_KEYBOARD_LL.
+            // keybd_event can exercise the real WH_KEYBOARD_LL transport but Windows
+            // correctly labels it Injected. The observer below reclassifies only at
+            // the runtime boundary so the production physical-input state machine is
+            // tested without pretending automation can generate a true hardware event.
             NativeMethods.keybd_event(VkNonConvert, NonConvertScanCode, 0, ForeignMarker);
             Assert.True(handler.WaitForCount(1, TimeSpan.FromSeconds(5)), "NonConvert down did not reach the real hook/runtime path.");
+            Assert.Equal(KeyEventOrigin.Injected, handler.Snapshot()[0].HookEvent.Origin);
             Assert.Equal(KeyboardDisposition.Suppress, handler.Snapshot()[0].Disposition);
 
             // Simulate the tray/panic recovery while the physical key is still down.
             runtime.ResetInputState();
 
-            // A late physical release must be absorbed without reopening/sticking M.
+            // A late physical release must be accepted without reopening/sticking M.
             NativeMethods.keybd_event(VkNonConvert, NonConvertScanCode, KeyEventKeyUp, ForeignMarker);
             Assert.True(handler.WaitForCount(2, TimeSpan.FromSeconds(5)), "Late NonConvert keyup did not reach the runtime.");
             Assert.Equal(KeyboardDisposition.Suppress, handler.Snapshot()[1].Disposition);
 
             // Q immediately after recovery must be ordinary R-mode pass-through. The
-            // observer suppresses the test event at the outer hook boundary so no Q
-            // is typed into the user's foreground application.
+            // observer suppresses the injected test event at the outer hook boundary
+            // so no Q is typed into the user's foreground application.
             NativeMethods.keybd_event(VkQ, 0, 0, ForeignMarker);
             NativeMethods.keybd_event(VkQ, 0, KeyEventKeyUp, ForeignMarker);
             Assert.True(handler.WaitForCount(4, TimeSpan.FromSeconds(5)), "Post-reset Q events did not reach the runtime.");
 
             var observed = handler.Snapshot();
-            Assert.Equal(VkQ, observed[2].Event.Key.VirtualKey);
-            Assert.Equal(KeyEventKind.Down, observed[2].Event.Kind);
+            Assert.Equal(VkQ, observed[2].HookEvent.Key.VirtualKey);
+            Assert.Equal(KeyEventKind.Down, observed[2].HookEvent.Kind);
             Assert.Equal(KeyboardDisposition.PassThrough, observed[2].Disposition);
-            Assert.Equal(VkQ, observed[3].Event.Key.VirtualKey);
-            Assert.Equal(KeyEventKind.Up, observed[3].Event.Kind);
+            Assert.Equal(VkQ, observed[3].HookEvent.Key.VirtualKey);
+            Assert.Equal(KeyEventKind.Up, observed[3].HookEvent.Kind);
             Assert.Equal(KeyboardDisposition.PassThrough, observed[3].Disposition);
         }
         finally
@@ -163,18 +167,19 @@ public sealed class WindowsKeyboardE2ETests
         }
     }
 
-    private sealed class SuppressingRuntimeObserver : IKeyboardEventHandler, IInputStateResettable
+    private sealed class PhysicalSemanticsRuntimeObserver : IKeyboardEventHandler, IInputStateResettable
     {
         private readonly IKeydRuntimeHandler _runtime;
         private readonly object _gate = new();
         private readonly List<ObservedRuntimeEvent> _events = [];
 
-        public SuppressingRuntimeObserver(IKeydRuntimeHandler runtime)
+        public PhysicalSemanticsRuntimeObserver(IKeydRuntimeHandler runtime)
             => _runtime = runtime;
 
         public KeyboardDisposition OnKeyboardEvent(KeyboardEvent keyboardEvent)
         {
-            var disposition = _runtime.OnKeyboardEvent(keyboardEvent);
+            var physicalEvent = keyboardEvent with { Origin = KeyEventOrigin.Physical };
+            var disposition = _runtime.OnKeyboardEvent(physicalEvent);
             lock (_gate)
                 _events.Add(new ObservedRuntimeEvent(keyboardEvent, disposition));
 
@@ -254,7 +259,7 @@ public sealed class WindowsKeyboardE2ETests
     }
 
     private readonly record struct ObservedRuntimeEvent(
-        KeyboardEvent Event,
+        KeyboardEvent HookEvent,
         KeyboardDisposition Disposition);
 
     private static class NativeMethods
