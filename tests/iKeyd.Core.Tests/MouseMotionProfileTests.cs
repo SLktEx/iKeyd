@@ -5,17 +5,11 @@ namespace iKeyd.Core.Tests;
 
 public sealed class MouseMotionProfileTests
 {
-    private const string MinimalProfilePrefix = """
-        {
-          "source": { "chordWindowMs": 40 },
-          "singleStroke": { "S": {}, "K": {} },
-          "chords": { "S": [], "K": [] },
-        """;
-
     [Fact]
-    public void Mouse_json_is_projected_on_top_of_the_generic_automation_profile()
+    public void Mouse_json_parses_independently_from_generic_automation_profile()
     {
-        var json = MinimalProfilePrefix + """
+        const string json = """
+        {
           "mouse": {
             "engine": "virtual_stick",
             "updateMs": 4,
@@ -28,49 +22,39 @@ public sealed class MouseMotionProfileTests
         }
         """;
 
-        var generic = AutomationProfileJson.Parse(json);
-        Assert.Equal(MouseMotionProfile.Default, generic.Mouse);
+        var mouse = MouseMotionProfileJson.Parse(json);
 
-        var projected = MouseMotionProfileJson.Apply(generic, json);
-        Assert.Equal(4, projected.Mouse.UpdateIntervalMs);
-        Assert.Equal(30, projected.Mouse.PressMs);
-        Assert.Equal(1, projected.Mouse.ReleaseMs);
-        Assert.Equal("linear", projected.Mouse.Curve);
-        Assert.Equal(1800, projected.Mouse.NormalSpeed);
-        Assert.Equal(500, projected.Mouse.PrecisionSpeed);
-        Assert.Equal(120, projected.Mouse.FineSpeed);
-        Assert.Equal(3600, projected.Mouse.FastSpeed);
-        Assert.Equal(2, projected.Mouse.TapNudgePixels);
-        Assert.Equal(24, projected.Mouse.MaxCatchupMs);
+        Assert.Equal(4, mouse.UpdateIntervalMs);
+        Assert.Equal(30, mouse.PressMs);
+        Assert.Equal(1, mouse.ReleaseMs);
+        Assert.Equal("linear", mouse.Curve);
+        Assert.Equal(1800, mouse.NormalSpeed);
+        Assert.Equal(500, mouse.PrecisionSpeed);
+        Assert.Equal(120, mouse.FineSpeed);
+        Assert.Equal(3600, mouse.FastSpeed);
+        Assert.Equal(2, mouse.TapNudgePixels);
+        Assert.Equal(24, mouse.MaxCatchupMs);
     }
 
     [Fact]
     public void Missing_mouse_json_keeps_runtime_defaults()
     {
-        var json = MinimalProfilePrefix + """
-          "startupMode": "S"
-        }
-        """;
-        var generic = AutomationProfileJson.Parse(json);
-
-        var projected = MouseMotionProfileJson.Apply(generic, json);
-
-        Assert.Same(generic, projected);
-        Assert.Equal(MouseMotionProfile.Default, projected.Mouse);
+        var mouse = MouseMotionProfileJson.Parse("{}");
+        Assert.Equal(MouseMotionProfile.Default, mouse);
     }
 
     [Fact]
     public void Unsupported_mouse_curve_is_rejected()
     {
-        var json = MinimalProfilePrefix + """
+        const string json = """
+        {
           "mouse": {
             "response": { "curve": "banana" }
           }
         }
         """;
-        var generic = AutomationProfileJson.Parse(json);
 
-        var error = Assert.Throws<InvalidDataException>(() => MouseMotionProfileJson.Apply(generic, json));
-        Assert.Contains("Mouse curve", error.Message, StringComparison.OrdinalIgnoreCase);
+        var error = Assert.Throws<InvalidDataException>(() => MouseMotionProfileJson.Parse(json));
+        Assert.Contains("Mouse curve", error.Message);
     }
 }
