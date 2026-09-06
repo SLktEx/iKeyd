@@ -12,7 +12,8 @@ param(
     [string]$ReportDirectory = (Join-Path $PWD "TestResults\real-windows"),
 
     [switch]$Interactive,
-    [switch]$SkipDifferential
+    [switch]$SkipDifferential,
+    [switch]$SkipBackendE2E
 )
 
 $ErrorActionPreference = "Stop"
@@ -84,6 +85,7 @@ if (-not [string]::IsNullOrWhiteSpace($IKeydExe)) {
 $resolvedReportDirectory = [System.IO.Path]::GetFullPath($ReportDirectory)
 New-Item -ItemType Directory -Force -Path $resolvedReportDirectory | Out-Null
 $differentialDirectory = Join-Path $resolvedReportDirectory "legacy-differential"
+$backendDirectory = Join-Path $resolvedReportDirectory "win32-backend"
 
 $userLanguages = @()
 try {
@@ -128,6 +130,11 @@ $automated = [ordered]@{
         reportDirectory = $differentialDirectory
         message = $null
     }
+    backendCompatibility = [ordered]@{
+        status = "not-run"
+        reportDirectory = $backendDirectory
+        message = $null
+    }
 }
 
 if (-not $SkipDifferential) {
@@ -143,6 +150,32 @@ if (-not $SkipDifferential) {
         $automated.legacyDifferential.status = "fail"
         $automated.legacyDifferential.message = $_.Exception.Message
         Write-Warning "Automated legacy differential failed: $($_.Exception.Message)"
+    }
+}
+
+if (-not $SkipBackendE2E) {
+    Write-Host "Running safe real-Win32 backend E2E..."
+    New-Item -ItemType Directory -Force -Path $backendDirectory | Out-Null
+    $previousRealWindowsE2E = $env:IKEYD_REAL_WINDOWS_E2E
+    try {
+        $env:IKEYD_REAL_WINDOWS_E2E = "1"
+        & dotnet test tests/iKeyd.Windows.Tests/iKeyd.Windows.Tests.csproj `
+            --configuration Release `
+            --filter "Category=RealWindowsCompatibilityE2E" `
+            --results-directory $backendDirectory `
+            --logger "trx;LogFileName=real-windows-backend.trx"
+        if ($LASTEXITCODE -ne 0) {
+            throw "Real-Win32 backend E2E exited with code $LASTEXITCODE."
+        }
+        $automated.backendCompatibility.status = "pass"
+    }
+    catch {
+        $automated.backendCompatibility.status = "fail"
+        $automated.backendCompatibility.message = $_.Exception.Message
+        Write-Warning "Real-Win32 backend E2E failed: $($_.Exception.Message)"
+    }
+    finally {
+        $env:IKEYD_REAL_WINDOWS_E2E = $previousRealWindowsE2E
     }
 }
 
@@ -193,6 +226,7 @@ $statuses = @($checkResults | ForEach-Object { $_.status })
 $manualComplete = $statuses.Count -gt 0 -and @($statuses | Where-Object { $_ -ne "pass" }).Count -eq 0
 $complete = (
     $automated.legacyDifferential.status -eq "pass" -and
+    $automated.backendCompatibility.status -eq "pass" -and
     $manualComplete -and
     -not [string]::IsNullOrWhiteSpace($iKeydSha) -and
     $japaneseImeConfigured -and
@@ -236,6 +270,7 @@ Write-Host ""
 Write-Host "Real-Windows verification report: $reportPath"
 Write-Host "Inventory covered by plan: $($uniqueInventoryIds.Count)/$($plan.expectedRealWindowsInventoryCount)"
 Write-Host "Automated differential: $($automated.legacyDifferential.status)"
+Write-Host "Real-Win32 backend E2E: $($automated.backendCompatibility.status)"
 Write-Host "Manual checks: pass=$($report.summary.passedChecks), fail=$($report.summary.failedChecks), skipped=$($report.summary.skippedChecks), pending=$($report.summary.pendingChecks)"
 Write-Host "Complete: $complete"
 
