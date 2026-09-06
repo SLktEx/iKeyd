@@ -68,6 +68,13 @@ class RealWindowsVerificationTests(unittest.TestCase):
             {check["id"]: len(check["inventoryIds"]) for check in self.plan["checks"]},
         )
 
+    def test_mouse_media_plan_preserves_v04_intentional_differences(self):
+        check = next(item for item in self.plan["checks"] if item["id"] == "mouse-media")
+        instructions = "\n".join(check["instructions"])
+        self.assertIn("virtual-stick", instructions)
+        self.assertIn("if s tate = U", instructions)
+        self.assertIn("intentional difference", instructions)
+
     def test_complete_report_requires_every_pinned_check_and_identity(self):
         report = self.complete_report()
         self.assertEqual([], module.validate_report(self.plan, report, require_complete=True))
