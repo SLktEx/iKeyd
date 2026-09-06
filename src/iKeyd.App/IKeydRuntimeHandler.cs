@@ -29,6 +29,7 @@ internal sealed class IKeydRuntimeHandler : IKeyboardEventHandler, IInputStateRe
     private readonly Dictionary<ushort, LayerEvent> _heldLayerPresses = new(4);
     private readonly Timer _chordTimer;
     private readonly KeyboardMouseMotion _mouseMotion;
+    private readonly InputDiagnosticsBuffer _diagnostics = new();
 
     private ILegacyMacroSlotActions? _macroSlots;
     private InputModeState _mode;
@@ -67,6 +68,18 @@ internal sealed class IKeydRuntimeHandler : IKeyboardEventHandler, IInputStateRe
             lock (_gate)
                 return _mode;
         }
+    }
+
+    internal string ExportInputDiagnostics()
+    {
+        lock (_gate)
+            return _diagnostics.ExportText();
+    }
+
+    internal InputDiagnosticEntry[] GetInputDiagnosticSnapshot()
+    {
+        lock (_gate)
+            return _diagnostics.Snapshot();
     }
 
     internal void AttachMacroSlotActions(ILegacyMacroSlotActions macroSlots)
@@ -109,63 +122,89 @@ internal sealed class IKeydRuntimeHandler : IKeyboardEventHandler, IInputStateRe
             if (_disposed)
                 return KeyboardDisposition.PassThrough;
 
-            if (TryHandleLayerKey(keyboardEvent))
-                return KeyboardDisposition.Suppress;
-
-            if (keyboardEvent.Kind == KeyEventKind.Up && _mouseMotion.TryRelease(keyboardEvent.Key.VirtualKey))
+            var before = CaptureDiagnosticState();
+            try
             {
-                _suppressedKeys.Remove(keyboardEvent.Key.VirtualKey);
-                return KeyboardDisposition.Suppress;
+                var disposition = HandlePhysicalKeyboardEventCore(keyboardEvent);
+                var after = CaptureDiagnosticState();
+                _diagnostics.RecordEvent(keyboardEvent, before, after, disposition);
+                RecoverIfInvariantBroken(keyboardEvent.TimestampMs);
+                return disposition;
             }
-
-            if (keyboardEvent.Kind == KeyEventKind.Up)
-                return _suppressedKeys.Remove(keyboardEvent.Key.VirtualKey)
-                    ? KeyboardDisposition.Suppress
-                    : KeyboardDisposition.PassThrough;
-
-            var keyId = WindowsKeyMap.TryResolveKeyId(keyboardEvent.Key.VirtualKey);
-
-            if (_layers.Layers.Count != 0)
+            catch (Exception error)
             {
-                var handled = keyId is not null && DispatchLayeredKey(keyId.Value, keyboardEvent.Key.VirtualKey);
-                _layers = _layers.MarkConsumed();
-                if (handled)
-                {
-                    _suppressedKeys.Add(keyboardEvent.Key.VirtualKey);
-                    return KeyboardDisposition.Suppress;
-                }
-
-                return KeyboardDisposition.PassThrough;
+                var failed = CaptureDiagnosticState();
+                ResetInputStateCore();
+                var recovered = CaptureDiagnosticState();
+                _diagnostics.RecordMarker(
+                    keyboardEvent.TimestampMs,
+                    InputDiagnosticKind.Exception,
+                    failed,
+                    recovered,
+                    error.HResult);
+                throw;
             }
+        }
+    }
 
-            var route = _mode.Route(_inputMethod);
-            if (route.Kind != InputRouteKind.ChordEngine || route.Keymap is null || keyId is null)
-            {
-                FlushAllPending();
-                return KeyboardDisposition.PassThrough;
-            }
+    private KeyboardDisposition HandlePhysicalKeyboardEventCore(KeyboardEvent keyboardEvent)
+    {
+        if (TryHandleLayerKey(keyboardEvent))
+            return KeyboardDisposition.Suppress;
 
-            var keymap = _configuration.GetKeymap(route.Keymap.Value);
-            if (!keymap.TryGetSingle(keyId.Value, out _))
-            {
-                FlushAllPending();
-                return KeyboardDisposition.PassThrough;
-            }
-
-            var engine = GetEngine(route.Keymap.Value);
-            if (engine.TryAdvanceTo(keyboardEvent.TimestampMs, out var timedOutOutput))
-                SendKeymapOutput(timedOutOutput);
-            if (engine.TryOnKeyDown(keyId.Value, keyboardEvent.TimestampMs, out var output))
-                SendKeymapOutput(output);
-
-            if (engine.State == ChordEngineState.PendingSingle)
-                ScheduleTimeout(route.Keymap.Value);
-            else
-                CancelTimeout();
-
-            _suppressedKeys.Add(keyboardEvent.Key.VirtualKey);
+        if (keyboardEvent.Kind == KeyEventKind.Up && _mouseMotion.TryRelease(keyboardEvent.Key.VirtualKey))
+        {
+            _suppressedKeys.Remove(keyboardEvent.Key.VirtualKey);
             return KeyboardDisposition.Suppress;
         }
+
+        if (keyboardEvent.Kind == KeyEventKind.Up)
+            return _suppressedKeys.Remove(keyboardEvent.Key.VirtualKey)
+                ? KeyboardDisposition.Suppress
+                : KeyboardDisposition.PassThrough;
+
+        var keyId = WindowsKeyMap.TryResolveKeyId(keyboardEvent.Key.VirtualKey);
+
+        if (_layers.Layers.Count != 0)
+        {
+            var handled = keyId is not null && DispatchLayeredKey(keyId.Value, keyboardEvent.Key.VirtualKey);
+            _layers = _layers.MarkConsumed();
+            if (handled)
+            {
+                _suppressedKeys.Add(keyboardEvent.Key.VirtualKey);
+                return KeyboardDisposition.Suppress;
+            }
+
+            return KeyboardDisposition.PassThrough;
+        }
+
+        var route = _mode.Route(_inputMethod);
+        if (route.Kind != InputRouteKind.ChordEngine || route.Keymap is null || keyId is null)
+        {
+            FlushAllPending();
+            return KeyboardDisposition.PassThrough;
+        }
+
+        var keymap = _configuration.GetKeymap(route.Keymap.Value);
+        if (!keymap.TryGetSingle(keyId.Value, out _))
+        {
+            FlushAllPending();
+            return KeyboardDisposition.PassThrough;
+        }
+
+        var engine = GetEngine(route.Keymap.Value);
+        if (engine.TryAdvanceTo(keyboardEvent.TimestampMs, out var timedOutOutput))
+            SendKeymapOutput(timedOutOutput);
+        if (engine.TryOnKeyDown(keyId.Value, keyboardEvent.TimestampMs, out var output))
+            SendKeymapOutput(output);
+
+        if (engine.State == ChordEngineState.PendingSingle)
+            ScheduleTimeout(route.Keymap.Value);
+        else
+            CancelTimeout();
+
+        _suppressedKeys.Add(keyboardEvent.Key.VirtualKey);
+        return KeyboardDisposition.Suppress;
     }
 
     public ValueTask DispatchAsync(MacroHotkey hotkey, CancellationToken cancellationToken)
@@ -210,7 +249,14 @@ internal sealed class IKeydRuntimeHandler : IKeyboardEventHandler, IInputStateRe
         {
             if (_disposed)
                 return;
+            var before = CaptureDiagnosticState();
             ResetInputStateCore();
+            _diagnostics.RecordMarker(
+                Environment.TickCount64,
+                InputDiagnosticKind.Reset,
+                before,
+                CaptureDiagnosticState(),
+                detailCode: 1);
         }
     }
 
@@ -221,7 +267,14 @@ internal sealed class IKeydRuntimeHandler : IKeyboardEventHandler, IInputStateRe
         {
             if (_disposed)
                 return;
+            var before = CaptureDiagnosticState();
             ResetInputStateCore();
+            _diagnostics.RecordMarker(
+                Environment.TickCount64,
+                InputDiagnosticKind.Reset,
+                before,
+                CaptureDiagnosticState(),
+                detailCode: 2);
             _disposed = true;
             slots = _macroSlots;
         }
@@ -411,7 +464,7 @@ internal sealed class IKeydRuntimeHandler : IKeyboardEventHandler, IInputStateRe
                 break;
 
             case KeyCode.F:
-                if (state.IsExact(LayerKey.M)) { _send.Send("{vkF3sc029}"); return true; }
+                if (state.IsExact(LayerKey.M)) { SendLegacyVirtualScanF(); return true; }
                 if (state.IsExact(LayerKey.M, LayerKey.H)) { _send.SendKey(WindowsKeyMap.CapsLock); return true; }
                 if (state.IsExact(LayerKey.H, LayerKey.M)) { _send.SendKey(WindowsKeyMap.Insert); return true; }
                 break;
@@ -487,7 +540,7 @@ internal sealed class IKeydRuntimeHandler : IKeyboardEventHandler, IInputStateRe
 
         if (name == "F")
         {
-            if (state == "M") { _send.Send("{vkF3sc029}"); return true; }
+            if (state == "M") { SendLegacyVirtualScanF(); return true; }
             if (state == "MH") { _send.SendKey(WindowsKeyMap.CapsLock); return true; }
             if (state == "HM") { _send.SendKey(WindowsKeyMap.Insert); return true; }
         }
@@ -701,16 +754,38 @@ internal sealed class IKeydRuntimeHandler : IKeyboardEventHandler, IInputStateRe
         {
             if (!WindowsKeyMap.TryResolveCharacter(character, out _))
             {
+                _diagnostics.RecordOutput(
+                    Environment.TickCount64,
+                    InputDiagnosticKind.KeymapOutputLegacy,
+                    CaptureDiagnosticState(),
+                    output);
                 _send.Send(output);
                 return;
             }
         }
 
+        _diagnostics.RecordOutput(
+            Environment.TickCount64,
+            InputDiagnosticKind.KeymapOutputKeys,
+            CaptureDiagnosticState(),
+            output);
         foreach (var character in output)
         {
             WindowsKeyMap.TryResolveCharacter(character, out var key);
             _send.SendChord(NoModifiers, key.VirtualKey);
         }
+    }
+
+    private void SendLegacyVirtualScanF()
+    {
+        const string legacyKey = "{vkF3sc029}";
+        _diagnostics.RecordOutput(
+            Environment.TickCount64,
+            InputDiagnosticKind.LegacyVirtualScan,
+            CaptureDiagnosticState(),
+            legacyKey,
+            detailCode: KeyCode.F.GetHashCode());
+        _send.Send(legacyKey);
     }
 
     private ChordEngine<string> GetEngine(KeymapMode mode)
@@ -753,12 +828,71 @@ internal sealed class IKeydRuntimeHandler : IKeyboardEventHandler, IInputStateRe
                 return;
             }
 
+            var before = CaptureDiagnosticState();
             var mode = _timerMode.Value;
             _timerMode = null;
             _timerDueAt = 0;
             if (GetEngine(mode).TryFlush(out var output))
                 SendKeymapOutput(output);
+            _diagnostics.RecordMarker(
+                Environment.TickCount64,
+                InputDiagnosticKind.ChordTimeout,
+                before,
+                CaptureDiagnosticState(),
+                detailCode: (int)mode);
+            RecoverIfInvariantBroken(Environment.TickCount64);
         }
+    }
+
+    private InputDiagnosticState CaptureDiagnosticState()
+        => new(
+            _layers.Layers.Modifiers,
+            _layers.Layers.Count,
+            _layers.Consumed,
+            _heldLayerPresses.Count,
+            _suppressedKeys.Count,
+            _sEngine.State,
+            _kEngine.State,
+            _timerMode,
+            _timerDueAt);
+
+    private void RecoverIfInvariantBroken(long timestampMs)
+    {
+        var violation = GetInputInvariantViolationCode();
+        if (violation == 0)
+            return;
+
+        var before = CaptureDiagnosticState();
+        ResetInputStateCore();
+        _diagnostics.RecordMarker(
+            timestampMs,
+            InputDiagnosticKind.InvariantViolation,
+            before,
+            CaptureDiagnosticState(),
+            violation);
+    }
+
+    private int GetInputInvariantViolationCode()
+    {
+        if ((_timerMode is null) != (_timerDueAt == 0))
+            return 1;
+        if (_sEngine.State == ChordEngineState.PendingSingle && _kEngine.State == ChordEngineState.PendingSingle)
+            return 2;
+        if (_timerMode == KeymapMode.S && _sEngine.State != ChordEngineState.PendingSingle)
+            return 3;
+        if (_timerMode == KeymapMode.K && _kEngine.State != ChordEngineState.PendingSingle)
+            return 4;
+        if (_timerMode is null &&
+            (_sEngine.State == ChordEngineState.PendingSingle || _kEngine.State == ChordEngineState.PendingSingle))
+            return 5;
+        if (_heldLayerPresses.Count > 4)
+            return 6;
+        foreach (var virtualKey in _heldLayerPresses.Keys)
+        {
+            if (!IsLayerTrigger(virtualKey))
+                return 7;
+        }
+        return 0;
     }
 
     private void ThrowIfDisposed()
