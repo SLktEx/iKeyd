@@ -118,6 +118,68 @@ keymap BASE {
         )
         self.assertNotIn("layouts", profile)
 
+    def test_named_physical_references_resolve_jis_keys(self):
+        text = """
+profile demo {
+    chord_window = 40ms
+}
+layout JIS109 {
+    row Q W E
+    row Muhenkan Ro Henkan Yen
+}
+keymap S {
+    JIS109.Ro = ro
+    combo JIS109.Muhenkan + JIS109.Ro = escape
+    combo JIS109.Henkan + JIS109.Yen = other
+}
+""".strip()
+
+        profile = module.compile_dsl(text, Path("profile.ikeyd"))
+
+        self.assertEqual({"Ro": "ro"}, profile["singleStroke"]["S"])
+        self.assertEqual(
+            [["Muhenkan", "Ro", "escape"], ["Henkan", "Yen", "other"]],
+            profile["chords"]["S"],
+        )
+
+    def test_pos_named_reference_aliases_base_layout(self):
+        text = """
+profile demo {
+    chord_window = 40ms
+}
+layout BASE {
+    row Q W E
+}
+keymap S {
+    POS.Q = q
+    combo POS.Q + POS.W = escape
+}
+""".strip()
+
+        profile = module.compile_dsl(text, Path("profile.ikeyd"))
+
+        self.assertEqual({"Q": "q"}, profile["singleStroke"]["S"])
+        self.assertEqual([["Q", "W", "escape"]], profile["chords"]["S"])
+
+    def test_named_reference_reports_missing_key_with_source_line(self):
+        text = """
+profile demo {
+    chord_window = 40ms
+}
+layout JIS109 {
+    row Muhenkan Ro Henkan
+}
+keymap S {
+    combo JIS109.Yen + JIS109.Ro = escape
+}
+""".strip()
+
+        with self.assertRaisesRegex(
+            module.DslError,
+            r"profile\.ikeyd:8: layout 'JIS109' has no key named 'Yen'",
+        ):
+            module.compile_dsl(text, Path("profile.ikeyd"))
+
     def test_position_references_are_independent_of_base_outputs(self):
         first = """
 profile demo {
