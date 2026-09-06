@@ -30,7 +30,7 @@ internal static class IKeydDslDocumentParser
 
     private static void ValidateCompileTimeBehaviorInvocations(AutomationProfile profile, string sourcePath)
     {
-        var runtimeState = profile.State.Count == 0
+        IRuntimeStateStore runtimeState = profile.State.Count == 0
             ? EmptyRuntimeStateStore.Instance
             : new RuntimeStateStore(profile.State);
 
