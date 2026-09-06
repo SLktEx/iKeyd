@@ -8,15 +8,15 @@
     <AssemblyName>iKeyd</AssemblyName>
     <RootNamespace>iKeyd.App</RootNamespace>
     <ApplicationIcon>Assets\ikeyd.ico</ApplicationIcon>
-    <ProfileSource>$(MSBuildProjectDirectory)\..\..\config\hotkeySKG.behavior.json</ProfileSource>
+    <ProfileSource>$(MSBuildProjectDirectory)\..\..\config\hotkeySKG.ikeyd</ProfileSource>
     <GeneratedProfileSource>$(MSBuildProjectDirectory)\obj\$(Configuration)\$(TargetFramework)\GeneratedProfile.g.cs</GeneratedProfileSource>
-    <ProfileCompilerAssembly>$(MSBuildProjectDirectory)\..\..\tools\iKeyd.ProfileCompiler\bin\$(Configuration)\net8.0\iKeyd.ProfileCompiler.dll</ProfileCompilerAssembly>
+    <ProfileCompilerAssembly>$(MSBuildProjectDirectory)\..\..\tools\iKeyd.DslCompiler\bin\$(Configuration)\net8.0\iKeyd.DslCompiler.dll</ProfileCompilerAssembly>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../iKeyd.Core/iKeyd.Core.csproj" />
     <ProjectReference Include="../iKeyd.Profiles.HotkeySkg/iKeyd.Profiles.HotkeySkg.csproj" />
     <ProjectReference Include="../iKeyd.Windows/iKeyd.Windows.csproj" />
-    <ProjectReference Include="../../tools/iKeyd.ProfileCompiler/iKeyd.ProfileCompiler.csproj"
+    <ProjectReference Include="../../tools/iKeyd.DslCompiler/iKeyd.DslCompiler.csproj"
                       ReferenceOutputAssembly="false"
                       SetConfiguration="Configuration=$(Configuration)"
                       GlobalPropertiesToRemove="RuntimeIdentifier;SelfContained;PublishSingleFile" />
