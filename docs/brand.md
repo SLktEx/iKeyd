@@ -1,18 +1,16 @@
 # iKeyd brand direction
 
-## Name
+## Brand idea
 
-**iKeyd**
+> **Your keyboard, defined in code.**
 
-Public naming line:
+iKeyd is a tool for defining and managing keyboard behavior as code. The product itself — especially the DSL and the behavior it produces — is the visual identity.
 
-> **I Key'd / I keyed it my way.**
-
-The product idea is simple: make the keyboard behave *your* way.
+The public name remains **iKeyd**. The naming line **“I Key'd / I keyed it my way.”** remains part of the project's identity, but marketing surfaces should lead with the product idea rather than a slogan.
 
 ## Official assets
 
-The following PNG files are the current, official iKeyd artwork. Use the files as-is: do not redraw, recolor, distort, crop, or add effects or text.
+The current PNG files are canonical. Use them as-is: do not redraw, recolor, distort, crop, add glow, or reinterpret their silhouette.
 
 ### Application icon
 
@@ -20,9 +18,7 @@ The following PNG files are the current, official iKeyd artwork. Use the files a
   <img src="assets/brand/ikeyd-icon.png" alt="iKeyd official icon" width="180">
 </p>
 
-`ikeyd-icon.png` is the canonical application and brand icon.
-
-The Windows executable and tray icon use `src/iKeyd.App/Assets/ikeyd.ico`, generated from the same artwork.
+`ikeyd-icon.png` is the canonical application and brand icon. The Windows executable and tray icon use `src/iKeyd.App/Assets/ikeyd.ico` derived from the same artwork.
 
 ### Logo / wordmark
 
@@ -34,74 +30,93 @@ The Windows executable and tray icon use `src/iKeyd.App/Assets/ikeyd.ico`, gener
 
 ## Visual direction
 
-The visual language should feel like a real developer tool, not an AI-product mascot brand.
+The design should feel quiet, precise, programmable, tool-like, and real.
 
-- Dark, restrained developer-workspace imagery.
-- A keyboard or its physical key geometry should remain the visual protagonist.
-- Use one cool blue/cyan accent rather than rainbow effects.
-- Prefer crisp interface annotations, keymaps, layers, combos, and code over decorative illustration.
-- Keep typography simple, spacious, and technical.
-- Avoid 3D mascots, glossy robot characters, excessive gradients, floating magic particles, or generic “AI future” imagery.
+Prefer:
 
-The supporting art should harmonize with the official icon without trying to redraw it. The icon remains the identity; README/website artwork supplies the environment around it.
+- near-black surfaces that resemble a calm editor or system tool
+- large, confident typography and generous whitespace
+- real `.ikeyd` source
+- real compiler/runtime concepts
+- keyboard geometry, key coordinates, tap/hold, layers, and combos as structural motifs
+- thin borders only when they clarify structure
+- monospace as a brand element, not decorative “terminal” styling
+- cyan only for functional state: active, selected, cursor, important DSL tokens, primary action
+
+Avoid:
+
+- glow and gradient atmosphere
+- background grids used as decoration
+- glassmorphism and floating panels
+- fake terminals, fake output, fake metrics, fake JSON, or fake status badges
+- generic six-card SaaS feature grids
+- large rounded dashboard cards
+- decorative arrows, particles, orbs, circuitry, or cyberpunk styling
+- generic “powerful / flexible / seamless” copy
 
 ## Core palette
 
 | Role | Value |
 | --- | --- |
-| Background | `#0B0F14` |
-| Primary blue | `#2563FF` |
-| Cyan accent | `#55E6F3` |
-| Primary text | `#E5E7EB` |
-| Secondary text | `#6B7280` |
+| Background | `#0A0A0A` |
+| Surface | `#111111` |
+| Elevated surface | `#151515` |
+| Primary text | `#F2F2F2` |
+| Secondary text | `#8A8A8A` |
+| Border | `#262626` |
+| Accent | `#2ED3D0` |
 
-The palette is intentionally small. Blue/cyan is for focus, active keys, links, and small brand marks. The official icon and logo must retain the colors in the supplied PNG files.
+Accent should normally stay below roughly 10% of the visual field. It is a system color, not ambient lighting.
 
 ## Typography
 
-- Latin: **Inter** or a clean system sans-serif.
-- Japanese: **Noto Sans JP** or the platform system sans-serif.
-- Code: the repository/editor default monospace stack.
+- Heading: neutral / industrial system sans, not excessively heavy
+- Body: high-legibility sans
+- Code and labels: monospace
 
-## Messaging
+Code is a primary brand surface. Keep syntax highlighting restrained to a few functional colors. Do not add fake editor chrome, macOS traffic lights, or invented filenames.
+
+## Product storytelling
+
+Use one idea per section:
+
+1. **Hero** — Your keyboard, defined in code. + one real DSL example.
+2. **Define** — Show readable authoring syntax.
+3. **Compile** — Show the real DSL → static JSON profile relationship.
+4. **Run** — Show minimal keyboard state that demonstrates documented behavior.
+5. **Why iKeyd** — Versionable, reviewable, shareable, understandable.
+6. **Real configuration** — Show a believable excerpt from `config/hotkeySKG.ikeyd`.
+
+The product should remain recognizable as iKeyd even when the logo is hidden because the visual language comes from keyboard behavior and the DSL.
+
+## Copy direction
 
 Primary:
 
-- **I Key'd / I keyed it my way.**
-- **Your keyboard, your workflow.**
-- **キーの可能性を、もう一度設計する。**
+- **Your keyboard, defined in code.**
+- **Keyboard behavior should be explicit.**
+- **Define behavior, not shortcuts.**
+- **Readable in. Predictable out.**
+- **Code becomes behavior.**
+- **Keyboard behavior belongs in source control.**
 
-Secondary:
+Keep copy short, technical, specific, and understated.
 
-- **Good Keys. Better Developers.**
+## Website
 
-## README visual set
+The landing page lives in `site/` and is intentionally static. It uses the canonical DSL documented in `docs/ikeyd-dsl.md` and a real configuration excerpt from `config/hotkeySKG.ikeyd`.
 
-The README uses a small family of matching illustrations instead of one isolated hero image.
-
-<p align="center">
-  <img src="assets/brand/readme-hero.png" alt="iKeyd README hero" width="100%">
-</p>
-
-<p align="center">
-  <img src="assets/brand/readme-features.png" alt="iKeyd feature overview" width="100%">
-</p>
-
-<p align="center">
-  <img src="assets/brand/readme-dsl.png" alt="iKeyd DSL compilation flow" width="100%">
-</p>
+The page is deployed by `.github/workflows/pages.yml` when GitHub Pages is enabled for the repository.
 
 ## Assets
 
 Brand assets live in `docs/assets/brand/`.
 
-- `ikeyd-icon.png` — canonical official application / brand mark.
-- `ikeyd-logo.png` — canonical official logo / wordmark.
-- `readme-hero.png` — README hero artwork.
-- `readme-features.png` — README feature overview.
-- `readme-dsl.png` — README DSL/compiler flow.
-- `src/iKeyd.App/Assets/ikeyd.ico` — Windows executable and tray icon, generated from `ikeyd-icon.png`.
+- `ikeyd-icon.png` — canonical application / brand mark
+- `ikeyd-logo.png` — canonical combined logo / wordmark
+- `readme-hero.png` — legacy/supporting README artwork retained for compatibility but no longer the primary brand language
+- `readme-features.png` — legacy/supporting README artwork retained for compatibility
+- `readme-dsl.png` — legacy/supporting README artwork retained for compatibility
+- `src/iKeyd.App/Assets/ikeyd.ico` — Windows executable and tray icon
 
-Future website, release, and OGP images should reuse these official assets and make the official mark the primary identifier rather than inventing a separate logo for each surface.
-
-
+The landing page should use the official logo and real product code rather than inventing additional logos or illustration systems. Future imagery should prefer real code and real behavior over illustration.

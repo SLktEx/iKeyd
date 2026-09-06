@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/assets/brand/ikeyd-icon.png" alt="iKeyd official icon" width="180">
+  <img src="docs/assets/brand/ikeyd-icon.png" alt="iKeyd official icon" width="160">
 </p>
 
 <h1 align="center">
@@ -7,43 +7,55 @@
 </h1>
 
 <p align="center">
-  <strong>I Key'd — I keyed it my way.</strong><br>
-  Your keyboard, your workflow.
+  <strong>Your keyboard, defined in code.</strong><br>
+  Write keyboard behavior as configuration you can read, version, and run.
 </p>
 
 <p align="center">
-  <a href="https://github.com/SLktEx/iKeyd/actions/workflows/windows-package.yml">Windows package</a>
+  <a href="site/">Landing page source</a>
   · <a href="docs/ikeyd-dsl.md">iKeyd DSL</a>
-  · <a href="docs/json-configuration.md">JSON schema</a>
+  · <a href="https://github.com/SLktEx/iKeyd/actions/workflows/windows-package.yml">Windows package</a>
   · <a href="docs/implementation-details.md">Implementation details</a>
-</p>
-
-<p align="center">
-  <img src="docs/assets/brand/readme-hero.png" alt="iKeyd — Your keyboard, your workflow." width="100%">
 </p>
 
 ---
 
-iKeyd is an open-source keyboard customization runtime built around the idea that the keyboard should adapt to you — not the other way around.
+iKeyd is an open-source keyboard customization runtime built around an authoring DSL that compiles to a static runtime profile. The first production target is **Windows without an AutoHotkey runtime**. The shared core is designed to expand to Linux, with **Wayland first, then X11**.
 
-It is the compiled successor to the existing `hotkeySKG` AutoHotkey v1 setup. The first production target is **Windows without an AutoHotkey runtime**. The shared core is designed to expand to Linux, with **Wayland first, then X11**.
+## Keyboard behavior in code
+
+The `.ikeyd` authoring format keeps physical layout, key mappings, combos, and tap/hold behavior in text you can review and version.
+
+```text
+layout BASE {
+    row Q W E
+    row A S D
+}
+
+keymap BASE {
+    POS[1,1] = LT(NUM, Z)
+    POS[1,2] = "w"
+    combo POS[1,1] + POS[2,2] = "escape"
+}
+```
+
+Compile it to the runtime JSON profile with the public compiler entry point:
+
+```bash
+python tools/compile-ikeyd.py input.ikeyd output.json
+```
+
+The runtime does not parse authoring-only layout metadata; position references are resolved before the JSON profile is emitted.
 
 ## What iKeyd does
 
-- **Key remapping** — make ordinary keys behave the way you want.
-- **Layers & modifiers** — compose richer behavior without needing more physical keys.
-- **Combos / simultaneous presses** — use multiple keys as one expressive input.
-- **Tap / hold behavior** — one physical key can do different things depending on how it is used.
-- **Macros & commands** — automate text, window operations, app launches, mouse operations, and more.
+- **Key remapping** — map physical input keys to the output you want.
+- **Position-based combos** — bind combos to stable physical positions with `BASE[row,col]` or `POS[row,col]`.
+- **Layers and tap/hold behavior** — `LT(layer, tap_key)` uses one key for a tap key and a held layer.
+- **Modifier tap** — `MT(modifier, tap_key)` uses one key for a tap key and a held modifier.
 - **IME-aware input** — preserve the Japanese-input behavior required by the existing workflow.
-- **Keyboard mouse** — mouse movement, clicks, scrolling, and media controls from the keyboard.
-- **Clipboard history** — tray-accessible clipboard history and paste flow.
-
-<p align="center">
-  <img src="docs/assets/brand/readme-features.png" alt="iKeyd feature overview — keyboard, layers and combos, mouse, clipboard, and commands" width="100%">
-</p>
-
-The Windows runtime intentionally keeps compatibility quirks that are part of the captured `hotkeySKG` behavior instead of silently changing them.
+- **Keyboard mouse** — continuous keyboard-driven pointer movement, clicks, scrolling, and related controls.
+- **Clipboard history** — tray-accessible clipboard history with text/image support and authenticated encrypted persistence.
 
 ## Quick start — Windows
 
@@ -55,13 +67,13 @@ dotnet build iKeyd.sln --configuration Release
 dotnet run --project src/iKeyd.App/iKeyd.App.csproj --configuration Release
 ```
 
-By default, the executable loads `iKeyd.json` from its own directory. The repository's canonical default configuration is:
+By default, the executable loads `iKeyd.json` from its own directory. The repository's canonical default runtime configuration is:
 
 ```text
 config/hotkeySKG.behavior.json
 ```
 
-To use another configuration:
+To use another runtime configuration:
 
 ```powershell
 iKeyd.exe --config C:\path\to\my-iKeyd.json
@@ -87,14 +99,9 @@ The package includes the self-contained Windows executable and its default `iKey
 
 ## Configuration
 
-Two configuration paths are documented while the project evolves:
-
-- [iKeyd DSL](docs/ikeyd-dsl.md) — the human-oriented configuration language.
-- [JSON configuration schema](docs/json-configuration.md) — the complete runtime configuration model and validation rules.
-
-<p align="center">
-  <img src="docs/assets/brand/readme-dsl.png" alt="iKeyd DSL compilation flow from authoring format to compiled runtime" width="100%">
-</p>
+- [iKeyd DSL](docs/ikeyd-dsl.md) — the human-oriented authoring language.
+- [JSON configuration schema](docs/json-configuration.md) — the runtime configuration model and validation rules.
+- [`config/hotkeySKG.ikeyd`](config/hotkeySKG.ikeyd) — a real configuration used as the compatibility baseline.
 
 Additional references:
 
@@ -126,14 +133,6 @@ dotnet test iKeyd.sln
 
 ## Brand
 
-The public name is **iKeyd** and the naming line is **“I Key'd / I keyed it my way.”**
+The public name is **iKeyd**. The product brand idea is **“Your keyboard, defined in code.”** The naming line **“I Key'd / I keyed it my way.”** remains part of the project's identity.
 
-The cyan `K` mark shown at the top of this README is the official iKeyd application and tray icon.
-
-Brand assets and the visual direction live under [`docs/assets/brand/`](docs/assets/brand/) and are summarized in [`docs/brand.md`](docs/brand.md).
-
----
-
-<p align="center"><sub>Good Keys. Better Developers.</sub></p>
-
-
+The canonical icon is `docs/assets/brand/ikeyd-icon.png` and the canonical combined logo/wordmark is `docs/assets/brand/ikeyd-logo.png`. Brand rules and the website visual direction are documented in [`docs/brand.md`](docs/brand.md).
