@@ -20,6 +20,7 @@ public enum BehaviorActionKind
     LayerOff,
     LayerToggle,
     LayerSet,
+    LayerOneShot,
     ModifierDown,
     ModifierUp,
     Exec,
@@ -107,6 +108,13 @@ public readonly record struct BehaviorAction
     /// </summary>
     public static BehaviorAction LayerSet(string layer)
         => new(BehaviorActionKind.LayerSet, default, RequireName(layer, nameof(layer)), null, null, BehaviorRepeatPolicy.Never);
+
+    /// <summary>
+    /// Arms a layer for the next supported physical key lifecycle. Platform
+    /// routing owns consumption; this action only carries target-neutral intent.
+    /// </summary>
+    public static BehaviorAction LayerOneShot(string layer)
+        => new(BehaviorActionKind.LayerOneShot, default, RequireName(layer, nameof(layer)), null, null, BehaviorRepeatPolicy.Never);
 
     public static BehaviorAction ModifierDown(string modifier)
         => new(BehaviorActionKind.ModifierDown, default, RequireName(modifier, nameof(modifier)), null, null, BehaviorRepeatPolicy.Never);
