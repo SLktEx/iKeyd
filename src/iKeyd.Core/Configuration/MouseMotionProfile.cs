@@ -45,8 +45,12 @@ public sealed record MouseMotionProfile
         }
         if (!string.Equals(socd, "neutral", StringComparison.OrdinalIgnoreCase))
             throw new ArgumentException("Mouse SOCD currently supports only 'neutral'.", nameof(socd));
-        if (normalSpeed < 0 || precisionSpeed < 0 || fineSpeed < 0 || fastSpeed < 0)
-            throw new ArgumentOutOfRangeException(nameof(normalSpeed), "Mouse speeds must be non-negative.");
+        if (!double.IsFinite(normalSpeed) || !double.IsFinite(precisionSpeed) ||
+            !double.IsFinite(fineSpeed) || !double.IsFinite(fastSpeed) ||
+            normalSpeed < 0 || precisionSpeed < 0 || fineSpeed < 0 || fastSpeed < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(normalSpeed), "Mouse speeds must be finite and non-negative.");
+        }
         if (tapNudgePixels < 0)
             throw new ArgumentOutOfRangeException(nameof(tapNudgePixels), "Mouse tap nudge must be non-negative.");
         if (maxCatchupMs <= 0)
