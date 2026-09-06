@@ -2,6 +2,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using iKeyd.Core.Chords;
+using iKeyd.Core.Configuration;
 
 if (args.Length < 2)
 {
@@ -36,9 +37,17 @@ try
         throw new FileNotFoundException("Automation profile was not found.", inputPath);
 
     var input = File.ReadAllText(inputPath);
-    var json = string.Equals(Path.GetExtension(inputPath), ".ikeyd", StringComparison.OrdinalIgnoreCase)
-        ? IKeydDslCompiler.CompileToJson(input, inputPath)
-        : input;
+    string json;
+    if (string.Equals(Path.GetExtension(inputPath), ".ikeyd", StringComparison.OrdinalIgnoreCase))
+    {
+        var behaviorExtension = IKeydBehaviorDsl.Extract(input, inputPath);
+        json = IKeydDslCompiler.CompileToJson(behaviorExtension.CleanSource, inputPath);
+        json = IKeydBehaviorDsl.Merge(json, behaviorExtension);
+    }
+    else
+    {
+        json = input;
+    }
 
     if (checkAgainstPath is not null)
     {
@@ -87,6 +96,7 @@ internal static class ProfileCompiler
         if (string.IsNullOrWhiteSpace(json))
             throw new InvalidDataException("Profile JSON must not be empty.");
 
+        var parsedProfile = AutomationProfileJson.Parse(json);
         using var document = JsonDocument.Parse(json);
         var root = document.RootElement;
         if (root.ValueKind != JsonValueKind.Object)
@@ -204,7 +214,8 @@ internal static class ProfileCompiler
             }
         }
 
-        builder.AppendLine("            });");
+        builder.AppendLine("            },");
+        builder.AppendLine("            keyBehaviors: CreateKeyBehaviors());");
         builder.AppendLine();
         builder.AppendLine($"        return new IKeydConfiguration(profile, InputMode.{startupModeCode}, SKeymap, KKeymap);");
         builder.AppendLine("    }");
@@ -213,10 +224,66 @@ internal static class ProfileCompiler
         EmitCompiledKeymapFactory(builder, "S", singleRoot, chordRoot);
         builder.AppendLine();
         EmitCompiledKeymapFactory(builder, "K", singleRoot, chordRoot);
+        builder.AppendLine();
+        EmitKeyBehaviorFactory(builder, parsedProfile.KeyBehaviors);
 
         builder.AppendLine("}");
         return builder.ToString();
     }
+
+    private static void EmitKeyBehaviorFactory(StringBuilder builder, KeyBehaviorProfile profile)
+    {
+        builder.AppendLine("    private static KeyBehaviorProfile CreateKeyBehaviors()");
+        builder.AppendLine("    {");
+        if (profile.IsEmpty)
+        {
+            builder.AppendLine("        return KeyBehaviorProfile.Empty;");
+            builder.AppendLine("    }");
+            return;
+        }
+
+        builder.AppendLine("        return new KeyBehaviorProfile(");
+        builder.AppendLine("            behaviors: new KeyBehaviorBinding[]");
+        builder.AppendLine("            {");
+        foreach (var behavior in profile.Behaviors.Values.OrderBy(value => value.Trigger))
+        {
+            var trigger = ParseKey(behavior.Trigger.Value, "behaviors");
+            builder.AppendLine("                new KeyBehaviorBinding(");
+            builder.AppendLine($"                    trigger: {trigger.Expression},");
+            builder.AppendLine($"                    tap: {(behavior.Tap is { } tap ? BehaviorActionExpression(tap) : "null")},");
+            builder.AppendLine($"                    hold: {BehaviorActionExpression(behavior.Hold)},");
+            builder.AppendLine($"                    timeoutMs: {behavior.TimeoutMs},");
+            builder.AppendLine($"                    interrupt: TapHoldInterruptPolicy.{behavior.Interrupt}),");
+        }
+        builder.AppendLine("            },");
+        builder.AppendLine("            layers: new KeyBehaviorLayer[]");
+        builder.AppendLine("            {");
+        foreach (var layer in profile.Layers.Values.OrderBy(value => value.Name, StringComparer.OrdinalIgnoreCase))
+        {
+            builder.AppendLine("                new KeyBehaviorLayer(");
+            builder.AppendLine($"                    name: {Literal(layer.Name)},");
+            builder.AppendLine("                    bindings: new KeyBehaviorLayerBinding[]");
+            builder.AppendLine("                    {");
+            foreach (var binding in layer.Bindings.OrderBy(pair => pair.Key))
+            {
+                var key = ParseKey(binding.Key.Value, $"layers.{layer.Name}");
+                builder.AppendLine($"                        new KeyBehaviorLayerBinding({key.Expression}, {BehaviorActionExpression(binding.Value)}),");
+            }
+            builder.AppendLine("                    }),");
+        }
+        builder.AppendLine("            });");
+        builder.AppendLine("    }");
+    }
+
+    private static string BehaviorActionExpression(KeyBehaviorAction action)
+        => action.Kind switch
+        {
+            KeyBehaviorActionKind.Key => $"KeyBehaviorAction.Key({Literal(action.Value)})",
+            KeyBehaviorActionKind.Text => $"KeyBehaviorAction.Text({Literal(action.Value)})",
+            KeyBehaviorActionKind.Layer => $"KeyBehaviorAction.Layer({Literal(action.Value)})",
+            KeyBehaviorActionKind.Modifier => $"KeyBehaviorAction.Modifier(KeyBehaviorModifier.{action.GetModifier()})",
+            _ => throw new InvalidDataException($"Unsupported behavior action kind '{action.Kind}'.")
+        };
 
     private static void EmitCompiledKeymapFactory(
         StringBuilder builder,
