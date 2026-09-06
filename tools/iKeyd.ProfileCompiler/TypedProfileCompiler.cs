@@ -2,6 +2,7 @@ using System.Text;
 using iKeyd.Core.Chords;
 using iKeyd.Core.Configuration;
 using iKeyd.Core.Keymaps;
+using iKeyd.Core.State;
 
 internal static class TypedProfileCompiler
 {
@@ -20,7 +21,8 @@ internal static class TypedProfileCompiler
                 $"Typed profile compiler expects a .ikeyd source file, got '{inputPath}'.");
         }
 
-        return Compile(IKeydDslParser.Parse(File.ReadAllText(inputPath), inputPath));
+        var document = IKeydDslDocumentParser.Parse(File.ReadAllText(inputPath), inputPath);
+        return Compile(document.Profile);
     }
 
     public static string Compile(AutomationProfile profile)
@@ -40,6 +42,7 @@ internal static class TypedProfileCompiler
         builder.AppendLine("using iKeyd.Core.Chords;");
         builder.AppendLine("using iKeyd.Core.Configuration;");
         builder.AppendLine("using iKeyd.Core.Keymaps;");
+        builder.AppendLine("using iKeyd.Core.State;");
         builder.AppendLine("using iKeyd.Profiles.HotkeySkg.Modes;");
         builder.AppendLine();
         builder.AppendLine("namespace iKeyd.App;");
@@ -78,7 +81,23 @@ internal static class TypedProfileCompiler
         builder.AppendLine($"                images: {BoolLiteral(profile.Clipboard.Images)},");
         builder.AppendLine($"                encryption: {Literal(profile.Clipboard.Encryption)},");
         builder.AppendLine($"                cipher: {Literal(profile.Clipboard.Cipher)},");
-        builder.AppendLine($"                directory: {(profile.Clipboard.Directory is null ? "null" : Literal(profile.Clipboard.Directory))}));");
+        builder.AppendLine($"                directory: {(profile.Clipboard.Directory is null ? "null" : Literal(profile.Clipboard.Directory))}),");
+        builder.AppendLine("            state: new RuntimeStateProfile(new RuntimeStateFieldProfile[]");
+        builder.AppendLine("            {");
+        foreach (var field in profile.State.Fields)
+        {
+            if (field.Type == RuntimeStateType.Bool)
+            {
+                builder.AppendLine(
+                    $"                RuntimeStateFieldProfile.Bool({Literal(field.Name)}, {BoolLiteral(field.InitialBool)}),");
+            }
+            else
+            {
+                builder.AppendLine(
+                    $"                RuntimeStateFieldProfile.String({Literal(field.Name)}, {Literal(field.InitialString ?? string.Empty)}),");
+            }
+        }
+        builder.AppendLine("            }));");
         builder.AppendLine();
         builder.AppendLine($"        return new IKeydConfiguration(profile, InputMode.{startupModeCode}, SKeymap, KKeymap);");
         builder.AppendLine("    }");
