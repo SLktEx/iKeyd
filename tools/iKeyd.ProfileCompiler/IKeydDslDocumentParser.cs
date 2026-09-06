@@ -24,6 +24,7 @@ internal static class IKeydDslDocumentParser
                 try
                 {
                     _ = BehaviorDefinitionFactory.Create(mapping.Invocation, profile.BehaviorDefinitions);
+                    _ = BehaviorDefinitionFactory.GetRequiredSystemQueries(mapping.Invocation);
                 }
                 catch (Exception error) when (error is ArgumentException or InvalidDataException or NotSupportedException)
                 {
@@ -40,7 +41,8 @@ internal static class IKeydDslDocumentParser
            name.Equals("TEXT", StringComparison.OrdinalIgnoreCase) ||
            name.Equals("EXEC", StringComparison.OrdinalIgnoreCase) ||
            name.Equals("SHELL", StringComparison.OrdinalIgnoreCase) ||
-           name.Equals("QUERY", StringComparison.OrdinalIgnoreCase);
+           name.Equals("QUERY", StringComparison.OrdinalIgnoreCase) ||
+           name.Equals("WHEN", StringComparison.OrdinalIgnoreCase);
 }
 
 internal sealed record IKeydDslDocument(
