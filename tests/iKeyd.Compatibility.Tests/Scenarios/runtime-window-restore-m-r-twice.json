@@ -1,0 +1,18 @@
+{
+  "id": "runtime-window-restore-m-r-twice",
+  "description": "Pressing M+R twice toggles the active window from normal to maximized and back to restored.",
+  "initialState": { "mode": "S", "ime": "off", "layers": ["M"] },
+  "input": [
+    { "atMs": 10, "kind": "keyDown", "key": "R" },
+    { "atMs": 11, "kind": "keyUp", "key": "R" },
+    { "atMs": 20, "kind": "keyDown", "key": "R" },
+    { "atMs": 21, "kind": "keyUp", "key": "R" }
+  ],
+  "expected": {
+    "actions": [
+      { "kind": "window", "value": "maximize" },
+      { "kind": "window", "value": "restore" }
+    ]
+  },
+  "tags": ["legacy", "runtime-long-tail", "window", "deterministic"]
+}
