@@ -91,9 +91,10 @@ public interface IMacroEditor
 
 public interface ILegacyMacroSlotActions
 {
-    void Run(char slot);
-    void EditTemplate(char slot);
-    void EditRepeat();
+    ValueTask RunAsync(char slot, CancellationToken cancellationToken = default);
+    ValueTask EditTemplateAsync(char slot, CancellationToken cancellationToken = default);
+    ValueTask EditRepeatAsync(CancellationToken cancellationToken = default);
+    void Cancel();
 }
 
 public sealed class SystemMacroDelay : IMacroDelay
