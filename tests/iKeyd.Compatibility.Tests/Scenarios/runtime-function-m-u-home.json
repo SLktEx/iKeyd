@@ -1,0 +1,19 @@
+{
+  "id": "runtime-function-m-u-home",
+  "description": "M+U emits Home through the restored direct withFuncKey table.",
+  "initialState": { "mode": "S", "ime": "off", "layers": ["M"] },
+  "input": [
+    { "atMs": 10, "kind": "keyDown", "key": "U" },
+    { "atMs": 11, "kind": "keyUp", "key": "U" }
+  ],
+  "expected": {
+    "events": [
+      { "kind": "keyDown", "key": "Home" },
+      { "kind": "keyUp", "key": "Home" }
+    ]
+  },
+  "tags": ["legacy", "runtime-long-tail", "function-layer", "send-event-diff", "hosted-windows"],
+  "inventoryIds": ["legacy-send-2de512fceb"],
+  "requiredEnvironment": ["hosted-windows"],
+  "oracleTargets": ["compiled-exe", "ahk-source", "ikeyd-runtime"]
+}
