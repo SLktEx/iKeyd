@@ -51,4 +51,39 @@ public sealed class WindowsKeyboardOutputTests
         Assert.NotEqual(0u, input.Data.Keyboard.Flags & 0x0004u);
         Assert.Equal(WindowsKeyboardOutput.InjectionMarker, input.Data.Keyboard.ExtraInfo);
     }
+
+    [Fact]
+    public void Supplementary_unicode_preserves_surrogate_pair_order_as_one_logical_text_output()
+    {
+        const string value = "🦀";
+        var inputs = new WindowsKeyboardOutput.NativeInput[value.Length * 2];
+
+        WindowsKeyboardOutput.FillUnicodeInputs(value, inputs);
+
+        Assert.Equal(4, inputs.Length);
+        Assert.Equal((ushort)value[0], inputs[0].Data.Keyboard.ScanCode);
+        Assert.Equal((ushort)value[0], inputs[1].Data.Keyboard.ScanCode);
+        Assert.Equal((ushort)value[1], inputs[2].Data.Keyboard.ScanCode);
+        Assert.Equal((ushort)value[1], inputs[3].Data.Keyboard.ScanCode);
+        Assert.NotEqual(0u, inputs[0].Data.Keyboard.Flags & 0x0004u);
+        Assert.Equal(0u, inputs[0].Data.Keyboard.Flags & 0x0002u);
+        Assert.NotEqual(0u, inputs[1].Data.Keyboard.Flags & 0x0002u);
+        Assert.Equal(0u, inputs[2].Data.Keyboard.Flags & 0x0002u);
+        Assert.NotEqual(0u, inputs[3].Data.Keyboard.Flags & 0x0002u);
+    }
+
+    [Fact]
+    public void Mixed_unicode_text_preserves_utf16_code_unit_order()
+    {
+        const string value = "Aあ🦀";
+        var inputs = new WindowsKeyboardOutput.NativeInput[value.Length * 2];
+
+        WindowsKeyboardOutput.FillUnicodeInputs(value, inputs);
+
+        for (var index = 0; index < value.Length; index++)
+        {
+            Assert.Equal((ushort)value[index], inputs[index * 2].Data.Keyboard.ScanCode);
+            Assert.Equal((ushort)value[index], inputs[index * 2 + 1].Data.Keyboard.ScanCode);
+        }
+    }
 }

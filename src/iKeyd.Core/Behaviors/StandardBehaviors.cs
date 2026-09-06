@@ -20,7 +20,7 @@ public sealed record ModTapOptions
 
 /// <summary>
 /// Standard behavior library. These helpers create ordinary behavior definitions;
-/// the runtime has no LT/MT/MO/MOD-specific dispatch path.
+/// the runtime has no helper-name-specific dispatch path.
 /// </summary>
 public static class StandardBehaviors
 {
@@ -41,6 +41,20 @@ public static class StandardBehaviors
 
     public static BehaviorDefinition MOD(string modifier)
         => new ModifierHoldBehaviorDefinition(modifier);
+
+    public static BehaviorDefinition Unicode(string scalar)
+        => Press(BehaviorAction.SendUnicode(scalar));
+
+    public static BehaviorDefinition Text(string text)
+        => Press(BehaviorAction.SendText(text));
+
+    /// <summary>
+    /// Emits a primitive output on first physical down. If the primitive declares
+    /// physical-key repeat support, repeated downs emit it again; otherwise they
+    /// remain suppressed without replaying the action.
+    /// </summary>
+    public static BehaviorDefinition Press(BehaviorAction action)
+        => new PressActionBehaviorDefinition(action);
 }
 
 internal sealed class LayerTapBehaviorDefinition : BehaviorDefinition
@@ -279,5 +293,27 @@ internal sealed class ModifierHoldBehaviorInstance(KeyId sourceKey, string modif
 
         _active = false;
         actions.Add(BehaviorAction.ModifierUp(modifier));
+    }
+}
+
+internal sealed class PressActionBehaviorDefinition(BehaviorAction action) : BehaviorDefinition
+{
+    internal override BehaviorInstance CreateInstance(KeyId sourceKey, long timestampMs)
+        => new PressActionBehaviorInstance(sourceKey, action);
+}
+
+internal sealed class PressActionBehaviorInstance(KeyId sourceKey, BehaviorAction action) : BehaviorInstance(sourceKey)
+{
+    internal override void OnPress(long timestampMs, List<BehaviorAction> actions)
+        => actions.Add(action);
+
+    internal override void OnRepeat(long timestampMs, List<BehaviorAction> actions)
+    {
+        if (action.RepeatPolicy == BehaviorRepeatPolicy.PhysicalKeyDown)
+            actions.Add(action);
+    }
+
+    internal override void OnRelease(long timestampMs, List<BehaviorAction> actions)
+    {
     }
 }

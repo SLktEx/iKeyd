@@ -113,9 +113,21 @@ internal sealed class BehaviorWindowsInputRouter : IKeyboardEventHandler, IInput
             ApplyActions(activeRuntime.ObserveKeyDown(keyId, keyboardEvent.TimestampMs).Actions);
 
         // Auto-repeat belongs to the behavior instance that consumed the original
-        // down even if that behavior has since activated a different layer.
+        // down even if that behavior has since activated a different layer. Route
+        // the repeated down back to that owner so repeatable output actions can
+        // react without replaying stateful layer/modifier transitions.
         if (_activeBehaviorKeys.Contains(keyId))
+        {
+            foreach (var activeRuntime in _behaviorRuntimes.Values)
+            {
+                if (!activeRuntime.IsActive(keyId))
+                    continue;
+
+                ApplyActions(activeRuntime.BeginKeyDown(keyId, keyboardEvent.TimestampMs).Actions);
+                break;
+            }
             return KeyboardDisposition.Suppress;
+        }
 
         var targetKeymap = ResolveTargetKeymapName();
         if (targetKeymap is not null &&
@@ -182,6 +194,13 @@ internal sealed class BehaviorWindowsInputRouter : IKeyboardEventHandler, IInput
                     if (!WindowsKeyMap.TryResolveOutputKey(action.Key, out var outputKey))
                         throw new InvalidOperationException($"Behavior output key '{action.Key}' is not supported by the Windows backend.");
                     _keyboard.SendKeyPress(outputKey);
+                    break;
+
+                case BehaviorActionKind.SendUnicode:
+                case BehaviorActionKind.SendText:
+                    if (action.Text is null)
+                        throw new InvalidOperationException($"Behavior {action.Kind} action is missing its text payload.");
+                    _keyboard.SendText(action.Text);
                     break;
 
                 case BehaviorActionKind.LayerOn:
