@@ -2,204 +2,210 @@
 
 ## Purpose
 
-`.ikeyd` is the source language for keyboard behavior, not a serialization format for the current Windows runtime.
+`.ikeyd` is the canonical source language for keyboard behavior, not a serialization format for the current Windows runtime.
 
-The compiler must preserve one semantic model across multiple targets:
+The intended compiler model is:
 
 ```text
 .ikeyd source
-    -> parser
-    -> AST
+    -> parser / typed document
     -> semantic analysis
-    -> Behavior IR
-       -> iKeyd C# backend
-       -> iKeyd Rust backend
+    -> portable + target-aware Behavior IR
+       -> iKeyd C# static representation
+       -> iKeyd Rust representation
        -> QMK backend
        -> ZMK backend
-       -> JSON/debug backend
+       -> optional JSON/debug projection
 ```
 
-JSON is an optional projection of the compiler-owned IR. It is useful for snapshots, diffs, migration, visualization, debugging, and external tooling, but it is not the canonical IR and should not remain a mandatory build hop.
+JSON is an optional projection useful for snapshots, diffs, migration, visualization, debugging, and external tooling. It is not the canonical IR and is no longer a mandatory normal-build hop.
+
+The current C# Windows build already consumes `.ikeyd` directly and generates static C# profile data under `obj/` (#150).
 
 ## Design rules
 
-### 1. Meaning lives in the IR
+### 1. Meaning lives in semantic data / Behavior IR
 
-The IR describes keyboard semantics rather than target syntax. It must not contain C# expressions, Rust syntax, QMK macros, ZMK Devicetree nodes, or JSON-schema-specific structures.
+The semantic model describes keyboard behavior rather than target source syntax. Portable semantics must not depend on C# expressions, Rust syntax, QMK macros, ZMK Devicetree nodes, or a JSON schema.
 
-Examples of target-neutral concepts include:
+Examples include:
 
-- physical key position
+- canonical physical key identity / position
 - key output
-- layer activation
-- modifier tap
-- layer tap / hold tap
-- combo
-- macro
-- Unicode output
+- Unicode scalar output
+- text output
+- layers and modifiers
+- hold-tap / mod-tap / layer-tap
+- combos
+- bounded behavior actions
 - pointer behavior
 - source location
+- explicit target requirements/extensions
 
-### 2. Physical position is first-class
+### 2. Physical identity is first-class
 
-`POS[row,col]` is a canonical physical reference.
+`POS[row,col]` is a physical reference. Authoring aliases such as `BASE[row,col]` are resolved before target code generation.
 
-Authoring aliases such as `BASE[row,col]` and `LAYER[row,col]` are resolved during semantic analysis. Backends receive resolved positions and must not reinterpret layout aliases independently.
+On Windows, the canonical JIS109 work under #174 preserves the physical `(virtual key, scan code, extended flag)` identity at the backend boundary instead of reducing everything to a virtual key alone.
 
-This lets combo definitions and other physical relationships survive changes to the output characters assigned to a layer.
+Backends receive canonical physical identity/position and must not independently reinterpret authoring aliases.
 
 ### 3. Portable core and target extensions are separate
 
-Portable source describes behavior that can be represented by the shared semantic model.
+Portable source describes requested semantics. Host-only concepts such as process inspection, active-window conditions, clipboard access, command execution, and other operating-system integration are explicit capabilities rather than assumptions of firmware targets.
 
-Host-only concepts such as process inspection, active-window conditions, clipboard access, command execution, and other operating-system integration are target capabilities rather than assumptions of the language core.
+Target-specific configuration uses the #151 extension model. Target blocks are additive metadata and must not silently redefine portable bindings.
 
-Target-specific escape hatches may exist, but they must be explicit. They must not silently alter the meaning of portable source on other backends.
+### 4. Unsupported behavior must never disappear silently
 
-### 4. Backends declare capabilities
+Each backend classifies a requested semantic construct as one of:
 
-Each backend declares the capabilities it can preserve. Example capability names:
+1. **direct** — semantics can be preserved natively;
+2. **target extension** — source explicitly requests a supported target-specific facility;
+3. **adaptation/hook** — the backend has a defined adaptation contract;
+4. **unsupported** — compilation fails with a precise diagnostic.
 
-```text
-key-output
-layer
-combo
-hold-tap
-mod-tap
-layer-tap
-macro
-unicode
-pointer
-host-command
-clipboard
-app-context
-```
+A backend must never silently omit requested behavior.
 
-Capabilities describe semantic behavior, not implementation mechanisms.
+This is intentionally more precise than the old blanket rule "unsupported means hard error".
 
-Before code generation, target validation walks the IR and rejects required capabilities that the selected backend does not implement.
+#### QMK
 
-Unsupported behavior is a compile error. A backend must never silently discard or approximate behavior unless the source explicitly requests an approximation mode in the future.
+QMK may lower host-only semantics to deterministic generated hooks under #161. Export succeeds with safe default hook implementations and reports which hooks need customization. Constructs outside the direct/hook/extension model still fail explicitly.
 
-Example diagnostic:
+#### ZMK
 
-```text
-error IKYD2041: `clipboard` is not supported by target `qmk`
-  --> keymap.ikeyd:143:9
-```
+ZMK currently has no equivalent general host-hook policy. Unsupported host-only semantics therefore remain explicit capability failures unless a concrete adaptation model is designed later.
 
-### 5. Backends consume IR, never source syntax
+### 5. Backends consume validated semantics, not source syntax
 
-A backend receives validated Behavior IR. It does not parse `.ikeyd`, resolve `BASE[...]`, or depend on the authoring grammar.
+A backend does not parse `.ikeyd`, resolve `BASE[...]`, or invent its own meaning for authoring constructs. Parsing/name resolution/semantic validation belong before backend generation.
 
-This keeps all targets aligned on one definition of meaning and prevents QMK/ZMK/iKeyd from gradually becoming separate languages.
+This keeps iKeyd C#, iKeyd Rust, QMK, and ZMK aligned on one language rather than becoming four loosely related parsers.
+
+## Current implementation status
+
+Already established:
+
+- `.ikeyd` is the normal build input (#150);
+- no mandatory JSON hop exists in the Windows build;
+- target-neutral Behavior IR/capability foundation exists (#145);
+- target selectors plus `require`, `option`, and `native` extensions exist (#151);
+- physical positions remain first-class;
+- the Windows/JIS109 key registry covers the full canonical physical surface (#174 repository-side work);
+- key / Unicode scalar / text output are distinct semantic actions (#67);
+- target/source diagnostics retain useful source context where implemented.
+
+Remaining backend work is tracked by #146/#147/#148/#149/#161. Language/runtime completion continues under #64/#99/#135/#80.
 
 ## Backend responsibilities
 
 ### iKeyd C#
 
-Generate the static profile representation consumed by the current .NET runtime. During migration this replaces the mandatory `JSON -> GeneratedProfile.g.cs` path with `IR -> GeneratedProfile.g.cs`.
+Compile canonical `.ikeyd` into deterministic static profile/mouse representation consumed by the current .NET Windows runtime. This is the current reference/oracle path during Rust migration.
 
 ### iKeyd Rust
 
-Generate a deterministic Rust profile/module, or another Rust build-time representation owned by the compiler. JSON should not be required between IR and the Rust runtime.
+Consume the same settled semantics through a deterministic Rust-oriented representation. It must not require a JSON intermediate or preserve C# implementation shapes merely for compatibility.
 
 ### QMK
 
-Generate QMK source/configuration for the supported portable subset. Map semantics rather than spelling; for example, a portable layer-tap behavior maps to the appropriate QMK representation only when its semantics can be preserved.
+Lower portable firmware-capable semantics directly. Host-only semantics covered by #161 become explicit generated hooks with conservative defaults and a separate customization area. Anything outside the defined direct/hook/extension policy fails diagnostically.
 
 ### ZMK
 
-Generate ZMK keymap/configuration for the supported portable subset. Position-based combo semantics should map naturally from resolved physical positions.
+Lower the supported portable intersection and explicit ZMK extensions. Unsupported host-only behavior currently fails clearly rather than being silently erased.
 
 ### JSON/debug
 
-Serialize a stable, documented projection useful for tests and tooling. This output is diagnostic/interchange data, not the in-memory IR contract.
+Optional compatibility/debug projection only. JSON text is not the in-memory semantic contract and is not required by normal runtime startup.
 
 ## Compilation phases
+
+Conceptually:
 
 ```text
 source text
   |
   v
-parser
+parser / typed document
   |
-  v
-AST
-  |  - names still exist
-  |  - authoring aliases still exist
   v
 semantic analysis
-  |  - resolve layouts and positions
-  |  - resolve symbols/layers/modifiers
+  |  - resolve physical aliases/positions
+  |  - resolve symbols/layers/behaviors
   |  - validate source-level invariants
   v
-Behavior IR
-  |  - target-neutral semantics
-  |  - source locations retained
-  v
-target capability validation
-  |
-  +--> diagnostics
+portable + target-aware Behavior semantics
   |
   v
-backend code generation
+target capability / adaptation validation
+  |\
+  | +--> diagnostics
+  v
+backend/static representation generation
 ```
 
-## Migration from the current JSON pipeline
+The exact internal class boundaries may evolve. The invariant is that meaning is settled before target source generation and is not reconstructed from generated text.
 
-Current path:
+## Normal Windows build today
+
+The historical migration sequence is complete enough that this is no longer the normal path:
 
 ```text
-.ikeyd -> JSON -> GeneratedProfile.g.cs -> iKeyd.exe
+.ikeyd -> JSON -> generated C# -> iKeyd.exe
 ```
 
-Target path:
+The current normal path is:
 
 ```text
-.ikeyd -> AST -> Behavior IR -> GeneratedProfile.g.cs -> iKeyd.exe
-                         |
-                         +-> JSON (optional)
+.ikeyd
+  -> typed DSL/profile + Behavior semantics
+  -> GeneratedProfile.g.cs / GeneratedMouseProfile.g.cs
+  -> iKeyd.exe
 ```
 
-Migration should be incremental:
-
-1. Introduce Behavior IR and capability primitives without removing the existing JSON path.
-2. Lower current DSL constructs into IR.
-3. Make the existing static C# profile generator consume IR.
-4. Keep JSON emission as a compatibility/debug backend and compare it with current fixtures.
-5. Make `.ikeyd` the normal build input.
-6. Add QMK and ZMK backends against the same conformance fixtures.
-7. Add the Rust backend before or alongside the runtime migration.
+Historical JSON compilers/fixtures remain for compatibility and differential verification only.
 
 ## Conformance strategy
 
-Correctness is defined at the semantic level first.
+Correctness is defined semantically before generated-source snapshots.
 
-A portable fixture should:
+For a portable fixture, prefer:
 
-1. parse and lower to a known Behavior IR snapshot;
-2. validate successfully for each target that claims the required capabilities;
-3. generate deterministic target output;
-4. fail with a precise diagnostic for targets that cannot preserve its semantics.
+```text
+same .ikeyd fixture
+  -> parsed/typed assertions
+  -> semantic / Behavior IR assertions
+  -> backend capability/adaptation assertions
+  -> deterministic target snapshot/build check
+```
 
-Generated QMK/ZMK/C#/Rust text snapshots are useful regressions, but text equality alone must not become the definition of semantic correctness.
+QMK hook cases assert preservation of an explicit adaptation contract, not false equivalence to native firmware behavior. ZMK fixtures assert both the supported intersection and the unsupported boundary. Rust fixtures should share the same semantic cases used by the reference path.
+
+This cross-backend suite is tracked by #149.
 
 ## Non-goals
 
-- forcing every iKeyd host feature onto embedded firmware;
-- designing the portable core as the intersection of every target forever;
-- using JSON as the compiler's object model;
-- allowing backends to silently ignore unsupported behavior;
-- allowing target-specific raw syntax to leak into portable IR.
+- forcing every host feature directly into embedded firmware;
+- defining portability as the smallest intersection of every target forever;
+- using JSON as the compiler object model;
+- allowing unsupported behavior to disappear silently;
+- allowing target-specific raw syntax to leak into portable semantics;
+- preserving obsolete C#-specific internal architecture in the Rust migration.
 
 ## Related issues
 
+- #64 `.ikeyd` authoring language/tooling
+- #80 hardcoded Windows/hotkeySKG binding migration
+- #99 generic/custom Behavior semantics
+- #135 typed runtime state
 - #144 portable DSL/backends umbrella
-- #145 Behavior IR and capability validation
+- #145 Behavior IR/capability foundation
 - #146 QMK backend
 - #147 ZMK backend
-- #148 Rust backend
+- #148 Rust profile/backend path
 - #149 cross-backend conformance suite
 - #150 canonical `.ikeyd` build input
-- #151 target extension syntax and capability semantics
+- #151 target extensions/capabilities
+- #161 QMK generated host hooks
