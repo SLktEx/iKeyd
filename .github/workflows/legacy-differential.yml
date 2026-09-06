@@ -9,6 +9,7 @@ on:
       - tests/legacy-binary/hotkeySKG.ahk.gpg.asc
       - .github/workflows/legacy-differential.yml
       - tools/analyze-legacy-compatibility.py
+      - tools/analyze-send-syntax.py
       - tools/apply-scenario-coverage.py
       - tools/validate-scenario-inventory-links.py
       - tests/compatibility/coverage-rules.json
@@ -143,6 +144,11 @@ jobs:
             --links tests/iKeyd.Compatibility.Tests/ScenarioInventoryLinks.json `
             --json (Join-Path $outputDir 'scenario-inventory-links.json') `
             --markdown (Join-Path $outputDir 'scenario-inventory-links.md')
+
+          python tools/analyze-send-syntax.py `
+            --matrix $matrix `
+            --json (Join-Path $outputDir 'send-syntax-inventory.json') `
+            --markdown (Join-Path $outputDir 'send-syntax-inventory.md')
 
       - name: Download pinned AutoHotkey v1.1.16.05 interpreter
         id: ahk
