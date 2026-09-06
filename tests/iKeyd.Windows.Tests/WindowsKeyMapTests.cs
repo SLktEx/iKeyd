@@ -18,15 +18,39 @@ public sealed class WindowsKeyMapTests
     [InlineData(WindowsKeyMap.OemAt, KeyCode.At)]
     [InlineData(WindowsKeyMap.Oem102, KeyCode.Ro)]
     [InlineData(WindowsKeyMap.OemYen, KeyCode.Yen)]
-    [InlineData(WindowsKeyMap.Convert, KeyCode.Henkan)]
-    [InlineData(WindowsKeyMap.NonConvert, KeyCode.Muhenkan)]
-    [InlineData(WindowsKeyMap.Kana, KeyCode.KatakanaHiragana)]
-    public void Physical_virtual_keys_resolve_directly_to_compact_ids(ushort virtualKey, KeyCode expected)
+    public void Character_virtual_keys_resolve_directly_to_compact_ids(ushort virtualKey, KeyCode expected)
     {
         var key = WindowsKeyMap.TryResolveKeyId(virtualKey);
 
         Assert.NotNull(key);
         Assert.True(key.Value.IsCompact);
+        Assert.Equal(expected, key.Value.Code);
+    }
+
+    [Theory]
+    [InlineData(WindowsKeyMap.Kana)]
+    [InlineData(WindowsKeyMap.Alt)]
+    [InlineData(WindowsKeyMap.Convert)]
+    [InlineData(WindowsKeyMap.NonConvert)]
+    [InlineData(WindowsKeyMap.Space)]
+    public void Layer_and_modifier_virtual_keys_are_not_legacy_character_key_ids(ushort virtualKey)
+    {
+        Assert.Null(WindowsKeyMap.TryResolveKeyId(virtualKey));
+    }
+
+    [Theory]
+    [InlineData(WindowsKeyMap.Kana, KeyCode.KatakanaHiragana)]
+    [InlineData(WindowsKeyMap.Convert, KeyCode.Henkan)]
+    [InlineData(WindowsKeyMap.NonConvert, KeyCode.Muhenkan)]
+    [InlineData(WindowsKeyMap.Space, KeyCode.Space)]
+    [InlineData(WindowsKeyMap.LeftControl, KeyCode.LeftControl)]
+    public void Full_physical_events_can_resolve_keys_excluded_from_legacy_character_lookup(
+        ushort virtualKey,
+        KeyCode expected)
+    {
+        var key = WindowsKeyMap.TryResolveKeyId(new KeyboardKey(virtualKey, 0));
+
+        Assert.NotNull(key);
         Assert.Equal(expected, key.Value.Code);
     }
 
@@ -65,5 +89,28 @@ public sealed class WindowsKeyMapTests
 
         Assert.NotNull(key);
         Assert.Equal(expected, key.Value.Code);
+    }
+
+    [Theory]
+    [InlineData(KeyCode.Ro, WindowsKeyMap.Oem102, 0x73, false)]
+    [InlineData(KeyCode.Yen, WindowsKeyMap.OemYen, 0x7D, false)]
+    [InlineData(KeyCode.Henkan, WindowsKeyMap.Convert, 0x79, false)]
+    [InlineData(KeyCode.Muhenkan, WindowsKeyMap.NonConvert, 0x7B, false)]
+    [InlineData(KeyCode.NumpadEnter, WindowsKeyMap.Enter, 0x1C, true)]
+    public void Compact_behavior_keys_translate_back_to_physical_windows_keys(
+        KeyCode code,
+        ushort virtualKey,
+        ushort scanCode,
+        bool extended)
+    {
+        Assert.True(WindowsKeyMap.TryGetKeyboardKey(code, out var key));
+        Assert.Equal(new KeyboardKey(virtualKey, scanCode, extended), key);
+    }
+
+    [Fact]
+    public void Jis_colon_character_uses_the_JIS_colon_virtual_key()
+    {
+        Assert.True(WindowsKeyMap.TryResolveCharacter(':', out var key));
+        Assert.Equal(WindowsKeyMap.OemPlus, key.VirtualKey);
     }
 }
