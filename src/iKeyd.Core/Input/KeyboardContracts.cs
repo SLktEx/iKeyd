@@ -13,7 +13,17 @@ public enum KeyEventOrigin
     OwnInjected
 }
 
-public readonly record struct KeyboardKey(ushort VirtualKey, ushort ScanCode, bool IsExtended = false);
+/// <summary>
+/// Describes a keyboard event. PreserveVirtualKeyWithScanCode is reserved for
+/// legacy Send forms such as {vkF3sc029}: AutoHotkey supplies both wVk and wScan
+/// without KEYEVENTF_SCANCODE, so Windows must not reinterpret the scan code into
+/// another virtual key. Ordinary scan-code injection keeps the default false.
+/// </summary>
+public readonly record struct KeyboardKey(
+    ushort VirtualKey,
+    ushort ScanCode,
+    bool IsExtended = false,
+    bool PreserveVirtualKeyWithScanCode = false);
 
 public readonly record struct KeyboardEvent(
     KeyboardKey Key,
