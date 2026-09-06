@@ -17,7 +17,7 @@
 </p>
 
 <p align="center">
-  <img src="docs/assets/brand/readme-hero.jpg" alt="iKeyd — I keyed it my way." width="100%">
+  <img src="docs/assets/brand/readme-hero.svg" alt="iKeyd — Your keyboard, your workflow." width="100%">
 </p>
 
 ---
@@ -36,6 +36,10 @@ It is the compiled successor to the existing `hotkeySKG` AutoHotkey v1 setup. Th
 - **IME-aware input** — preserve the Japanese-input behavior required by the existing workflow.
 - **Keyboard mouse** — mouse movement, clicks, scrolling, and media controls from the keyboard.
 - **Clipboard history** — tray-accessible clipboard history and paste flow.
+
+<p align="center">
+  <img src="docs/assets/brand/readme-features.svg" alt="iKeyd feature overview — keyboard, layers and combos, mouse, clipboard, and commands" width="100%">
+</p>
 
 The Windows runtime intentionally keeps compatibility quirks that are part of the captured `hotkeySKG` behavior instead of silently changing them.
 
@@ -85,6 +89,10 @@ Two configuration paths are documented while the project evolves:
 
 - [iKeyd DSL](docs/ikeyd-dsl.md) — the human-oriented configuration language.
 - [JSON configuration schema](docs/json-configuration.md) — the complete runtime configuration model and validation rules.
+
+<p align="center">
+  <img src="docs/assets/brand/readme-dsl.svg" alt="iKeyd DSL compilation flow from authoring format to compiled runtime" width="100%">
+</p>
 
 Additional references:
 

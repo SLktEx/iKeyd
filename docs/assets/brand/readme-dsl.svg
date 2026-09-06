@@ -1,0 +1,59 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="580" viewBox="0 0 1600 580" role="img" aria-labelledby="title desc">
+  <title id="title">iKeyd DSL compilation flow</title>
+  <desc id="desc">The iKeyd authoring DSL compiles to a runtime profile used by the compiled iKeyd executable.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#0B0F14"/><stop offset="1" stop-color="#0D1821"/></linearGradient>
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#78F4F3"/><stop offset="1" stop-color="#1DC9EA"/></linearGradient>
+    <pattern id="grid" width="54" height="54" patternUnits="userSpaceOnUse"><path d="M54 0H0V54" fill="none" stroke="#27485B" stroke-opacity=".13"/></pattern>
+  </defs>
+  <rect width="1600" height="580" fill="url(#bg)"/>
+  <rect width="1600" height="580" fill="url(#grid)"/>
+  <g font-family="Inter, system-ui, sans-serif">
+    <text x="76" y="88" fill="#E5E7EB" font-size="50" font-weight="700">Write intent. Compile behavior.</text>
+    <text x="78" y="129" fill="#7E8FA0" font-size="19">The human-friendly .ikeyd DSL compiles into the runtime profile — authoring metadata stays out of the hot path.</text>
+  </g>
+
+  <g transform="translate(76 178)">
+    <rect width="636" height="328" rx="24" fill="#0D161E" stroke="#28495C"/>
+    <circle cx="28" cy="28" r="6" fill="#FF675C"/><circle cx="48" cy="28" r="6" fill="#F6C34A"/><circle cx="68" cy="28" r="6" fill="#55CF7A"/>
+    <text x="96" y="34" fill="#728A98" font-family="ui-monospace, monospace" font-size="15">my-layout.ikeyd</text>
+    <g font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="20">
+      <text x="34" y="88" fill="#82C8D8">layout BASE {</text>
+      <text x="34" y="118" fill="#C1D7E1">    row Q W E</text>
+      <text x="34" y="148" fill="#C1D7E1">    row A S D</text>
+      <text x="34" y="178" fill="#82C8D8">}</text>
+      <text x="34" y="226" fill="#82C8D8">keymap BASE {</text>
+      <text x="34" y="256" fill="#55E5F1">    POS[1,1] = LT(NUM, Z)</text>
+      <text x="34" y="286" fill="#C1D7E1">    POS[1,2] = &quot;w&quot;</text>
+      <text x="34" y="316" fill="#82C8D8">}</text>
+    </g>
+  </g>
+
+  <g stroke="#44CDE5" stroke-width="4" fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M754 336H862"/><path d="M842 324l20 12-20 12"/>
+    <path d="M1048 336H1156"/><path d="M1136 324l20 12-20 12"/>
+  </g>
+
+  <g transform="translate(872 245)" font-family="Inter, system-ui, sans-serif">
+    <rect width="166" height="182" rx="24" fill="#10222D" stroke="#2A6077"/>
+    <text x="42" y="76" fill="#5BE7F3" font-family="ui-monospace, monospace" font-size="48" font-weight="700">{}</text>
+    <text x="49" y="121" fill="#E5E7EB" font-size="20" font-weight="600">compile</text>
+    <text x="55" y="148" fill="#7E8FA0" font-size="15">profile</text>
+  </g>
+
+  <g transform="translate(1166 207)" font-family="Inter, system-ui, sans-serif">
+    <rect width="354" height="258" rx="26" fill="#0F1C26" stroke="#2A6077"/>
+    <rect x="32" y="32" width="86" height="86" rx="22" fill="#102B38" stroke="#357994"/>
+    <path d="M52 91l24-31 15 17 13-10 0 18-27 22z" fill="url(#accent)" opacity=".95"/>
+    <text x="140" y="67" fill="#E5E7EB" font-size="30" font-weight="650">iKeyd.exe</text>
+    <text x="141" y="96" fill="#7E8FA0" font-size="16">compiled runtime</text>
+    <g font-size="14" font-weight="550" fill="#B6D5E1">
+      <g><rect x="32" y="146" width="127" height="35" rx="14" fill="#112B37" stroke="#28576C"/><text x="48" y="169">Keyboard</text></g>
+      <g><rect x="176" y="146" width="120" height="35" rx="14" fill="#112B37" stroke="#28576C"/><text x="199" y="169">Mouse</text></g>
+      <g><rect x="32" y="194" width="127" height="35" rx="14" fill="#112B37" stroke="#28576C"/><text x="49" y="217">Clipboard</text></g>
+      <g><rect x="176" y="194" width="120" height="35" rx="14" fill="#112B37" stroke="#28576C"/><text x="194" y="217">Window</text></g>
+    </g>
+  </g>
+
+  <text x="873" y="493" fill="#6F91A2" font-family="Inter, system-ui, sans-serif" font-size="15">Human-readable authoring on the left. Minimal runtime work on the right.</text>
+</svg>
