@@ -1,0 +1,23 @@
+{
+  "id": "runtime-function-ms-u-ctrl-shift-home",
+  "description": "M then Space plus U emits Ctrl+Shift+Home through withFuncKey mskey.",
+  "initialState": { "mode": "S", "ime": "off", "layers": ["M", "S"] },
+  "input": [
+    { "atMs": 10, "kind": "keyDown", "key": "U" },
+    { "atMs": 11, "kind": "keyUp", "key": "U" }
+  ],
+  "expected": {
+    "events": [
+      { "kind": "keyDown", "key": "VK_A2" },
+      { "kind": "keyDown", "key": "VK_A0" },
+      { "kind": "keyDown", "key": "Home" },
+      { "kind": "keyUp", "key": "Home" },
+      { "kind": "keyUp", "key": "VK_A2" },
+      { "kind": "keyUp", "key": "VK_A0" }
+    ]
+  },
+  "tags": ["legacy", "runtime-long-tail", "function-layer", "send-event-diff", "hosted-windows"],
+  "inventoryIds": ["legacy-send-64cd1136f9"],
+  "requiredEnvironment": ["hosted-windows"],
+  "oracleTargets": ["compiled-exe", "ahk-source", "ikeyd-runtime"]
+}

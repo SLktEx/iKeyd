@@ -1,0 +1,24 @@
+{
+  "id": "runtime-function-mh-slash-comment",
+  "description": "M then H plus Slash emits the legacy comment skeleton and three Left presses.",
+  "initialState": { "mode": "S", "ime": "off", "layers": ["M", "H"] },
+  "input": [
+    { "atMs": 10, "kind": "keyDown", "key": "Slash" },
+    { "atMs": 11, "kind": "keyUp", "key": "Slash" }
+  ],
+  "expected": {
+    "text": "/*  */",
+    "events": [
+      { "kind": "keyDown", "key": "Left" },
+      { "kind": "keyUp", "key": "Left" },
+      { "kind": "keyDown", "key": "Left" },
+      { "kind": "keyUp", "key": "Left" },
+      { "kind": "keyDown", "key": "Left" },
+      { "kind": "keyUp", "key": "Left" }
+    ]
+  },
+  "tags": ["legacy", "runtime-long-tail", "function-layer", "repeat", "send-event-diff", "hosted-windows"],
+  "inventoryIds": ["legacy-send-cb4d74562e"],
+  "requiredEnvironment": ["hosted-windows"],
+  "oracleTargets": ["compiled-exe", "ahk-source", "ikeyd-runtime"]
+}
