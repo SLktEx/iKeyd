@@ -247,6 +247,9 @@ internal sealed class IKeydRuntimeHandler : IKeyboardEventHandler, IMacroActionD
 
     private bool DispatchFunctionKey(KeyId key, LayerState state)
     {
+        if (TrySwitchLegacyModeKey(key.Code))
+            return true;
+
         if (LegacyFunctionSendMap.TryResolve(key.Code, state, out var legacySend))
         {
             if (legacySend.Length != 0)
@@ -305,6 +308,9 @@ internal sealed class IKeydRuntimeHandler : IKeyboardEventHandler, IMacroActionD
     // stringify LayerState on every event.
     private bool DispatchFunctionKey(KeyId key, string state)
     {
+        if (TrySwitchLegacyModeKey(key.Code))
+            return true;
+
         if (LegacyFunctionSendMap.TryResolve(key.Code, state, out var legacySend))
         {
             if (legacySend.Length != 0)
@@ -361,6 +367,25 @@ internal sealed class IKeydRuntimeHandler : IKeyboardEventHandler, IMacroActionD
         }
 
         return false;
+    }
+
+    private bool TrySwitchLegacyModeKey(KeyCode key)
+    {
+        InputMode? target = key switch
+        {
+            KeyCode.Digit1 => InputMode.S,
+            KeyCode.Digit2 => InputMode.R,
+            KeyCode.Digit3 => InputMode.T,
+            KeyCode.Digit4 => InputMode.K,
+            _ => null
+        };
+
+        if (target is null)
+            return false;
+
+        FlushAllPending();
+        _mode = _mode.SwitchTo(target.Value);
+        return true;
     }
 
     private bool DispatchMouseMedia(KeyId key)
