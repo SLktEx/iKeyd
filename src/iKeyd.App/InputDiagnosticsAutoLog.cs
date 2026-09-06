@@ -17,7 +17,7 @@ internal sealed class InputDiagnosticsAutoLog : IDisposable
     private readonly string _logPath;
     private readonly string _previousPath;
     private readonly string _tempPath;
-    private readonly Timer _timer;
+    private readonly System.Threading.Timer _timer;
     private bool _disposed;
 
     public InputDiagnosticsAutoLog(
@@ -38,7 +38,7 @@ internal sealed class InputDiagnosticsAutoLog : IDisposable
         if (interval <= TimeSpan.Zero)
             throw new ArgumentOutOfRangeException(nameof(flushInterval));
 
-        _timer = new Timer(
+        _timer = new System.Threading.Timer(
             static state => ((InputDiagnosticsAutoLog)state!).FlushBestEffort(),
             this,
             interval,
