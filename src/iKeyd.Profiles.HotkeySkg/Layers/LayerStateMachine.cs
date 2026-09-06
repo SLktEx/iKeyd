@@ -235,7 +235,10 @@ public static class LayerStateMachine
         if (state.Layers.IsExact(LayerKey.H))
             return Result(state.MarkConsumed(), [LayerAction.Henkan]);
         if (state.Layers.IsExact(LayerKey.S))
-            return Result(state.MarkConsumed(), [LayerAction.CtrlEsc]);
+            // The pinned compiled EXE leaves the Space layer unconsumed here, so
+            // releasing Space emits a normal Space after Ctrl+Esc. The original
+            // AHK source differs; that divergence is recorded in the scenario.
+            return Result(state, [LayerAction.CtrlEsc]);
         if (!state.Layers.Contains(LayerKey.K))
             return Result(state with { Layers = state.Layers.Press(LayerKey.K) });
         if (state.Layers.IsExact(LayerKey.K))
