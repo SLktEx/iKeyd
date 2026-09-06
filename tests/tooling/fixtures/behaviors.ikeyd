@@ -9,6 +9,11 @@ layer NAV {
     POS.J = key(Down)
     POS.K = key(Up)
     POS.L = key(Right)
+    POS.U = mouse_move(-30, 10)
+    POS.I = mouse_click(Left)
+    POS.O = scroll(Up)
+    POS.P = media(PlayPause)
+    POS.At = window(LeftHalf)
 }
 
 behavior POS.Space = layer_tap(NAV, Space)
@@ -17,7 +22,7 @@ behavior POS.Yen = layer(NAV)
 behavior POS.Muhenkan = modifier(Ctrl)
 
 behavior POS.Henkan {
-    tap = key(Enter)
+    tap = window(ToggleMaximize)
     hold = modifier(Shift)
     timeout = 200ms
     interrupt = tap
