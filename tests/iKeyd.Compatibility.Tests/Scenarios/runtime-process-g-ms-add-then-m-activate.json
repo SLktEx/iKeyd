@@ -1,0 +1,27 @@
+{
+  "id": "runtime-process-g-ms-add-then-m-activate",
+  "description": "M then S plus G adds the active window to the current legacy group; after releasing S, M plus G activates the next grouped window.",
+  "initialState": { "mode": "S", "ime": "off", "layers": ["M"] },
+  "input": [
+    { "atMs": 10, "kind": "keyDown", "key": "Space" },
+    { "atMs": 20, "kind": "keyDown", "key": "G" },
+    { "atMs": 21, "kind": "keyUp", "key": "G" },
+    { "atMs": 30, "kind": "keyUp", "key": "Space" },
+    { "atMs": 40, "kind": "keyDown", "key": "G" },
+    { "atMs": 41, "kind": "keyUp", "key": "G" }
+  ],
+  "expected": {
+    "actions": [
+      { "kind": "window", "value": "activate" }
+    ]
+  },
+  "tags": ["legacy", "runtime-long-tail", "process", "window-group", "deterministic"],
+  "inventoryIds": [
+    "legacy-function-9917abb78c",
+    "legacy-branch-570f3e3334",
+    "legacy-window-operation-abb36eed6d",
+    "legacy-branch-55cf9cf5a0"
+  ],
+  "requiredEnvironment": ["deterministic-windows-runtime"],
+  "oracleTargets": ["ikeyd-runtime"]
+}

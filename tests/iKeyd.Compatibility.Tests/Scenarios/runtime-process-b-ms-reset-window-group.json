@@ -1,0 +1,29 @@
+{
+  "id": "runtime-process-b-ms-reset-window-group",
+  "description": "After M then S plus G adds the active window, M then S plus B resets/advances the group so a following M plus G has nothing to activate.",
+  "initialState": { "mode": "S", "ime": "off", "layers": ["M"] },
+  "input": [
+    { "atMs": 10, "kind": "keyDown", "key": "Space" },
+    { "atMs": 20, "kind": "keyDown", "key": "G" },
+    { "atMs": 21, "kind": "keyUp", "key": "G" },
+    { "atMs": 30, "kind": "keyUp", "key": "Space" },
+    { "atMs": 40, "kind": "keyDown", "key": "Space" },
+    { "atMs": 50, "kind": "keyDown", "key": "B" },
+    { "atMs": 51, "kind": "keyUp", "key": "B" },
+    { "atMs": 60, "kind": "keyUp", "key": "Space" },
+    { "atMs": 70, "kind": "keyDown", "key": "G" },
+    { "atMs": 71, "kind": "keyUp", "key": "G" }
+  ],
+  "expected": { "actions": [] },
+  "tags": ["legacy", "runtime-long-tail", "process", "window-group", "deterministic"],
+  "inventoryIds": [
+    "legacy-function-9917abb78c",
+    "legacy-branch-570f3e3334",
+    "legacy-window-operation-abb36eed6d",
+    "legacy-function-1af3169be4",
+    "legacy-branch-4ce5879762",
+    "legacy-branch-55cf9cf5a0"
+  ],
+  "requiredEnvironment": ["deterministic-windows-runtime"],
+  "oracleTargets": ["ikeyd-runtime"]
+}
