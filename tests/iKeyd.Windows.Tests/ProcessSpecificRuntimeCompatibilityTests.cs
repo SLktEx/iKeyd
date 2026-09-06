@@ -1,40 +1,7 @@
-from pathlib import Path
-
-
-def replace_once(path: str, old: str, new: str) -> None:
-    p = Path(path)
-    text = p.read_text(encoding="utf-8")
-    count = text.count(old)
-    if count != 1:
-        raise SystemExit(f"{path}: expected one match, found {count}: {old[:100]!r}")
-    p.write_text(text.replace(old, new, 1), encoding="utf-8")
-
-runtime = "src/iKeyd.App/IKeydRuntimeHandler.cs"
-replace_once(runtime,
-    "using iKeyd.Core.Chords;",
-    "using System.Runtime.InteropServices;\nusing iKeyd.Core.Chords;")
-replace_once(runtime,
-    "internal sealed class IKeydRuntimeHandler : IKeyboardEventHandler, IMacroActionDispatcher, IDisposable\n{",
-    "internal sealed class IKeydRuntimeHandler : IKeyboardEventHandler, IMacroActionDispatcher, IDisposable\n{\n    private const uint WmCommand = 0x0111;")
-replace_once(runtime,
-    "    private long _timerDueAt;\n    private bool _disposed;",
-    "    private long _timerDueAt;\n    private bool _suspended;\n    private bool _disposed;")
-replace_once(runtime,
-    '''    public void SetMode(InputMode mode)\n    {''',
-    '''    internal bool IsSuspended\n    {\n        get\n        {\n            lock (_gate)\n                return _suspended;\n        }\n    }\n\n    public void SetMode(InputMode mode)\n    {''')
-replace_once(runtime,
-    '''            if (_disposed)\n                return KeyboardDisposition.PassThrough;\n\n            if (TryHandleLayerKey(keyboardEvent))''',
-    '''            if (_disposed)\n                return KeyboardDisposition.PassThrough;\n\n            if (TryHandleSuspendToggle(keyboardEvent))\n                return KeyboardDisposition.Suppress;\n\n            if (_suspended)\n            {\n                if (keyboardEvent.Kind == KeyEventKind.Up &&\n                    _suppressedKeys.Remove(keyboardEvent.Key.VirtualKey))\n                    return KeyboardDisposition.Suppress;\n                return KeyboardDisposition.PassThrough;\n            }\n\n            if (TryHandleContextHotkey(keyboardEvent))\n                return KeyboardDisposition.Suppress;\n\n            if (TryHandleLayerKey(keyboardEvent))''')
-replace_once(runtime,
-    '''    private bool TryHandleLayerKey(KeyboardEvent keyboardEvent)\n    {''',
-    '''    private bool TryHandleSuspendToggle(KeyboardEvent keyboardEvent)\n    {\n        if (keyboardEvent.Key.VirtualKey != WindowsKeyMap.Escape ||\n            keyboardEvent.Kind != KeyEventKind.Down ||\n            !_keyboardState.IsVirtualKeyPressed(WindowsKeyMap.Control) ||\n            _keyboardState.IsVirtualKeyPressed(WindowsKeyMap.Alt) ||\n            _keyboardState.IsVirtualKeyPressed(WindowsKeyMap.Shift) ||\n            _keyboardState.IsVirtualKeyPressed(WindowsKeyMap.LeftWin) ||\n            _keyboardState.IsVirtualKeyPressed(0x5C))\n            return false;\n\n        FlushAllPending();\n        _suspended = !_suspended;\n        _suppressedKeys.Add(WindowsKeyMap.Escape);\n        return true;\n    }\n\n    private bool TryHandleContextHotkey(KeyboardEvent keyboardEvent)\n    {\n        if (keyboardEvent.Kind != KeyEventKind.Down)\n            return false;\n\n        var window = _desktop.GetActiveWindow();\n        if (!_desktop.IsWindow(window))\n            return false;\n\n        var className = _desktop.GetWindowClass(window);\n        if (string.IsNullOrEmpty(className))\n            return false;\n\n        var ctrl = _keyboardState.IsVirtualKeyPressed(WindowsKeyMap.Control);\n        var alt = _keyboardState.IsVirtualKeyPressed(WindowsKeyMap.Alt);\n        var shift = _keyboardState.IsVirtualKeyPressed(WindowsKeyMap.Shift);\n        var win = _keyboardState.IsVirtualKeyPressed(WindowsKeyMap.LeftWin) ||\n                  _keyboardState.IsVirtualKeyPressed(0x5C);\n\n        if (string.Equals(className, "ConsoleWindowClass", StringComparison.Ordinal) &&\n            ctrl && !alt && !shift && !win)\n        {\n            if (keyboardEvent.Key.VirtualKey == (ushort)'V')\n            {\n                FlushAllPending();\n                _send.Send("!{Space}ep");\n                _suppressedKeys.Add(keyboardEvent.Key.VirtualKey);\n                return true;\n            }\n\n            if (keyboardEvent.Key.VirtualKey == (ushort)'X')\n            {\n                FlushAllPending();\n                _send.Send("!{Space}ek");\n                _suppressedKeys.Add(keyboardEvent.Key.VirtualKey);\n                return true;\n            }\n        }\n\n        if (string.Equals(className, "gsview_class", StringComparison.Ordinal) &&\n            alt && !ctrl && !shift && !win &&\n            keyboardEvent.Key.VirtualKey == (ushort)'E')\n        {\n            FlushAllPending();\n            NativeMethods.PostMessageW(window.Value, WmCommand, 105, 0);\n            _suppressedKeys.Add(keyboardEvent.Key.VirtualKey);\n            return true;\n        }\n\n        return false;\n    }\n\n    private bool TryHandleLayerKey(KeyboardEvent keyboardEvent)\n    {''')
-replace_once(runtime,
-    '''    private void ThrowIfDisposed()\n        => ObjectDisposedException.ThrowIf(_disposed, this);\n}''',
-    '''    private void ThrowIfDisposed()\n        => ObjectDisposedException.ThrowIf(_disposed, this);\n\n    private static class NativeMethods\n    {\n        [DllImport("user32.dll", SetLastError = true)]\n        [return: MarshalAs(UnmanagedType.Bool)]\n        public static extern bool PostMessageW(nint window, uint message, nuint wParam, nint lParam);\n    }\n}''')
-
-Path("tests/iKeyd.Windows.Tests/ProcessSpecificRuntimeCompatibilityTests.cs").write_text(r'''using iKeyd.App;
+using iKeyd.App;
 using iKeyd.Core.Desktop;
 using iKeyd.Core.Input;
+using iKeyd.Windows.Input;
 using Xunit;
 
 namespace iKeyd.Windows.Tests;
@@ -79,8 +46,7 @@ public sealed class ProcessSpecificRuntimeCompatibilityTests
 
         Assert.Equal(KeyboardDisposition.Suppress, disposition);
         Assert.Contains(keyboard.Events, item => item.Key.VirtualKey == WindowsKeyMap.Space && item.Kind == KeyEventKind.Down);
-        Assert.Contains(keyboard.Events, item => item.Key.VirtualKey == (ushort)'E' && item.Kind == KeyEventKind.Down);
-        Assert.Contains(keyboard.Events, item => item.Key.VirtualKey == (ushort)finalKey && item.Kind == KeyEventKind.Down);
+        Assert.Equal($"e{char.ToLowerInvariant(finalKey)}", keyboard.Text);
     }
 
     [Fact]
@@ -156,6 +122,7 @@ public sealed class ProcessSpecificRuntimeCompatibilityTests
     private sealed class RecordingKeyboardOutput : IKeyboardOutput
     {
         public List<KeyboardEvent> Events { get; } = [];
+        public string Text { get; private set; } = string.Empty;
         public void SendKey(KeyboardKey key, KeyEventKind kind)
             => Events.Add(new KeyboardEvent(key, kind, KeyEventOrigin.OwnInjected, 0));
         public void SendKeyPress(KeyboardKey key)
@@ -163,7 +130,7 @@ public sealed class ProcessSpecificRuntimeCompatibilityTests
             SendKey(key, KeyEventKind.Down);
             SendKey(key, KeyEventKind.Up);
         }
-        public void SendText(string text) { }
+        public void SendText(string text) => Text += text;
         public bool IsToggleOn(ushort virtualKey) => false;
     }
 
@@ -198,4 +165,3 @@ public sealed class ProcessSpecificRuntimeCompatibilityTests
         public void SendMediaCommand(DesktopMediaCommand command) { }
     }
 }
-''', encoding="utf-8")

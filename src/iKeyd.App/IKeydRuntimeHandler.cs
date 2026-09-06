@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using iKeyd.Core.Chords;
 using iKeyd.Core.Desktop;
 using iKeyd.Core.Input;
@@ -11,6 +12,7 @@ namespace iKeyd.App;
 
 internal sealed class IKeydRuntimeHandler : IKeyboardEventHandler, IMacroActionDispatcher, IDisposable
 {
+    private const uint WmCommand = 0x0111;
     private readonly object _gate = new();
     private readonly IKeydConfiguration _configuration;
     private readonly IInputMethod _inputMethod;
@@ -28,6 +30,7 @@ internal sealed class IKeydRuntimeHandler : IKeyboardEventHandler, IMacroActionD
     private LayerRuntimeState _layers = LayerRuntimeState.Empty;
     private KeymapMode? _timerMode;
     private long _timerDueAt;
+    private bool _suspended;
     private bool _disposed;
 
     public IKeydRuntimeHandler(
@@ -59,6 +62,15 @@ internal sealed class IKeydRuntimeHandler : IKeyboardEventHandler, IMacroActionD
         }
     }
 
+    internal bool IsSuspended
+    {
+        get
+        {
+            lock (_gate)
+                return _suspended;
+        }
+    }
+
     public void SetMode(InputMode mode)
     {
         lock (_gate)
@@ -78,6 +90,20 @@ internal sealed class IKeydRuntimeHandler : IKeyboardEventHandler, IMacroActionD
         {
             if (_disposed)
                 return KeyboardDisposition.PassThrough;
+
+            if (TryHandleSuspendToggle(keyboardEvent))
+                return KeyboardDisposition.Suppress;
+
+            if (_suspended)
+            {
+                if (keyboardEvent.Kind == KeyEventKind.Up &&
+                    _suppressedKeys.Remove(keyboardEvent.Key.VirtualKey))
+                    return KeyboardDisposition.Suppress;
+                return KeyboardDisposition.PassThrough;
+            }
+
+            if (TryHandleContextHotkey(keyboardEvent))
+                return KeyboardDisposition.Suppress;
 
             if (TryHandleLayerKey(keyboardEvent))
                 return KeyboardDisposition.Suppress;
@@ -158,6 +184,75 @@ internal sealed class IKeydRuntimeHandler : IKeyboardEventHandler, IMacroActionD
             _suppressedKeys.Clear();
         }
         _chordTimer.Dispose();
+    }
+
+    private bool TryHandleSuspendToggle(KeyboardEvent keyboardEvent)
+    {
+        if (keyboardEvent.Key.VirtualKey != WindowsKeyMap.Escape ||
+            keyboardEvent.Kind != KeyEventKind.Down ||
+            !_keyboardState.IsVirtualKeyPressed(WindowsKeyMap.Control) ||
+            _keyboardState.IsVirtualKeyPressed(WindowsKeyMap.Alt) ||
+            _keyboardState.IsVirtualKeyPressed(WindowsKeyMap.Shift) ||
+            _keyboardState.IsVirtualKeyPressed(WindowsKeyMap.LeftWin) ||
+            _keyboardState.IsVirtualKeyPressed(0x5C))
+            return false;
+
+        FlushAllPending();
+        _suspended = !_suspended;
+        _suppressedKeys.Add(WindowsKeyMap.Escape);
+        return true;
+    }
+
+    private bool TryHandleContextHotkey(KeyboardEvent keyboardEvent)
+    {
+        if (keyboardEvent.Kind != KeyEventKind.Down)
+            return false;
+
+        var window = _desktop.GetActiveWindow();
+        if (!_desktop.IsWindow(window))
+            return false;
+
+        var className = _desktop.GetWindowClass(window);
+        if (string.IsNullOrEmpty(className))
+            return false;
+
+        var ctrl = _keyboardState.IsVirtualKeyPressed(WindowsKeyMap.Control);
+        var alt = _keyboardState.IsVirtualKeyPressed(WindowsKeyMap.Alt);
+        var shift = _keyboardState.IsVirtualKeyPressed(WindowsKeyMap.Shift);
+        var win = _keyboardState.IsVirtualKeyPressed(WindowsKeyMap.LeftWin) ||
+                  _keyboardState.IsVirtualKeyPressed(0x5C);
+
+        if (string.Equals(className, "ConsoleWindowClass", StringComparison.Ordinal) &&
+            ctrl && !alt && !shift && !win)
+        {
+            if (keyboardEvent.Key.VirtualKey == (ushort)'V')
+            {
+                FlushAllPending();
+                _send.Send("!{Space}ep");
+                _suppressedKeys.Add(keyboardEvent.Key.VirtualKey);
+                return true;
+            }
+
+            if (keyboardEvent.Key.VirtualKey == (ushort)'X')
+            {
+                FlushAllPending();
+                _send.Send("!{Space}ek");
+                _suppressedKeys.Add(keyboardEvent.Key.VirtualKey);
+                return true;
+            }
+        }
+
+        if (string.Equals(className, "gsview_class", StringComparison.Ordinal) &&
+            alt && !ctrl && !shift && !win &&
+            keyboardEvent.Key.VirtualKey == (ushort)'E')
+        {
+            FlushAllPending();
+            NativeMethods.PostMessageW(window.Value, WmCommand, 105, 0);
+            _suppressedKeys.Add(keyboardEvent.Key.VirtualKey);
+            return true;
+        }
+
+        return false;
     }
 
     private bool TryHandleLayerKey(KeyboardEvent keyboardEvent)
@@ -550,4 +645,11 @@ internal sealed class IKeydRuntimeHandler : IKeyboardEventHandler, IMacroActionD
 
     private void ThrowIfDisposed()
         => ObjectDisposedException.ThrowIf(_disposed, this);
+
+    private static class NativeMethods
+    {
+        [DllImport("user32.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static extern bool PostMessageW(nint window, uint message, nuint wParam, nint lParam);
+    }
 }
