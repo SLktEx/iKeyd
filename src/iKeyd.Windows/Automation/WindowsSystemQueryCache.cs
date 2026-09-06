@@ -9,7 +9,7 @@ public sealed class WindowsSystemQueryCache : ISystemQuerySnapshot, IDisposable
     private readonly ISystemQueryProvider _provider;
     private readonly string[] _keys;
     private readonly SystemQuerySnapshotStore _snapshot = new();
-    private readonly Timer? _timer;
+    private readonly System.Threading.Timer? _timer;
     private int _refreshing;
     private bool _disposed;
 
@@ -31,7 +31,7 @@ public sealed class WindowsSystemQueryCache : ISystemQuerySnapshot, IDisposable
             var interval = refreshInterval ?? DefaultRefreshInterval;
             if (interval <= TimeSpan.Zero)
                 throw new ArgumentOutOfRangeException(nameof(refreshInterval), "Refresh interval must be positive.");
-            _timer = new Timer(_ => Refresh(), null, interval, interval);
+            _timer = new System.Threading.Timer(_ => Refresh(), null, interval, interval);
         }
     }
 
