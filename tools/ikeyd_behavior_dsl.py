@@ -48,6 +48,7 @@ def _compact_key_map(base: Any) -> dict[str, str]:
         "rwin": "RightGui",
         "semicolon": "SColon",
         "period": "Dot",
+        "at": "At",
     }
     result = {key.casefold(): key for key in keys}
     result.update(aliases)
