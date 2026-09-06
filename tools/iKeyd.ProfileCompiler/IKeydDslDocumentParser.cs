@@ -10,7 +10,15 @@ internal static class IKeydDslDocumentParser
         var state = IKeydStateDslParser.Extract(text, sourcePath);
         var mouse = IKeydMouseDslParser.Extract(state.SourceWithoutState, sourcePath);
         var targets = IKeydTargetExtensionParser.Extract(mouse.SourceWithoutMouse, sourcePath);
-        var profile = IKeydDslParser.Parse(targets.SourceWithoutTargetBlocks, sourcePath, state.Profile);
+        var parsed = IKeydDslParser.Parse(targets.SourceWithoutTargetBlocks, sourcePath);
+        var profile = new AutomationProfile(
+            parsed.ChordWindowMs,
+            parsed.Keymaps.Values,
+            parsed.StartupMode,
+            parsed.Hotkeys,
+            parsed.BehaviorDefinitions.Values,
+            parsed.Clipboard,
+            state.Profile);
         ValidateCompileTimeBehaviorInvocations(profile, sourcePath);
         return new IKeydDslDocument(profile, mouse.Profile, targets.Extensions);
     }
