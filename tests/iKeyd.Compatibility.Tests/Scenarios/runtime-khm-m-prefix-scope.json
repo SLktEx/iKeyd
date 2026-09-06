@@ -1,0 +1,29 @@
+{
+  "id": "runtime-khm-m-prefix-scope",
+  "description": "K+H+M with letter M probes whether the legacy Ctrl prefix remains held across {HOME}+{END}.",
+  "initialState": { "mode": "S", "ime": "off", "modifiers": [] },
+  "input": [
+    { "atMs": 0, "kind": "keyDown", "key": "KANA" },
+    { "atMs": 20, "kind": "keyUp", "key": "KANA" },
+    { "atMs": 40, "kind": "keyDown", "key": "CONVERT" },
+    { "atMs": 60, "kind": "keyDown", "key": "NONCONVERT" },
+    { "atMs": 80, "kind": "keyDown", "key": "M" },
+    { "atMs": 100, "kind": "keyUp", "key": "M" },
+    { "atMs": 120, "kind": "keyUp", "key": "NONCONVERT" },
+    { "atMs": 140, "kind": "keyUp", "key": "CONVERT" }
+  ],
+  "expected": {
+    "text": "",
+    "events": [
+      { "kind": "keyDown", "key": "CTRL" },
+      { "kind": "keyDown", "key": "HOME" },
+      { "kind": "keyUp", "key": "HOME" },
+      { "kind": "keyDown", "key": "SHIFT" },
+      { "kind": "keyDown", "key": "END" },
+      { "kind": "keyUp", "key": "END" },
+      { "kind": "keyUp", "key": "SHIFT" },
+      { "kind": "keyUp", "key": "CTRL" }
+    ]
+  },
+  "tags": ["hosted-legacy", "hosted-legacy-runtime", "function-prefix", "long-tail"]
+}
