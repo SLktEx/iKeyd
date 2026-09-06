@@ -17,6 +17,7 @@ on:
       - 'src/iKeyd.Core/**'
       - 'src/iKeyd.Windows/**'
       - 'tools/iKeyd.ProfileCompiler/**'
+      - 'tools/iKeyd.MouseProfileCompiler/**'
       - 'config/**'
 
 permissions:
