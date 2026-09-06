@@ -1,22 +1,24 @@
 using System.Text;
 using iKeyd.Core.Configuration;
 
-internal static partial class ProfileCompiler
+internal static class TypedProfileCompiler
 {
+    private const int CompactKeyCount = 54; // KeyCode.A..KeyCode.At
+    private const int MaxBehaviorStatementDepth = 32;
+
     public static string CompileFile(string inputPath)
     {
         if (string.IsNullOrWhiteSpace(inputPath))
             throw new ArgumentException("Profile input path must not be empty.", nameof(inputPath));
 
         var extension = Path.GetExtension(inputPath);
-        var text = File.ReadAllText(inputPath);
-        if (extension.Equals(".ikeyd", StringComparison.OrdinalIgnoreCase))
-            return Compile(IKeydDslParser.Parse(text, inputPath));
-        if (extension.Equals(".json", StringComparison.OrdinalIgnoreCase))
-            return Compile(text);
+        if (!extension.Equals(".ikeyd", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidDataException(
+                $"Typed profile compiler expects a .ikeyd source file, got '{inputPath}'.");
+        }
 
-        throw new InvalidDataException(
-            $"Unsupported profile input '{inputPath}'. Expected a .ikeyd source file or legacy .json profile.");
+        return Compile(IKeydDslParser.Parse(File.ReadAllText(inputPath), inputPath));
     }
 
     public static string Compile(AutomationProfile profile)
@@ -111,13 +113,16 @@ internal static partial class ProfileCompiler
         builder.AppendLine("                    behaviorMappings: new BehaviorMappingProfile[]");
         builder.AppendLine("                    {");
         foreach (var mapping in keymap.BehaviorMappings)
-            EmitBehaviorMapping(builder, mapping);
+            EmitBehaviorMapping(builder, keymap.Name, mapping);
         builder.AppendLine("                    }),");
     }
 
-    private static void EmitBehaviorMapping(StringBuilder builder, BehaviorMappingProfile mapping)
+    private static void EmitBehaviorMapping(
+        StringBuilder builder,
+        string mode,
+        BehaviorMappingProfile mapping)
     {
-        var key = ParseKey(mapping.Key.Value, "behaviors");
+        var key = ParseKey(mapping.Key.Value, $"behaviors.{mode}");
         var invocation = mapping.Invocation;
         builder.AppendLine($"                        new BehaviorMappingProfile({key.Expression}, new BehaviorInvocationProfile({Literal(invocation.Name)}, new string[]");
         builder.AppendLine("                        {");
@@ -216,4 +221,88 @@ internal static partial class ProfileCompiler
         builder.AppendLine("        return Keymap<string>.FromCompiledTables(single, chords);");
         builder.AppendLine("    }");
     }
+
+    private static KeyInfo ParseKey(string key, string location)
+    {
+        if (string.IsNullOrWhiteSpace(key))
+            throw new InvalidDataException($"{location} contains an empty key name.");
+        var normalized = key.Trim().ToUpperInvariant();
+        string? token = null;
+        var code = 0;
+        if (normalized.Length == 1 && normalized[0] is >= 'A' and <= 'Z')
+        {
+            token = normalized;
+            code = 1 + normalized[0] - 'A';
+        }
+        else if (normalized.Length == 1 && normalized[0] is >= '0' and <= '9')
+        {
+            token = $"Digit{normalized}";
+            code = 27 + normalized[0] - '0';
+        }
+        else if (normalized.Length is 2 or 3 && normalized[0] == 'F' &&
+                 int.TryParse(normalized.AsSpan(1), out var functionNumber) &&
+                 functionNumber is >= 1 and <= 12)
+        {
+            token = normalized;
+            code = 37 + functionNumber - 1;
+        }
+        else
+        {
+            (token, code) = normalized switch
+            {
+                "SCOLON" => ("SColon", 49),
+                "COLON" => ("Colon", 50),
+                "COMMA" => ("Comma", 51),
+                "DOT" => ("Dot", 52),
+                "SLASH" => ("Slash", 53),
+                "AT" => ("At", 54),
+                _ => (null, 0),
+            };
+        }
+
+        if (token is null || code is < 1 or > CompactKeyCount)
+            throw new InvalidDataException($"{location} contains unsupported key '{key}' for the compiled Windows profile.");
+        return new KeyInfo($"new KeyId(KeyCode.{token})", code);
+    }
+
+    private static int GetCompactChordIndex(int firstCode, int secondCode)
+    {
+        var firstIndex = firstCode - 1;
+        var secondIndex = secondCode - 1;
+        if (firstIndex > secondIndex)
+            (firstIndex, secondIndex) = (secondIndex, firstIndex);
+        var rowOffset = firstIndex * CompactKeyCount - firstIndex * (firstIndex - 1) / 2;
+        return rowOffset + secondIndex - firstIndex;
+    }
+
+    private static string NullableLiteral(string? value) => value is null ? "null" : Literal(value);
+    private static string BoolLiteral(bool value) => value ? "true" : "false";
+
+    private static string Literal(string value)
+    {
+        var builder = new StringBuilder(value.Length + 2);
+        builder.Append('"');
+        foreach (var character in value)
+        {
+            switch (character)
+            {
+                case '\\': builder.Append("\\\\"); break;
+                case '"': builder.Append("\\\""); break;
+                case '\r': builder.Append("\\r"); break;
+                case '\n': builder.Append("\\n"); break;
+                case '\t': builder.Append("\\t"); break;
+                case '\0': builder.Append("\\0"); break;
+                default:
+                    if (char.IsControl(character))
+                        builder.Append("\\u").Append(((int)character).ToString("x4"));
+                    else
+                        builder.Append(character);
+                    break;
+            }
+        }
+        builder.Append('"');
+        return builder.ToString();
+    }
+
+    private readonly record struct KeyInfo(string Expression, int Code);
 }
