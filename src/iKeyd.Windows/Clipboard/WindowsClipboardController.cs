@@ -15,6 +15,8 @@ public sealed class WindowsClipboardController : IClipboardHistoryActions, IDisp
     private readonly IClipboardPicker _picker;
     private readonly IClipboardPayloadPicker? _payloadPicker;
     private readonly IKeyboardOutput _keyboard;
+    private readonly bool _historyEnabled;
+    private readonly bool _imagesEnabled;
     private string? _captured;
     private bool _disposed;
 
@@ -24,7 +26,9 @@ public sealed class WindowsClipboardController : IClipboardHistoryActions, IDisp
         IClipboardPicker picker,
         IKeyboardOutput keyboard,
         ClipboardPayloadHistory? payloadHistory = null,
-        IClipboardPayloadPicker? payloadPicker = null)
+        IClipboardPayloadPicker? payloadPicker = null,
+        bool historyEnabled = true,
+        bool imagesEnabled = true)
     {
         _clipboard = clipboard ?? throw new ArgumentNullException(nameof(clipboard));
         _payloadClipboard = clipboard as IClipboardPayloadService;
@@ -33,6 +37,8 @@ public sealed class WindowsClipboardController : IClipboardHistoryActions, IDisp
         _picker = picker ?? throw new ArgumentNullException(nameof(picker));
         _payloadPicker = payloadPicker;
         _keyboard = keyboard ?? throw new ArgumentNullException(nameof(keyboard));
+        _historyEnabled = historyEnabled;
+        _imagesEnabled = imagesEnabled;
         _clipboard.Changed += OnClipboardChanged;
         CaptureCurrentClipboard();
     }
@@ -43,6 +49,8 @@ public sealed class WindowsClipboardController : IClipboardHistoryActions, IDisp
     public bool ShowPickerAndPaste()
     {
         ThrowIfDisposed();
+        if (!_historyEnabled)
+            return false;
 
         if (_payloadHistory is not null && _payloadPicker is not null && _payloadClipboard is not null)
         {
@@ -77,6 +85,8 @@ public sealed class WindowsClipboardController : IClipboardHistoryActions, IDisp
     public bool CaptureLatest()
     {
         ThrowIfDisposed();
+        if (!_historyEnabled)
+            return false;
         _captured = _history.Items.FirstOrDefault();
         return _captured is not null;
     }
@@ -84,7 +94,7 @@ public sealed class WindowsClipboardController : IClipboardHistoryActions, IDisp
     public bool PasteCaptured()
     {
         ThrowIfDisposed();
-        if (_captured is null)
+        if (!_historyEnabled || _captured is null)
             return false;
         PasteText(_captured);
         return true;
@@ -112,11 +122,17 @@ public sealed class WindowsClipboardController : IClipboardHistoryActions, IDisp
 
     private void RecordCurrentClipboard()
     {
+        if (!_historyEnabled)
+            return;
+
         if (_payloadClipboard is not null && _payloadHistory is not null)
         {
             var payload = _payloadClipboard.ReadPayload();
             if (payload is not null)
             {
+                if (payload.Kind == ClipboardPayloadKind.Image && !_imagesEnabled)
+                    return;
+
                 _payloadHistory.Record(payload);
                 if (payload.Kind == ClipboardPayloadKind.Text)
                     _history.Record(payload.GetText());
@@ -131,6 +147,8 @@ public sealed class WindowsClipboardController : IClipboardHistoryActions, IDisp
     {
         if (_payloadClipboard is null)
             throw new InvalidOperationException("Clipboard service does not support binary payloads.");
+        if (payload.Kind == ClipboardPayloadKind.Image && !_imagesEnabled)
+            return;
 
         _payloadHistory?.Record(payload);
         if (payload.Kind == ClipboardPayloadKind.Text)

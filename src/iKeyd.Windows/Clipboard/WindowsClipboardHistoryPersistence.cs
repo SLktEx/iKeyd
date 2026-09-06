@@ -3,13 +3,14 @@ using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text.Json;
 using iKeyd.Core.Clipboard;
+using iKeyd.Core.Configuration;
 
 namespace iKeyd.Windows.Clipboard;
 
 /// <summary>
 /// Persists only encrypted iKeyd clipboard-history records. The normal Windows
-/// clipboard remains untouched. The ChaCha20-Poly1305 master key is protected
-/// with Windows DPAPI for the current user.
+/// clipboard remains untouched. The master key is protected with Windows DPAPI
+/// for the current user.
 /// </summary>
 public sealed class WindowsClipboardHistoryPersistence : IClipboardHistoryPersistence, IDisposable
 {
@@ -23,10 +24,26 @@ public sealed class WindowsClipboardHistoryPersistence : IClipboardHistoryPersis
     private bool _disposed;
 
     public WindowsClipboardHistoryPersistence(string? directory = null)
+        : this(ClipboardHistoryProfile.Default, directory)
     {
-        var dataDirectory = directory ?? Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "iKeyd");
+    }
+
+    public WindowsClipboardHistoryPersistence(
+        ClipboardHistoryProfile settings,
+        string? directoryOverride = null)
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+        if (!settings.Persist)
+            throw new ArgumentException("Clipboard persistence is disabled by the profile.", nameof(settings));
+        if (!string.Equals(settings.Encryption, "user", StringComparison.OrdinalIgnoreCase))
+            throw new NotSupportedException($"Unsupported clipboard encryption scope '{settings.Encryption}'.");
+        if (settings.Cipher is not ("auto" or "chacha20-poly1305"))
+            throw new NotSupportedException($"Unsupported clipboard cipher '{settings.Cipher}'.");
+
+        var configuredDirectory = directoryOverride ?? settings.Directory;
+        var dataDirectory = configuredDirectory is null
+            ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "iKeyd")
+            : Path.GetFullPath(Environment.ExpandEnvironmentVariables(configuredDirectory));
         Directory.CreateDirectory(dataDirectory);
 
         _historyPath = Path.Combine(dataDirectory, HistoryFileName);
@@ -35,6 +52,9 @@ public sealed class WindowsClipboardHistoryPersistence : IClipboardHistoryPersis
         var key = LoadOrCreateMasterKey();
         try
         {
+            // .NET currently resolves auto to ChaCha20-Poly1305. The profile-level
+            // 'auto' spelling lets the future Rust runtime prefer AEGIS-256 without
+            // changing user-authored DSL.
             _cipher = new ChaCha20Poly1305ClipboardCipher(key);
         }
         finally

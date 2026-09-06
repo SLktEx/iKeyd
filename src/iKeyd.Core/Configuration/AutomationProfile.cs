@@ -14,7 +14,8 @@ public sealed record AutomationProfile
         IEnumerable<AutomationKeymapProfile> keymaps,
         string startupMode = "S",
         IEnumerable<HotkeyBinding>? hotkeys = null,
-        IEnumerable<UserBehaviorDefinitionProfile>? behaviorDefinitions = null)
+        IEnumerable<UserBehaviorDefinitionProfile>? behaviorDefinitions = null,
+        ClipboardHistoryProfile? clipboard = null)
     {
         if (chordWindowMs < 0)
             throw new ArgumentOutOfRangeException(nameof(chordWindowMs));
@@ -25,6 +26,7 @@ public sealed record AutomationProfile
         ChordWindowMs = chordWindowMs;
         StartupMode = startupMode;
         Hotkeys = (hotkeys ?? []).ToArray();
+        Clipboard = clipboard ?? ClipboardHistoryProfile.Default;
 
         var byName = new Dictionary<string, AutomationKeymapProfile>(StringComparer.OrdinalIgnoreCase);
         foreach (var keymap in keymaps)
@@ -53,6 +55,7 @@ public sealed record AutomationProfile
     public int ChordWindowMs { get; }
     public string StartupMode { get; }
     public IReadOnlyList<HotkeyBinding> Hotkeys { get; }
+    public ClipboardHistoryProfile Clipboard { get; }
     public IReadOnlyDictionary<string, AutomationKeymapProfile> Keymaps => _keymaps;
     public IReadOnlyDictionary<string, UserBehaviorDefinitionProfile> BehaviorDefinitions => _behaviorDefinitions;
 

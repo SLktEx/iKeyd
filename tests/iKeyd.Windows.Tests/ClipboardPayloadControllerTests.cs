@@ -60,6 +60,57 @@ public sealed class ClipboardPayloadControllerTests
         Assert.Empty(textHistory.Items);
     }
 
+    [Fact]
+    public void Disabled_image_history_ignores_images_but_keeps_text_history()
+    {
+        var image = ClipboardPayload.FromImage([9, 8, 7], "image/png");
+        var clipboard = new FakePayloadClipboardService { Payload = image };
+        var payloadHistory = new ClipboardPayloadHistory();
+        var textHistory = new ClipboardHistory();
+
+        using var controller = new WindowsClipboardController(
+            clipboard,
+            textHistory,
+            new FakeTextPicker(),
+            new RecordingKeyboardOutput(),
+            payloadHistory,
+            new FakePayloadPicker(null),
+            historyEnabled: true,
+            imagesEnabled: false);
+
+        Assert.Empty(payloadHistory.Items);
+        Assert.Empty(textHistory.Items);
+
+        clipboard.Payload = ClipboardPayload.FromText("still-recorded");
+        clipboard.RaiseChanged();
+
+        Assert.Equal("still-recorded", Assert.Single(textHistory.Items));
+        Assert.Equal(ClipboardPayloadKind.Text, Assert.Single(payloadHistory.Items).Kind);
+    }
+
+    [Fact]
+    public void Disabled_history_does_not_collect_or_open_picker()
+    {
+        var clipboard = new FakePayloadClipboardService { Payload = ClipboardPayload.FromText("secret") };
+        var payloadHistory = new ClipboardPayloadHistory();
+        var textHistory = new ClipboardHistory();
+
+        using var controller = new WindowsClipboardController(
+            clipboard,
+            textHistory,
+            new FakeTextPicker(),
+            new RecordingKeyboardOutput(),
+            payloadHistory,
+            new FakePayloadPicker(0),
+            historyEnabled: false,
+            imagesEnabled: true);
+
+        Assert.Empty(payloadHistory.Items);
+        Assert.Empty(textHistory.Items);
+        Assert.False(controller.ShowPickerAndPaste());
+        Assert.False(controller.CaptureLatest());
+    }
+
     private sealed class FakePayloadClipboardService : IClipboardService, IClipboardPayloadService
     {
         public event EventHandler? Changed;
@@ -82,6 +133,7 @@ public sealed class ClipboardPayloadControllerTests
             Changed?.Invoke(this, EventArgs.Empty);
         }
 
+        public void RaiseChanged() => Changed?.Invoke(this, EventArgs.Empty);
         public void Dispose() { }
     }
 
