@@ -1,0 +1,44 @@
+name: Validate intentional mouse coverage
+
+on:
+  push:
+    branches: [fix/matrix-mouse-intentional-differences-v2]
+    paths:
+      - .github/workflows/issue46-mouse-matrix.yml
+      - tools/issue46_mark_mouse_intentional.py
+
+permissions:
+  contents: write
+
+jobs:
+  validate:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/matrix-mouse-intentional-differences-v2
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+      - name: Apply narrow coverage rules
+        run: python tools/issue46_mark_mouse_intentional.py
+      - name: Run tooling suite
+        run: python -m unittest discover tests/tooling -p 'test_*.py' -v
+      - name: Check exact intentional-rule count
+        shell: python
+        run: |
+          import json
+          from pathlib import Path
+          rules = json.loads(Path('tests/compatibility/coverage-rules.json').read_text(encoding='utf-8'))['rules']
+          marked = [r.get('match', {}).get('id') for r in rules if r.get('set', {}).get('intentionalDifference') == 'yes']
+          assert len(marked) == 7, marked
+          assert set(marked) >= {'legacy-send-19d656068e','legacy-send-c963e4ab3e'}
+      - name: Commit validated coverage update
+        shell: powershell
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add tests/compatibility/coverage-rules.json tests/tooling/test_mouse_intentional_coverage.py
+          git commit -m "test: mark accepted v0.4 mouse differences in matrix"
+          git push origin HEAD:fix/matrix-mouse-intentional-differences-v2
