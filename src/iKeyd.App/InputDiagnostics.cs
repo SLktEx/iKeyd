@@ -12,6 +12,7 @@ internal enum InputDiagnosticKind : byte
     LegacyVirtualScan,
     ChordTimeout,
     Reset,
+    Exception,
     InvariantViolation
 }
 
