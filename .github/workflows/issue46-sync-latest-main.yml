@@ -51,7 +51,7 @@ jobs:
             done
           fi
           python -B tools/issue46_sync_latest_main.py
-          git add src/iKeyd.App/IKeydRuntimeHandler.cs src/iKeyd.App/WindowsKeyMap.cs tests/iKeyd.Windows.Tests/LegacySendEventScenarioRunner.cs
+          git add src/iKeyd.App/IKeydRuntimeHandler.cs src/iKeyd.App/WindowsKeyMap.cs tests/iKeyd.Windows.Tests/LegacySendEventScenarioRunner.cs tests/iKeyd.Compatibility.Tests/Scenarios/runtime-mouse-right-hold-toggle-sm-h.json
       - name: Restore
         run: dotnet restore iKeyd.sln
       - name: Build
@@ -67,4 +67,4 @@ jobs:
           git add -A
           git commit -m "Merge latest main into hotkeySKG compatibility"
           git push origin HEAD:issue-46-hotkeyskg-full-compat
-# rerun: semantic markers allow Git's successful auto-merges
+# rerun: keep pinned source typo rather than repaired right-button behavior
