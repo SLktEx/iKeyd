@@ -11,6 +11,12 @@ internal static class Program
 
         try
         {
+            if (IsNameEasterEggRequested(args))
+            {
+                ShowNameEasterEgg();
+                return;
+            }
+
             var started = RunSingleInstance(
                 SingleInstanceGuard.TryAcquire,
                 () => RunPrimaryInstance(args),
@@ -33,6 +39,9 @@ internal static class Program
         }
     }
 
+    internal static bool IsNameEasterEggRequested(IReadOnlyList<string> args) =>
+        args.Any(argument => string.Equals(argument, "--why-the-name", StringComparison.OrdinalIgnoreCase));
+
     internal static bool RunSingleInstance(
         Func<IDisposable?> acquireInstance,
         Action runPrimaryInstance,
@@ -47,6 +56,18 @@ internal static class Program
 
         runPrimaryInstance();
         return true;
+    }
+
+    private static void ShowNameEasterEgg()
+    {
+        const string encodedLegacyName = "SWNoaWthd2EgS2V5IERhZW1vbg==";
+        var legacyName = System.Text.Encoding.UTF8.GetString(Convert.FromBase64String(encodedLegacyName));
+
+        MessageBox.Show(
+            $"I Key'd - I keyed it my way.\n\n[CLASSIFIED]\nOriginal internal codename:\n{legacyName}\n\nYou weren't supposed to find this.",
+            "About iKeyd",
+            MessageBoxButtons.OK,
+            MessageBoxIcon.Information);
     }
 
     private static void RunPrimaryInstance(string[] args)
