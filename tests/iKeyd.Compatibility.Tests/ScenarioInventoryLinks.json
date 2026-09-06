@@ -34,5 +34,12 @@
   "s-chord-k-5": {"inventoryIds":["legacy-chord-f2fa0da67b"],"requiredEnvironment":["hosted-windows"],"oracleTargets":["compiled-exe","ahk-source","ikeyd"]},
   "s-chord-o-b": {"inventoryIds":["legacy-chord-ba1e4711c8"],"requiredEnvironment":["hosted-windows"],"oracleTargets":["compiled-exe","ahk-source","ikeyd"]},
   "s-single-k": {"inventoryIds":["legacy-single-stroke-0532fd9ed9"],"requiredEnvironment":["hosted-windows"],"oracleTargets":["compiled-exe","ahk-source","ikeyd"]},
-  "s-single-w": {"inventoryIds":["legacy-single-stroke-e1cb2619ec"],"requiredEnvironment":["hosted-windows"],"oracleTargets":["compiled-exe","ahk-source","ikeyd"]}
+  "s-single-w": {"inventoryIds":["legacy-single-stroke-e1cb2619ec"],"requiredEnvironment":["hosted-windows"],"oracleTargets":["compiled-exe","ahk-source","ikeyd"]},
+  "send-event-m-j-left": {"inventoryIds":["legacy-send-2de512fceb"],"requiredEnvironment":["hosted-windows"],"oracleTargets":["compiled-exe","ahk-source","ikeyd-runtime"]},
+  "send-event-mh-j-shift-left": {"inventoryIds":["legacy-send-cb4d74562e"],"requiredEnvironment":["hosted-windows"],"oracleTargets":["compiled-exe","ahk-source","ikeyd-runtime"]},
+  "send-event-hm-j-control-left": {"inventoryIds":["legacy-send-dc4be9fd08"],"requiredEnvironment":["hosted-windows"],"oracleTargets":["compiled-exe","ahk-source","ikeyd-runtime"]},
+  "send-event-ms-j-control-shift-left": {"inventoryIds":["legacy-send-64cd1136f9"],"requiredEnvironment":["hosted-windows"],"oracleTargets":["compiled-exe","ahk-source","ikeyd-runtime"]},
+  "send-event-m-comma-space": {"inventoryIds":["legacy-send-2de512fceb"],"requiredEnvironment":["hosted-windows"],"oracleTargets":["compiled-exe","ahk-source","ikeyd-runtime"]},
+  "send-event-mh-comma-tab": {"inventoryIds":["legacy-send-cb4d74562e"],"requiredEnvironment":["hosted-windows"],"oracleTargets":["compiled-exe","ahk-source","ikeyd-runtime"]},
+  "send-event-hm-comma-enter": {"inventoryIds":["legacy-send-dc4be9fd08"],"requiredEnvironment":["hosted-windows"],"oracleTargets":["compiled-exe","ahk-source","ikeyd-runtime"]}
 }
