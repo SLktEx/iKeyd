@@ -1,3 +1,4 @@
+using iKeyd.Core.Automation;
 using iKeyd.Core.Behaviors;
 using iKeyd.Core.Chords;
 using iKeyd.Core.Configuration;
@@ -33,7 +34,8 @@ internal sealed class BehaviorWindowsInputRouter : IKeyboardEventHandler, IInput
         LegacySendOutput send,
         IKeyboardOutput keyboard,
         IKeyboardEventHandler fallback,
-        Action<BehaviorAction>? postHostAction = null)
+        Action<BehaviorAction>? postHostAction = null,
+        ISystemQuerySnapshot? systemQueries = null)
     {
         _profile = profile ?? throw new ArgumentNullException(nameof(profile));
         _baseKeymapName = baseKeymapName ?? throw new ArgumentNullException(nameof(baseKeymapName));
@@ -41,6 +43,7 @@ internal sealed class BehaviorWindowsInputRouter : IKeyboardEventHandler, IInput
         _keyboard = keyboard ?? throw new ArgumentNullException(nameof(keyboard));
         _fallback = fallback ?? throw new ArgumentNullException(nameof(fallback));
         _postHostAction = postHostAction;
+        systemQueries ??= EmptySystemQuerySnapshot.Instance;
 
         _keymaps = new Dictionary<string, Keymap<string>>(StringComparer.OrdinalIgnoreCase);
         _behaviorRuntimes = new Dictionary<string, BehaviorRuntime>(StringComparer.OrdinalIgnoreCase);
@@ -48,7 +51,11 @@ internal sealed class BehaviorWindowsInputRouter : IKeyboardEventHandler, IInput
         {
             _keymaps.Add(pair.Key, pair.Value.BuildKeymap());
             if (pair.Value.BehaviorMappings.Count != 0)
-                _behaviorRuntimes.Add(pair.Key, new BehaviorRuntime(pair.Value.BuildBehaviorBindings(profile.BehaviorDefinitions)));
+            {
+                _behaviorRuntimes.Add(
+                    pair.Key,
+                    new BehaviorRuntime(pair.Value.BuildBehaviorBindings(profile.BehaviorDefinitions, systemQueries)));
+            }
         }
 
         ValidateLayerTapTargets();
