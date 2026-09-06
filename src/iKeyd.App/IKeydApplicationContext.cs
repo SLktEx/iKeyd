@@ -26,6 +26,7 @@ internal sealed class IKeydApplicationContext : ApplicationContext
     private readonly WindowsMacroEditor _macroEditor = new();
     private readonly MacroExecutor _macroExecutor;
     private readonly LegacyMacroSlotController _legacyMacroSlots;
+    private readonly InputDiagnosticsAutoLog _inputDiagnosticsAutoLog;
 
     private string _macroTemplate = string.Empty;
     private MacroRepeat _macroRepeat = MacroRepeat.Once;
@@ -67,6 +68,7 @@ internal sealed class IKeydApplicationContext : ApplicationContext
             send,
             desktop,
             _clipboard);
+        _inputDiagnosticsAutoLog = new InputDiagnosticsAutoLog(_runtime.ExportInputDiagnostics);
         _keyboardHandler = new BehaviorWindowsInputRouter(
             configuration.Profile,
             () => _runtime.Mode.Route(inputMethod).Keymap?.ToString(),
@@ -146,6 +148,7 @@ internal sealed class IKeydApplicationContext : ApplicationContext
         }
         finally
         {
+            _inputDiagnosticsAutoLog.Dispose();
             _legacyMacroSlots.Dispose();
             _clipboard.Dispose();
             _clipboardPersistence?.Dispose();
