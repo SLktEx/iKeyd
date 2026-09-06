@@ -15,16 +15,16 @@ spec.loader.exec_module(module)
 
 
 BASE = """
-profile demo {
+profile demo {{
     chord_window = 40ms
-}
+}}
 {clipboard}
-keymap S {
+keymap S {{
     A = "a"
-}
-keymap K {
+}}
+keymap K {{
     A = "a"
-}
+}}
 """.strip()
 
 
