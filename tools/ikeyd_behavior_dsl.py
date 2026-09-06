@@ -6,6 +6,20 @@ from collections import OrderedDict
 from pathlib import Path
 from typing import Any
 
+SYSTEM_QUERIES = (
+    "system.os",
+    "system.architecture",
+    "system.hostname",
+    "system.username",
+    "foreground.process",
+    "foreground.pid",
+    "foreground.title",
+    "ime.kana_active",
+    "keyboard.capslock",
+    "keyboard.numlock",
+    "keyboard.scrolllock",
+)
+
 
 def _strip_comment(line: str) -> str:
     in_string = False
@@ -90,7 +104,17 @@ def _quoted(base: Any, path: Path, lineno: int, action: str, arg: str) -> str:
     return value
 
 
-def _action(base: Any, path: Path, lineno: int, expression: str, *, allow_hold: bool) -> OrderedDict[str, str]:
+def _exec(base: Any, path: Path, lineno: int, arg: str) -> OrderedDict[str, object]:
+    try:
+        values = json.loads(f"[{arg}]")
+    except json.JSONDecodeError as exc:
+        raise base.DslError(path, lineno, f"exec(...) requires quoted string arguments: {exc.msg}") from exc
+    if not isinstance(values, list) or not values or not all(isinstance(value, str) for value in values) or not values[0].strip():
+        raise base.DslError(path, lineno, "exec(...) requires a quoted executable followed by optional quoted arguments")
+    return OrderedDict(kind="exec", value=values[0], args=values[1:])
+
+
+def _action(base: Any, path: Path, lineno: int, expression: str, *, allow_hold: bool) -> OrderedDict[str, object]:
     expression = expression.strip().rstrip(";").strip()
     call = re.fullmatch(rf"({base.IDENT})\((.*)\)", expression)
     if not call:
@@ -124,6 +148,15 @@ def _action(base: Any, path: Path, lineno: int, expression: str, *, allow_hold: 
         return OrderedDict(kind="clipboard", value=_choice(base, path, lineno, "clipboard command", arg, ("History",)))
     if kind == "macro":
         return OrderedDict(kind="macro", value=_quoted(base, path, lineno, "macro", arg))
+    if kind == "exec":
+        return _exec(base, path, lineno, arg)
+    if kind == "shell":
+        return OrderedDict(kind="shell", value=_quoted(base, path, lineno, "shell", arg))
+    if kind == "query":
+        query = next((item for item in SYSTEM_QUERIES if item.casefold() == arg.casefold()), None)
+        if query is None:
+            raise base.DslError(path, lineno, f"unknown system query '{arg}'")
+        return OrderedDict(kind="query", value=query)
     if kind == "layer" and allow_hold:
         if not re.fullmatch(base.IDENT, arg):
             raise base.DslError(path, lineno, "layer(...) expects one layer name")
@@ -134,7 +167,7 @@ def _action(base: Any, path: Path, lineno: int, expression: str, *, allow_hold: 
         if value is None:
             raise base.DslError(path, lineno, f"unknown modifier '{arg}'")
         return OrderedDict(kind="modifier", value=value)
-    output = "key(...), text(...), mouse_move(...), mouse_click(...), scroll(...), media(...), window(...), clipboard(...) or macro(...)"
+    output = "key(...), text(...), mouse_move(...), mouse_click(...), scroll(...), media(...), window(...), clipboard(...), macro(...), exec(...), shell(...) or query(...)"
     allowed = f"{output}, layer(...) or modifier(...)" if allow_hold else output
     raise base.DslError(path, lineno, f"action must be {allowed}")
 

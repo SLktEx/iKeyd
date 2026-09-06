@@ -262,6 +262,9 @@ internal static class ProfileCompiler
             KeyBehaviorActionKind.Text => $"KeyBehaviorAction.Text({Literal(action.Value)})",
             KeyBehaviorActionKind.Layer => $"KeyBehaviorAction.Layer({Literal(action.Value)})",
             KeyBehaviorActionKind.Modifier => $"KeyBehaviorAction.Modifier(KeyBehaviorModifier.{action.GetModifier()})",
+            KeyBehaviorActionKind.Exec => $"KeyBehaviorAction.Exec({Literal(action.Value)}, {StringArrayLiteral(action.GetArguments())})",
+            KeyBehaviorActionKind.Shell => $"KeyBehaviorAction.Shell({Literal(action.Value)})",
+            KeyBehaviorActionKind.Query => $"KeyBehaviorAction.Query({Literal(action.Value)})",
             KeyBehaviorActionKind.MouseMove or
             KeyBehaviorActionKind.MouseClick or
             KeyBehaviorActionKind.Scroll or
@@ -271,6 +274,11 @@ internal static class ProfileCompiler
             KeyBehaviorActionKind.Macro => $"new KeyBehaviorAction(KeyBehaviorActionKind.{action.Kind}, {Literal(action.Value)})",
             _ => throw new InvalidDataException($"Unsupported behavior action kind '{action.Kind}'.")
         };
+
+    private static string StringArrayLiteral(IReadOnlyList<string> values)
+        => values.Count == 0
+            ? "Array.Empty<string>()"
+            : $"new string[] {{ {string.Join(", ", values.Select(Literal))} }}";
 
     private static void EmitCompiledKeymapFactory(StringBuilder builder, string mode, JsonElement singleRoot, JsonElement chordRoot)
     {

@@ -14,7 +14,10 @@ public enum KeyBehaviorActionKind
     Media,
     Window,
     Clipboard,
-    Macro
+    Macro,
+    Exec,
+    Shell,
+    Query
 }
 
 public enum KeyBehaviorModifier
@@ -31,7 +34,10 @@ public enum TapHoldInterruptPolicy
     Tap
 }
 
-public readonly record struct KeyBehaviorAction(KeyBehaviorActionKind Kind, string Value)
+public readonly record struct KeyBehaviorAction(
+    KeyBehaviorActionKind Kind,
+    string Value,
+    IReadOnlyList<string>? Arguments = null)
 {
     public static KeyBehaviorAction Key(string key) => new(KeyBehaviorActionKind.Key, RequireValue(key, nameof(key)));
     public static KeyBehaviorAction Text(string text) => new(KeyBehaviorActionKind.Text, text ?? throw new ArgumentNullException(nameof(text)));
@@ -44,6 +50,15 @@ public readonly record struct KeyBehaviorAction(KeyBehaviorActionKind Kind, stri
     public static KeyBehaviorAction Window(string command) => new(KeyBehaviorActionKind.Window, RequireValue(command, nameof(command)));
     public static KeyBehaviorAction Clipboard(string command) => new(KeyBehaviorActionKind.Clipboard, RequireValue(command, nameof(command)));
     public static KeyBehaviorAction Macro(string template) => new(KeyBehaviorActionKind.Macro, template ?? throw new ArgumentNullException(nameof(template)));
+    public static KeyBehaviorAction Exec(string executable, IEnumerable<string>? arguments = null)
+    {
+        var argv = arguments?.Select(argument => argument ?? throw new ArgumentException("Exec arguments must not contain null.", nameof(arguments))).ToArray() ?? [];
+        return new KeyBehaviorAction(KeyBehaviorActionKind.Exec, RequireValue(executable, nameof(executable)), Array.AsReadOnly(argv));
+    }
+    public static KeyBehaviorAction Shell(string command) => new(KeyBehaviorActionKind.Shell, RequireValue(command, nameof(command)));
+    public static KeyBehaviorAction Query(string key) => new(KeyBehaviorActionKind.Query, RequireValue(key, nameof(key)));
+
+    public IReadOnlyList<string> GetArguments() => Arguments ?? Array.Empty<string>();
 
     public KeyBehaviorModifier GetModifier()
         => Kind == KeyBehaviorActionKind.Modifier && Enum.TryParse<KeyBehaviorModifier>(Value, ignoreCase: true, out var modifier)

@@ -129,7 +129,9 @@ internal sealed class ConfiguredBehaviorDispatcher
                 return;
             case KeyBehaviorActionKind.Clipboard:
             case KeyBehaviorActionKind.Macro:
-                // UI/async work must never run inline on the low-level keyboard hook.
+            case KeyBehaviorActionKind.Exec:
+            case KeyBehaviorActionKind.Shell:
+            case KeyBehaviorActionKind.Query:
                 _hostActions.Post(action);
                 return;
             default:

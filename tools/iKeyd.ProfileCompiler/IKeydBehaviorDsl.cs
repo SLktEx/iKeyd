@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
+using iKeyd.Core.Automation;
 using iKeyd.Core.Chords;
 
 internal sealed record IKeydBehaviorDslExtension(string CleanSource, JsonObject Layers, JsonObject Behaviors);
@@ -285,14 +286,42 @@ internal static class IKeydBehaviorDsl
                 return Action("clipboard", NormalizeChoice(path, lineNumber, "clipboard command", argument, "History"));
             case "macro":
                 return Action("macro", ParseQuotedString(path, lineNumber, argument, "macro"));
+            case "exec":
+                return ParseExec(path, lineNumber, argument);
+            case "shell":
+                return Action("shell", ParseQuotedString(path, lineNumber, argument, "shell"));
+            case "query":
+                if (!SystemQueryKeys.TryNormalize(argument, out var query))
+                    throw Error(path, lineNumber, $"unknown system query '{argument}'");
+                return Action("query", query);
             case "layer" when allowHoldActions:
                 if (!Regex.IsMatch(argument, $@"^{Ident}$", RegexOptions.CultureInvariant)) throw Error(path, lineNumber, "layer(...) expects one layer name");
                 return Action("layer", argument);
             case "modifier" when allowHoldActions:
                 return Action("modifier", NormalizeModifier(path, lineNumber, argument));
             default:
-                var output = "key(...), text(...), mouse_move(...), mouse_click(...), scroll(...), media(...), window(...), clipboard(...) or macro(...)";
+                var output = "key(...), text(...), mouse_move(...), mouse_click(...), scroll(...), media(...), window(...), clipboard(...), macro(...), exec(...), shell(...) or query(...)";
                 throw Error(path, lineNumber, allowHoldActions ? $"action must be {output}, layer(...) or modifier(...)" : $"action must be {output}");
+        }
+    }
+
+    private static JsonObject ParseExec(string path, int lineNumber, string argument)
+    {
+        try
+        {
+            var values = JsonSerializer.Deserialize<string[]>($"[{argument}]");
+            if (values is null || values.Length == 0 || string.IsNullOrWhiteSpace(values[0]))
+                throw Error(path, lineNumber, "exec(...) requires a quoted executable followed by optional quoted arguments");
+            var result = Action("exec", values[0]);
+            var args = new JsonArray();
+            foreach (var value in values.Skip(1))
+                args.Add(value);
+            result["args"] = args;
+            return result;
+        }
+        catch (JsonException exception)
+        {
+            throw Error(path, lineNumber, $"exec(...) requires quoted string arguments: {exception.Message}");
         }
     }
 
