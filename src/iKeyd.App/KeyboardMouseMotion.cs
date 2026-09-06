@@ -52,6 +52,13 @@ internal sealed class KeyboardMouseMotion : IDisposable
             if (!_directions.Add(virtualKey))
                 return true;
 
+            // A tap can be shorter than the first timer tick. Give every fresh
+            // direction press exactly one pixel of deterministic movement so fine
+            // positioning remains possible without restoring the old 10/30/100px
+            // jumps that made keyboard mouse movement feel coarse.
+            var (nudgeX, nudgeY) = DirectionUnit(key.Code);
+            _desktop.MovePointerBy(nudgeX, nudgeY);
+
             if (_directions.Count == 1)
             {
                 var now = Environment.TickCount64;
@@ -190,4 +197,14 @@ internal sealed class KeyboardMouseMotion : IDisposable
 
     private static bool IsDirection(KeyCode key)
         => key is KeyCode.I or KeyCode.J or KeyCode.K or KeyCode.L;
+
+    private static (int X, int Y) DirectionUnit(KeyCode key)
+        => key switch
+        {
+            KeyCode.I => (0, -1),
+            KeyCode.J => (-1, 0),
+            KeyCode.K => (0, 1),
+            KeyCode.L => (1, 0),
+            _ => (0, 0)
+        };
 }
