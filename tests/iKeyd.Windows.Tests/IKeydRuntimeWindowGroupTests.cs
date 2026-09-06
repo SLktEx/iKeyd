@@ -52,7 +52,7 @@ public sealed class IKeydRuntimeWindowGroupTests
         public DesktopRect GetWindowBounds(WindowHandle window) => new(100, 100, 800, 600);
         public DesktopRect GetPrimaryWorkArea() => new(0, 0, 1920, 1080);
         public string? GetWindowClass(WindowHandle window)
-            => window is { Value: 1 or 2 } ? "SharedClass" : null;
+            => IsWindow(window) ? "SharedClass" : null;
         public bool IsWindow(WindowHandle window) => window == Active || window == Secondary;
         public void Minimize(WindowHandle window) { }
         public void Maximize(WindowHandle window) { }
