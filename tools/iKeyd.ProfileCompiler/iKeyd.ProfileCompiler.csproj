@@ -5,4 +5,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
   </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../src/iKeyd.Core/iKeyd.Core.csproj" />
+  </ItemGroup>
 </Project>

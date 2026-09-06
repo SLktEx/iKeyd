@@ -7,7 +7,9 @@
     <Nullable>enable</Nullable>
     <AssemblyName>iKeyd</AssemblyName>
     <RootNamespace>iKeyd.App</RootNamespace>
-    <ProfileSource>$(MSBuildProjectDirectory)\..\..\config\hotkeySKG.behavior.json</ProfileSource>
+    <ProfileSource>$(MSBuildProjectDirectory)\..\..\config\hotkeySKG.ikeyd</ProfileSource>
+    <CanonicalProfile>$(MSBuildProjectDirectory)\..\..\config\hotkeySKG.behavior.json</CanonicalProfile>
+    <GeneratedProfileJson>$(MSBuildProjectDirectory)\obj\$(Configuration)\$(TargetFramework)\hotkeySKG.behavior.generated.json</GeneratedProfileJson>
     <GeneratedProfileSource>$(MSBuildProjectDirectory)\obj\$(Configuration)\$(TargetFramework)\GeneratedProfile.g.cs</GeneratedProfileSource>
     <ProfileCompilerAssembly>$(MSBuildProjectDirectory)\..\..\tools\iKeyd.ProfileCompiler\bin\$(Configuration)\net8.0\iKeyd.ProfileCompiler.dll</ProfileCompilerAssembly>
   </PropertyGroup>
@@ -27,8 +29,8 @@
   <Target Name="GenerateCompiledProfile"
           BeforeTargets="CoreCompile"
           DependsOnTargets="ResolveProjectReferences"
-          Inputs="$(ProfileSource);$(ProfileCompilerAssembly)"
-          Outputs="$(GeneratedProfileSource)">
-    <Exec Command="dotnet &quot;$(ProfileCompilerAssembly)&quot; &quot;$(ProfileSource)&quot; &quot;$(GeneratedProfileSource)&quot;" />
+          Inputs="$(ProfileSource);$(CanonicalProfile);$(ProfileCompilerAssembly)"
+          Outputs="$(GeneratedProfileSource);$(GeneratedProfileJson)">
+    <Exec Command="dotnet &quot;$(ProfileCompilerAssembly)&quot; &quot;$(ProfileSource)&quot; &quot;$(GeneratedProfileSource)&quot; --emit-json &quot;$(GeneratedProfileJson)&quot; --check-against &quot;$(CanonicalProfile)&quot;" />
   </Target>
 </Project>

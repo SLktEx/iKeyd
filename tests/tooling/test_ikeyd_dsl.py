@@ -45,6 +45,53 @@ class IKeydDslTests(unittest.TestCase):
             profile["knownQuirks"]["duplicateChordPatterns"]["K"],
         )
 
+    def test_layout_map_expands_rows_to_physical_keys(self):
+        text = """
+profile demo {
+    chord_window = 40ms
+}
+layout BASE {
+    row Q W E
+    row A S D
+}
+keymap S using BASE {
+    map {
+        row "x", "y", "z"
+        row "a", "b", "c"
+    }
+}
+""".strip()
+
+        profile = module.compile_dsl(text, Path("profile.ikeyd"))
+        self.assertEqual(
+            {"Q": "x", "W": "y", "E": "z", "A": "a", "S": "b", "D": "c"},
+            profile["singleStroke"]["S"],
+        )
+
+    def test_grouped_combos_preserve_order_and_duplicates(self):
+        text = """
+profile demo {
+    chord_window = 40ms
+}
+keymap K {
+    combos F {
+        U = "first"
+        H = "other"
+        U = "second"
+    }
+}
+""".strip()
+
+        profile = module.compile_dsl(text, Path("profile.ikeyd"))
+        self.assertEqual(
+            [["F", "U", "first"], ["F", "H", "other"], ["F", "U", "second"]],
+            profile["chords"]["K"],
+        )
+        self.assertEqual(
+            [{"keys": ["f", "u"], "outputs": ["first", "second"], "effectiveOutput": "first"}],
+            profile["knownQuirks"]["duplicateChordPatterns"]["K"],
+        )
+
     def test_position_references_compile_to_physical_key_ids(self):
         text = """
 profile demo {
@@ -90,10 +137,7 @@ keymap BASE {
         first_profile = module.compile_dsl(first, Path("first.ikeyd"))
         second_profile = module.compile_dsl(second, Path("second.ikeyd"))
 
-        self.assertEqual(
-            first_profile["chords"]["BASE"],
-            second_profile["chords"]["BASE"],
-        )
+        self.assertEqual(first_profile["chords"]["BASE"], second_profile["chords"]["BASE"])
         self.assertEqual([["Q", "W", "escape"]], second_profile["chords"]["BASE"])
 
     def test_position_reference_reports_out_of_range_coordinates(self):
@@ -113,6 +157,24 @@ keymap BASE {
             module.DslError,
             r"profile\.ikeyd:8: column 3 is out of range for layout 'BASE' row 1",
         ):
+            module.compile_dsl(text, Path("profile.ikeyd"))
+
+    def test_map_width_mismatch_reports_source_line(self):
+        text = """
+profile demo {
+    chord_window = 40ms
+}
+layout BASE {
+    row Q W E
+}
+keymap S using BASE {
+    map {
+        row "x", "y"
+    }
+}
+""".strip()
+
+        with self.assertRaisesRegex(module.DslError, r"profile\.ikeyd:9: map row 1 has 2 outputs"):
             module.compile_dsl(text, Path("profile.ikeyd"))
 
     def test_reports_source_line_for_invalid_statement(self):

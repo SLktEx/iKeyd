@@ -20,7 +20,7 @@ internal sealed class IKeydRuntimeHandler : IKeyboardEventHandler, IMacroActionD
     private readonly DesktopActionService _desktopActions;
     private readonly ChordEngine<string> _sEngine;
     private readonly ChordEngine<string> _kEngine;
-    private readonly HashSet<ushort> _suppressedKeys = new(64);
+    private readonly HashSet<KeyboardKey> _suppressedKeys = new(64);
     private readonly Timer _chordTimer;
 
     private InputModeState _mode;
@@ -81,11 +81,11 @@ internal sealed class IKeydRuntimeHandler : IKeyboardEventHandler, IMacroActionD
                 return KeyboardDisposition.Suppress;
 
             if (keyboardEvent.Kind == KeyEventKind.Up)
-                return _suppressedKeys.Remove(keyboardEvent.Key.VirtualKey)
+                return _suppressedKeys.Remove(keyboardEvent.Key)
                     ? KeyboardDisposition.Suppress
                     : KeyboardDisposition.PassThrough;
 
-            var keyId = WindowsKeyMap.TryResolveKeyId(keyboardEvent.Key.VirtualKey);
+            var keyId = WindowsKeyMap.TryResolveKeyId(keyboardEvent.Key);
 
             if (_layers.Layers.Count != 0)
             {
@@ -93,7 +93,7 @@ internal sealed class IKeydRuntimeHandler : IKeyboardEventHandler, IMacroActionD
                 _layers = _layers.MarkConsumed();
                 if (handled)
                 {
-                    _suppressedKeys.Add(keyboardEvent.Key.VirtualKey);
+                    _suppressedKeys.Add(keyboardEvent.Key);
                     return KeyboardDisposition.Suppress;
                 }
 
@@ -125,7 +125,7 @@ internal sealed class IKeydRuntimeHandler : IKeyboardEventHandler, IMacroActionD
             else
                 CancelTimeout();
 
-            _suppressedKeys.Add(keyboardEvent.Key.VirtualKey);
+            _suppressedKeys.Add(keyboardEvent.Key);
             return KeyboardDisposition.Suppress;
         }
     }

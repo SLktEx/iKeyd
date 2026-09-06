@@ -1,9 +1,11 @@
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
+using iKeyd.Core.Chords;
 
-if (args.Length != 2)
+if (args.Length < 2)
 {
-    Console.Error.WriteLine("Usage: iKeyd.ProfileCompiler <profile.json> <GeneratedProfile.g.cs>");
+    PrintUsage();
     return 2;
 }
 
@@ -11,10 +13,53 @@ try
 {
     var inputPath = Path.GetFullPath(args[0]);
     var outputPath = Path.GetFullPath(args[1]);
+    string? emittedJsonPath = null;
+    string? checkAgainstPath = null;
+
+    for (var index = 2; index < args.Length; index++)
+    {
+        switch (args[index])
+        {
+            case "--emit-json" when index + 1 < args.Length:
+                emittedJsonPath = Path.GetFullPath(args[++index]);
+                break;
+            case "--check-against" when index + 1 < args.Length:
+                checkAgainstPath = Path.GetFullPath(args[++index]);
+                break;
+            default:
+                PrintUsage();
+                return 2;
+        }
+    }
+
     if (!File.Exists(inputPath))
         throw new FileNotFoundException("Automation profile was not found.", inputPath);
 
-    var generatedSource = ProfileCompiler.Compile(File.ReadAllText(inputPath));
+    var input = File.ReadAllText(inputPath);
+    var json = string.Equals(Path.GetExtension(inputPath), ".ikeyd", StringComparison.OrdinalIgnoreCase)
+        ? IKeydDslCompiler.CompileToJson(input, inputPath)
+        : input;
+
+    if (checkAgainstPath is not null)
+    {
+        if (!File.Exists(checkAgainstPath))
+            throw new FileNotFoundException("Canonical profile was not found.", checkAgainstPath);
+
+        var actualNode = JsonNode.Parse(json)
+            ?? throw new InvalidDataException("Generated profile JSON is empty.");
+        var expectedNode = JsonNode.Parse(File.ReadAllText(checkAgainstPath))
+            ?? throw new InvalidDataException("Canonical profile JSON is empty.");
+        if (!JsonNode.DeepEquals(actualNode, expectedNode))
+            throw new InvalidDataException($"Generated profile differs from canonical profile '{checkAgainstPath}'.");
+    }
+
+    if (emittedJsonPath is not null)
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(emittedJsonPath)!);
+        File.WriteAllText(emittedJsonPath, json, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+    }
+
+    var generatedSource = ProfileCompiler.Compile(json);
     Directory.CreateDirectory(Path.GetDirectoryName(outputPath)!);
     File.WriteAllText(outputPath, generatedSource, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
     return 0;
@@ -25,10 +70,17 @@ catch (Exception exception)
     return 1;
 }
 
+static void PrintUsage()
+{
+    Console.Error.WriteLine(
+        "Usage: iKeyd.ProfileCompiler <profile.json|profile.ikeyd> <GeneratedProfile.g.cs> " +
+        "[--emit-json <generated.json>] [--check-against <canonical.json>]");
+}
+
 internal static class ProfileCompiler
 {
     private const int DefaultChordWindowMs = 40;
-    private const int CompactKeyCount = 54; // KeyCode.A..KeyCode.At
+    private const int CompactKeyCount = (int)KeyCode.NumpadComma;
 
     public static string Compile(string json)
     {
@@ -250,48 +302,10 @@ internal static class ProfileCompiler
 
     private static KeyInfo ParseKey(string key, string location)
     {
-        if (string.IsNullOrWhiteSpace(key))
-            throw new InvalidDataException($"{location} contains an empty key name.");
+        if (!KeyId.TryParseCompact(key, out var code))
+            throw new InvalidDataException($"{location} contains unsupported key '{key}' for the compiled profile.");
 
-        var normalized = key.Trim().ToUpperInvariant();
-        string? token = null;
-        var code = 0;
-
-        if (normalized.Length == 1 && normalized[0] is >= 'A' and <= 'Z')
-        {
-            token = normalized;
-            code = 1 + normalized[0] - 'A';
-        }
-        else if (normalized.Length == 1 && normalized[0] is >= '0' and <= '9')
-        {
-            token = $"Digit{normalized}";
-            code = 27 + normalized[0] - '0';
-        }
-        else if (normalized.Length is 2 or 3 && normalized[0] == 'F' &&
-                 int.TryParse(normalized.AsSpan(1), out var functionNumber) &&
-                 functionNumber is >= 1 and <= 12)
-        {
-            token = normalized;
-            code = 37 + functionNumber - 1;
-        }
-        else
-        {
-            (token, code) = normalized switch
-            {
-                "SCOLON" => ("SColon", 49),
-                "COLON" => ("Colon", 50),
-                "COMMA" => ("Comma", 51),
-                "DOT" => ("Dot", 52),
-                "SLASH" => ("Slash", 53),
-                "AT" => ("At", 54),
-                _ => (null, 0)
-            };
-        }
-
-        if (token is null || code is < 1 or > CompactKeyCount)
-            throw new InvalidDataException($"{location} contains unsupported key '{key}' for the compiled Windows profile.");
-
-        return new KeyInfo($"new KeyId(KeyCode.{token})", code);
+        return new KeyInfo($"new KeyId(KeyCode.{code})", (int)code);
     }
 
     private static int GetCompactChordIndex(int firstCode, int secondCode)
