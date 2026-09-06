@@ -1,0 +1,11 @@
+{
+  "id": "runtime-media-volume-mute-sm-a",
+  "description": "Space then M plus A emits volume mute.",
+  "initialState": { "mode": "S", "ime": "off", "layers": ["S", "M"] },
+  "input": [
+    { "atMs": 10, "kind": "keyDown", "key": "A" },
+    { "atMs": 11, "kind": "keyUp", "key": "A" }
+  ],
+  "expected": { "actions": [ { "kind": "media", "value": "VolumeMute" } ] },
+  "tags": ["legacy", "runtime-long-tail", "media", "deterministic"]
+}

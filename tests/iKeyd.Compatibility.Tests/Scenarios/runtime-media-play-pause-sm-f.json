@@ -1,0 +1,11 @@
+{
+  "id": "runtime-media-play-pause-sm-f",
+  "description": "Space then M plus F emits play/pause.",
+  "initialState": { "mode": "S", "ime": "off", "layers": ["S", "M"] },
+  "input": [
+    { "atMs": 10, "kind": "keyDown", "key": "F" },
+    { "atMs": 11, "kind": "keyUp", "key": "F" }
+  ],
+  "expected": { "actions": [ { "kind": "media", "value": "PlayPause" } ] },
+  "tags": ["legacy", "runtime-long-tail", "media", "deterministic"]
+}

@@ -1,0 +1,11 @@
+{
+  "id": "runtime-mouse-middle-click-sm-comma",
+  "description": "Space then M plus Comma emits a middle mouse click.",
+  "initialState": { "mode": "S", "ime": "off", "layers": ["S", "M"] },
+  "input": [
+    { "atMs": 10, "kind": "keyDown", "key": "Comma" },
+    { "atMs": 11, "kind": "keyUp", "key": "Comma" }
+  ],
+  "expected": { "actions": [ { "kind": "mouse", "value": "click:middle" } ] },
+  "tags": ["legacy", "runtime-long-tail", "mouse", "deterministic"]
+}

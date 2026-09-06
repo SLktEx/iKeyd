@@ -1,0 +1,11 @@
+{
+  "id": "runtime-media-next-track-sm-r",
+  "description": "Space then M plus R emits next track.",
+  "initialState": { "mode": "S", "ime": "off", "layers": ["S", "M"] },
+  "input": [
+    { "atMs": 10, "kind": "keyDown", "key": "R" },
+    { "atMs": 11, "kind": "keyUp", "key": "R" }
+  ],
+  "expected": { "actions": [ { "kind": "media", "value": "NextTrack" } ] },
+  "tags": ["legacy", "runtime-long-tail", "media", "deterministic"]
+}

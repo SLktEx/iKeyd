@@ -1,0 +1,11 @@
+{
+  "id": "runtime-mouse-scroll-down-ctrl-sm-colon",
+  "description": "Space then M plus Colon scrolls down with Control held.",
+  "initialState": { "mode": "S", "ime": "off", "layers": ["S", "M"] },
+  "input": [
+    { "atMs": 10, "kind": "keyDown", "key": "Colon" },
+    { "atMs": 11, "kind": "keyUp", "key": "Colon" }
+  ],
+  "expected": { "actions": [ { "kind": "mouse", "value": "scroll:-120:ctrl" } ] },
+  "tags": ["legacy", "runtime-long-tail", "mouse", "send", "deterministic"]
+}

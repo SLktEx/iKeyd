@@ -1,0 +1,11 @@
+{
+  "id": "runtime-mouse-scroll-up-sm-p",
+  "description": "Space then M plus P scrolls up one wheel detent.",
+  "initialState": { "mode": "S", "ime": "off", "layers": ["S", "M"] },
+  "input": [
+    { "atMs": 10, "kind": "keyDown", "key": "P" },
+    { "atMs": 11, "kind": "keyUp", "key": "P" }
+  ],
+  "expected": { "actions": [ { "kind": "mouse", "value": "scroll:120:plain" } ] },
+  "tags": ["legacy", "runtime-long-tail", "mouse", "deterministic"]
+}

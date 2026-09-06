@@ -1,0 +1,11 @@
+{
+  "id": "runtime-media-previous-track-sm-v",
+  "description": "Space then M plus V emits previous track.",
+  "initialState": { "mode": "S", "ime": "off", "layers": ["S", "M"] },
+  "input": [
+    { "atMs": 10, "kind": "keyDown", "key": "V" },
+    { "atMs": 11, "kind": "keyUp", "key": "V" }
+  ],
+  "expected": { "actions": [ { "kind": "media", "value": "PreviousTrack" } ] },
+  "tags": ["legacy", "runtime-long-tail", "media", "deterministic"]
+}

@@ -1,0 +1,11 @@
+{
+  "id": "runtime-media-volume-down-sm-z",
+  "description": "Space then M plus Z emits volume down.",
+  "initialState": { "mode": "S", "ime": "off", "layers": ["S", "M"] },
+  "input": [
+    { "atMs": 10, "kind": "keyDown", "key": "Z" },
+    { "atMs": 11, "kind": "keyUp", "key": "Z" }
+  ],
+  "expected": { "actions": [ { "kind": "media", "value": "VolumeDown" } ] },
+  "tags": ["legacy", "runtime-long-tail", "media", "deterministic"]
+}
