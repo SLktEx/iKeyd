@@ -24,7 +24,7 @@ public sealed class BehaviorIrTests
                 new KeyOutputIr("ESC"))
         ]);
 
-        var diagnostics = TargetCapabilityValidator.Validate(document, CompilationTarget.Qmk);
+        var diagnostics = CompilationTargetValidator.Validate(document, CompilationTarget.Qmk);
 
         Assert.Empty(diagnostics);
     }
@@ -40,7 +40,7 @@ public sealed class BehaviorIrTests
                 new ClipboardIr("history.next", source))
         ]);
 
-        var diagnostic = Assert.Single(TargetCapabilityValidator.Validate(document, CompilationTarget.Qmk));
+        var diagnostic = Assert.Single(CompilationTargetValidator.Validate(document, CompilationTarget.Qmk));
 
         Assert.Equal("IKYD2041", diagnostic.Code);
         Assert.Equal(source, diagnostic.Source);
@@ -63,7 +63,7 @@ public sealed class BehaviorIrTests
             macroSource)
         ]);
 
-        var diagnostic = Assert.Single(TargetCapabilityValidator.Validate(document, CompilationTarget.Zmk));
+        var diagnostic = Assert.Single(CompilationTargetValidator.Validate(document, CompilationTarget.Zmk));
 
         Assert.Equal(commandSource, diagnostic.Source);
         Assert.Contains("`host-command`", diagnostic.Message);
@@ -84,7 +84,7 @@ public sealed class BehaviorIrTests
                 ]))
         ]);
 
-        var diagnostics = TargetCapabilityValidator.Validate(document, CompilationTarget.IKeydCSharp);
+        var diagnostics = CompilationTargetValidator.Validate(document, CompilationTarget.IKeydCSharp);
 
         Assert.Empty(diagnostics);
     }
@@ -99,5 +99,127 @@ public sealed class BehaviorIrTests
         Assert.Contains(BehaviorCapability.Combo, qmk.Capabilities);
         Assert.DoesNotContain(BehaviorCapability.Clipboard, qmk.Capabilities);
         Assert.True(current.CodegenAvailable);
+    }
+
+    [Fact]
+    public void Target_blocks_are_additive_leaf_metadata_and_do_not_replace_portable_bindings()
+    {
+        var extension = new TargetExtensionIr(
+            TargetSelector.Qmk,
+            [],
+            [new TargetOptionIr("combo_term", "40ms")],
+            []);
+        var document = new BehaviorIrDocument(
+        [
+            new KeyBindingIr(new KeyPosition(1, 1), new KeyOutputIr("A")),
+            extension
+        ]);
+
+        Assert.Empty(extension.Children);
+        Assert.Contains(document.Traverse(), node => node is KeyBindingIr);
+        Assert.Single(TargetExtensionSemantics.Select(document, CompilationTarget.Qmk));
+        Assert.Empty(TargetExtensionSemantics.Select(document, CompilationTarget.Zmk));
+    }
+
+    [Fact]
+    public void IKeyd_target_family_applies_to_both_runtime_languages()
+    {
+        var document = new BehaviorIrDocument(
+        [
+            new TargetExtensionIr(
+                TargetSelector.IKeyd,
+                [],
+                [new TargetOptionIr("diagnostics", "verbose")],
+                [])
+        ]);
+
+        Assert.Single(TargetExtensionSemantics.Select(document, CompilationTarget.IKeydCSharp));
+        Assert.Single(TargetExtensionSemantics.Select(document, CompilationTarget.IKeydRust));
+        Assert.Empty(TargetExtensionSemantics.Select(document, CompilationTarget.Qmk));
+    }
+
+    [Fact]
+    public void Foreign_target_native_fragments_are_ignored_not_rejected()
+    {
+        var source = new SourceLocation("keymap.ikeyd", 20, 5);
+        var document = new BehaviorIrDocument(
+        [
+            new TargetExtensionIr(
+                TargetSelector.Qmk,
+                [],
+                [],
+                [new NativeTargetFragmentIr("keymap.c", "// qmk only", source)],
+                source)
+        ]);
+
+        Assert.Empty(CompilationTargetValidator.Validate(document, CompilationTarget.Zmk));
+        Assert.Empty(CompilationTargetValidator.Validate(document, CompilationTarget.IKeydCSharp));
+    }
+
+    [Fact]
+    public void Native_fragments_are_only_allowed_for_explicit_embedded_targets()
+    {
+        var source = new SourceLocation("keymap.ikeyd", 30, 7);
+        var document = new BehaviorIrDocument(
+        [
+            new TargetExtensionIr(
+                TargetSelector.IKeyd,
+                [],
+                [],
+                [new NativeTargetFragmentIr("csharp", "unsafe escape", source)])
+        ]);
+
+        var diagnostic = Assert.Single(
+            CompilationTargetValidator.Validate(document, CompilationTarget.IKeydCSharp));
+
+        Assert.Equal("IKYD2042", diagnostic.Code);
+        Assert.Equal(source, diagnostic.Source);
+    }
+
+    [Fact]
+    public void Explicit_target_requirements_use_the_same_capability_error_contract()
+    {
+        var source = new SourceLocation("keymap.ikeyd", 42, 9);
+        var document = new BehaviorIrDocument(
+        [
+            new TargetExtensionIr(
+                TargetSelector.Zmk,
+                [new TargetCapabilityRequirementIr(BehaviorCapability.Pointer, source)],
+                [],
+                [])
+        ]);
+
+        var diagnostic = Assert.Single(
+            CompilationTargetValidator.Validate(document, CompilationTarget.Zmk));
+
+        Assert.Equal("IKYD2041", diagnostic.Code);
+        Assert.Equal(source, diagnostic.Source);
+        Assert.Contains("`pointer`", diagnostic.Message);
+        Assert.Contains("`zmk`", diagnostic.Message);
+    }
+
+    [Fact]
+    public void Duplicate_options_across_matching_target_blocks_are_rejected()
+    {
+        var second = new SourceLocation("keymap.ikeyd", 52, 5);
+        var document = new BehaviorIrDocument(
+        [
+            new TargetExtensionIr(
+                TargetSelector.Qmk,
+                [],
+                [new TargetOptionIr("combo_term", "40ms")],
+                []),
+            new TargetExtensionIr(
+                TargetSelector.Qmk,
+                [],
+                [new TargetOptionIr("combo_term", "50ms", second)],
+                [])
+        ]);
+
+        var diagnostic = Assert.Single(
+            CompilationTargetValidator.Validate(document, CompilationTarget.Qmk));
+
+        Assert.Equal("IKYD2043", diagnostic.Code);
+        Assert.Equal(second, diagnostic.Source);
     }
 }
