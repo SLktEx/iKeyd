@@ -181,8 +181,14 @@ internal static class TypedProfileCompiler
         builder.AppendLine($"{indent}    {{");
         foreach (var local in definition.Locals)
         {
+            var initialValue = local.Type switch
+            {
+                UserBehaviorLocalType.Bool => BoolLiteral(local.InitialBoolValue),
+                UserBehaviorLocalType.Int => local.InitialIntValue.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                _ => throw new ArgumentOutOfRangeException(nameof(local.Type), local.Type, "Unknown behavior local type.")
+            };
             builder.AppendLine(
-                $"{indent}        new UserBehaviorLocalProfile({Literal(local.Name)}, {BoolLiteral(local.InitialValue)}),");
+                $"{indent}        new UserBehaviorLocalProfile({Literal(local.Name)}, {initialValue}),");
         }
         builder.AppendLine($"{indent}    }},");
         builder.AppendLine($"{indent}    new UserBehaviorHandlerProfile[]");
