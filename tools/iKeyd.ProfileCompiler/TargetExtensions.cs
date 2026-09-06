@@ -30,12 +30,20 @@ internal static class TargetSelectors
     };
 }
 
+/// <summary>
+/// Backend-only metadata. It is deliberately a leaf node: target blocks may add
+/// backend options/native declarations, but may not redefine portable bindings.
+/// </summary>
 internal sealed record TargetExtensionIr(
     TargetSelector Selector,
     IReadOnlyList<TargetCapabilityRequirementIr> Requirements,
     IReadOnlyList<TargetOptionIr> Options,
     IReadOnlyList<NativeTargetFragmentIr> NativeFragments,
-    SourceLocation? Source = null);
+    SourceLocation? Source = null) : BehaviorIrNode(Source)
+{
+    public override IEnumerable<BehaviorCapability> RequiredCapabilities
+        => Array.Empty<BehaviorCapability>();
+}
 
 internal sealed record TargetCapabilityRequirementIr(
     BehaviorCapability Capability,
@@ -51,6 +59,19 @@ internal sealed record NativeTargetFragmentIr(
     string Payload,
     SourceLocation? Source = null);
 
+internal static class CompilationTargetValidator
+{
+    public static IReadOnlyList<TargetDiagnostic> Validate(
+        BehaviorIrDocument document,
+        CompilationTarget target)
+    {
+        ArgumentNullException.ThrowIfNull(document);
+        return TargetCapabilityValidator.Validate(document, target)
+            .Concat(TargetExtensionSemantics.Validate(document, target))
+            .ToArray();
+    }
+}
+
 internal static class TargetExtensionSemantics
 {
     public const string NativeFragmentUnsupportedCode = "IKYD2042";
@@ -61,7 +82,8 @@ internal static class TargetExtensionSemantics
         CompilationTarget target)
     {
         ArgumentNullException.ThrowIfNull(document);
-        return document.TargetExtensions
+        return document.Traverse()
+            .OfType<TargetExtensionIr>()
             .Where(extension => TargetSelectors.Matches(extension.Selector, target))
             .ToArray();
     }
@@ -86,7 +108,7 @@ internal static class TargetExtensionSemantics
 
                 diagnostics.Add(new TargetDiagnostic(
                     TargetCapabilityValidator.UnsupportedCapabilityCode,
-                    $"`{TargetCapabilityValidator.CapabilityName(requirement.Capability)}` is not supported by target `{backend.Name}`.",
+                    $"`{CapabilityName(requirement.Capability)}` is not supported by target `{backend.Name}`.",
                     requirement.Source ?? extension.Source));
             }
 
@@ -120,4 +142,21 @@ internal static class TargetExtensionSemantics
 
     public static bool AllowsNativeFragments(CompilationTarget target)
         => target is CompilationTarget.Qmk or CompilationTarget.Zmk;
+
+    private static string CapabilityName(BehaviorCapability capability) => capability switch
+    {
+        BehaviorCapability.KeyOutput => "key-output",
+        BehaviorCapability.Layer => "layer",
+        BehaviorCapability.Combo => "combo",
+        BehaviorCapability.HoldTap => "hold-tap",
+        BehaviorCapability.ModTap => "mod-tap",
+        BehaviorCapability.LayerTap => "layer-tap",
+        BehaviorCapability.Macro => "macro",
+        BehaviorCapability.Unicode => "unicode",
+        BehaviorCapability.Pointer => "pointer",
+        BehaviorCapability.HostCommand => "host-command",
+        BehaviorCapability.Clipboard => "clipboard",
+        BehaviorCapability.AppContext => "app-context",
+        _ => capability.ToString(),
+    };
 }
