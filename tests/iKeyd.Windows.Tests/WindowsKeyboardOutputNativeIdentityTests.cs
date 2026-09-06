@@ -39,6 +39,8 @@ public sealed class WindowsKeyboardOutputNativeIdentityTests
         private const uint WmSysKeyDown = 0x0104;
         private const uint WmSysKeyUp = 0x0105;
         private const uint PmNoRemove = 0;
+        private const uint TargetVirtualKey = 0xF3;
+        private const uint TargetScanCode = 0x29;
 
         private readonly object _gate = new();
         private readonly HookProc _hookProc;
@@ -138,7 +140,9 @@ public sealed class WindowsKeyboardOutputNativeIdentityTests
             if (code >= 0 && (down || up))
             {
                 var native = Marshal.PtrToStructure<KbdLlHookStruct>(lParam);
-                if (native.ExtraInfo == WindowsKeyboardOutput.InjectionMarker)
+                if (native.ExtraInfo == WindowsKeyboardOutput.InjectionMarker &&
+                    native.VirtualKey == TargetVirtualKey &&
+                    native.ScanCode == TargetScanCode)
                 {
                     lock (_gate)
                     {
