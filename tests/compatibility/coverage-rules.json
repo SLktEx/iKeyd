@@ -29,10 +29,16 @@
       "evidence": ["tests/iKeyd.LegacySpec.Tests/LegacyRuntimeSpecTests.cs","tests/COMPATIBILITY.md"]
     },
     {
-      "name": "legacy Send interpreter",
+      "name": "hotkeySKG Send grammar is implemented and exhaustively checked for every finite pinned-source expression",
       "match": {"tag": "send"},
-      "set": {"implementation":"partial","unit":"partial","scenario":"partial","exeDiff":"partial","ahkDiff":"partial","realWindows":"unverified","intentionalDifference":"no"},
-      "evidence": ["src/iKeyd.Windows","tests/iKeyd.Windows.Tests","README.md"]
+      "set": {"implementation":"implemented","unit":"covered","scenario":"regression","exeDiff":"partial","ahkDiff":"partial","realWindows":"not-required","intentionalDifference":"no"},
+      "evidence": [
+        "src/iKeyd.App/LegacySendOutput.cs",
+        "tools/analyze-send-syntax.py",
+        "tests/iKeyd.Windows.Tests/LegacySendOutputCompatibilityTests.cs",
+        "tests/iKeyd.Windows.Tests/PinnedSendSyntaxInventoryTests.cs",
+        "tests/iKeyd.Compatibility.Tests/Scenarios/send-event-*.json"
+      ]
     },
     {
       "name": "desktop window operations",
@@ -79,7 +85,7 @@
     {
       "name": "process/application-specific legacy branches are explicitly handed to compatibility-fix work",
       "match": {"tag": "process-specific"},
-      "set": {"implementation":"unknown","unit":"unknown","scenario":"deferred:#57","exeDiff":"missing","ahkDiff":"missing","realWindows":"required","intentionalDifference":"unknown"},
+      "set": {"implementation":"deferred:#57","unit":"deferred:#57","scenario":"deferred:#57","exeDiff":"deferred:#57","ahkDiff":"deferred:#57","realWindows":"required","intentionalDifference":"pending:#57"},
       "evidence": ["issue:#57","tests/COMPATIBILITY.md"]
     },
     {
@@ -105,6 +111,18 @@
       "match": {"id": "legacy-label-610ca263a5"},
       "set": {"scenario": "real-windows:#59"},
       "evidence": ["issue:#59","tests/iKeyd.Windows.Tests/ClipboardControllerTests.cs"]
+    },
+    {
+      "name": "SendMessage substring false positive is excluded from Send compatibility scope",
+      "match": {"id": "legacy-send-19d656068e"},
+      "set": {"implementation":"excluded:false-positive","unit":"not-applicable","scenario":"excluded:false-positive","exeDiff":"not-applicable","ahkDiff":"not-applicable","realWindows":"not-applicable","intentionalDifference":"yes"},
+      "evidence": ["tools/analyze-send-syntax.py","issue:#56"]
+    },
+    {
+      "name": "SendMessage conversion-mode substring false positive is excluded from Send compatibility scope",
+      "match": {"id": "legacy-send-c963e4ab3e"},
+      "set": {"implementation":"excluded:false-positive","unit":"not-applicable","scenario":"excluded:false-positive","exeDiff":"not-applicable","ahkDiff":"not-applicable","realWindows":"not-applicable","intentionalDifference":"yes"},
+      "evidence": ["tools/analyze-send-syntax.py","issue:#56"]
     }
   ]
 }
