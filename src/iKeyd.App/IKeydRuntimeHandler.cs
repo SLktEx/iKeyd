@@ -245,36 +245,15 @@ internal sealed class IKeydRuntimeHandler : IKeyboardEventHandler, IMacroActionD
 
     private bool DispatchFunctionKey(KeyId key, LayerState state)
     {
+        if (LegacyFunctionSendMap.TryResolve(key.Code, state, out var legacySend))
+        {
+            if (legacySend.Length != 0)
+                _send.Send(legacySend);
+            return true;
+        }
+
         switch (key.Code)
         {
-            case KeyCode.Q:
-                if (state.IsExact(LayerKey.M)) { _send.Send("("); return true; }
-                if (state.IsExact(LayerKey.M, LayerKey.H)) { _send.Send("\""); return true; }
-                if (state.IsExact(LayerKey.H, LayerKey.M)) { _send.Send("'"); return true; }
-                break;
-
-            case KeyCode.W:
-                if (state.IsExact(LayerKey.M)) { _send.SendChord(WindowsKeyMap.Alt, 0x73); return true; }
-                if (state.IsExact(LayerKey.M, LayerKey.H)) { _send.SendChord(WindowsKeyMap.Control, 0x73); return true; }
-                break;
-
-            case KeyCode.J:
-                if (state.IsExact(LayerKey.M)) { _send.SendKey(WindowsKeyMap.Left); return true; }
-                if (state.IsExact(LayerKey.M, LayerKey.H)) { _send.SendChord(WindowsKeyMap.Shift, WindowsKeyMap.Left); return true; }
-                if (state.IsExact(LayerKey.H, LayerKey.M)) { _send.SendChord(WindowsKeyMap.Control, WindowsKeyMap.Left); return true; }
-                if (state.IsExact(LayerKey.M, LayerKey.S)) { _send.SendChord(WindowsKeyMap.Control, WindowsKeyMap.Shift, WindowsKeyMap.Left); return true; }
-                break;
-
-            case KeyCode.M:
-                if (state.IsExact(LayerKey.M)) { _send.SendKey(WindowsKeyMap.Delete); return true; }
-                break;
-
-            case KeyCode.Comma:
-                if (state.IsExact(LayerKey.M)) { _send.SendKey(WindowsKeyMap.Space); return true; }
-                if (state.IsExact(LayerKey.M, LayerKey.H)) { _send.SendKey(WindowsKeyMap.Tab); return true; }
-                if (state.IsExact(LayerKey.H, LayerKey.M)) { _send.SendKey(WindowsKeyMap.Enter); return true; }
-                break;
-
             case KeyCode.E:
                 if (state.IsExact(LayerKey.M)) { _desktopActions.MinimizeActive(); return true; }
                 if (state.IsExact(LayerKey.M, LayerKey.H)) { _desktopActions.PlaceActive(DesktopPlacement.TopHalf); return true; }
@@ -314,41 +293,14 @@ internal sealed class IKeydRuntimeHandler : IKeyboardEventHandler, IMacroActionD
     // stringify LayerState on every event.
     private bool DispatchFunctionKey(KeyId key, string state)
     {
-        var name = key.Value;
-
-        if (name == "Q")
+        if (LegacyFunctionSendMap.TryResolve(key.Code, state, out var legacySend))
         {
-            if (state == "M") { _send.Send("("); return true; }
-            if (state == "MH") { _send.Send("\""); return true; }
-            if (state == "HM") { _send.Send("'"); return true; }
-        }
-
-        if (name == "W")
-        {
-            if (state == "M") { _send.SendChord(WindowsKeyMap.Alt, 0x73); return true; }
-            if (state == "MH") { _send.SendChord(WindowsKeyMap.Control, 0x73); return true; }
-        }
-
-        if (name == "J")
-        {
-            if (state == "M") { _send.SendKey(WindowsKeyMap.Left); return true; }
-            if (state == "MH") { _send.SendChord(WindowsKeyMap.Shift, WindowsKeyMap.Left); return true; }
-            if (state == "HM") { _send.SendChord(WindowsKeyMap.Control, WindowsKeyMap.Left); return true; }
-            if (state == "MS") { _send.SendChord(WindowsKeyMap.Control, WindowsKeyMap.Shift, WindowsKeyMap.Left); return true; }
-        }
-
-        if (name == "M" && state == "M")
-        {
-            _send.SendKey(WindowsKeyMap.Delete);
+            if (legacySend.Length != 0)
+                _send.Send(legacySend);
             return true;
         }
 
-        if (name == "COMMA")
-        {
-            if (state == "M") { _send.SendKey(WindowsKeyMap.Space); return true; }
-            if (state == "MH") { _send.SendKey(WindowsKeyMap.Tab); return true; }
-            if (state == "HM") { _send.SendKey(WindowsKeyMap.Enter); return true; }
-        }
+        var name = key.Value;
 
         if (name == "E")
         {
