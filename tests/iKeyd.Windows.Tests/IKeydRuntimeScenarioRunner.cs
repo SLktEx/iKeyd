@@ -16,6 +16,10 @@ namespace iKeyd.Windows.Tests;
 public sealed class IKeydRuntimeScenarioRunner : ICompatibilityScenarioRunner
 {
     private static string ProfilePath => Path.Combine(AppContext.BaseDirectory, "Fixtures", "hotkeySKG.behavior.json");
+    private readonly DesktopMouseButton[] _initialMouseButtons;
+
+    public IKeydRuntimeScenarioRunner(params DesktopMouseButton[] initialMouseButtons)
+        => _initialMouseButtons = initialMouseButtons ?? [];
 
     public string Name => "iKeyd.Runtime";
     public bool IsAvailable => true;
@@ -36,6 +40,7 @@ public sealed class IKeydRuntimeScenarioRunner : ICompatibilityScenarioRunner
         var keyboardState = new KeyboardState();
         var keyboard = new RecordingKeyboardOutput();
         var desktop = new RecordingDesktopBackend();
+        desktop.SetInitialMouseButtons(_initialMouseButtons);
         var inputMethod = new FixedInputMethod(
             string.Equals(scenario.InitialState.Ime, "on", StringComparison.OrdinalIgnoreCase));
         var send = new LegacySendOutput(keyboard);
@@ -225,6 +230,7 @@ public sealed class IKeydRuntimeScenarioRunner : ICompatibilityScenarioRunner
     private sealed class RecordingDesktopBackend : IDesktopBackend
     {
         private readonly WindowHandle _window = new(1);
+        private readonly WindowHandle _secondaryWindow = new(2);
         private readonly HashSet<DesktopMouseButton> _buttons = [];
         private DesktopWindowState _windowState = DesktopWindowState.Normal;
         private DesktopRect _bounds = new(100, 100, 800, 600);
@@ -236,12 +242,19 @@ public sealed class IKeydRuntimeScenarioRunner : ICompatibilityScenarioRunner
 
         public List<ObservedAction> Actions { get; } = [];
 
+        public void SetInitialMouseButtons(IEnumerable<DesktopMouseButton> buttons)
+        {
+            _buttons.Clear();
+            foreach (var button in buttons)
+                _buttons.Add(button);
+        }
+
         public WindowHandle GetActiveWindow() => _window;
         public DesktopWindowState GetWindowState(WindowHandle window) => _windowState;
         public DesktopRect GetWindowBounds(WindowHandle window) => _bounds;
         public DesktopRect GetPrimaryWorkArea() => _workArea;
         public string? GetWindowClass(WindowHandle window) => "iKeydScenarioWindow";
-        public bool IsWindow(WindowHandle window) => window == _window;
+        public bool IsWindow(WindowHandle window) => window == _window || window == _secondaryWindow;
 
         public void Minimize(WindowHandle window)
         {
@@ -268,7 +281,7 @@ public sealed class IKeydRuntimeScenarioRunner : ICompatibilityScenarioRunner
         }
 
         public void Activate(WindowHandle window) => Add("window", "activate");
-        public IReadOnlyList<WindowHandle> EnumerateTopLevelWindows() => [_window];
+        public IReadOnlyList<WindowHandle> EnumerateTopLevelWindows() => [_window, _secondaryWindow];
 
         public bool IsTopMost(WindowHandle window) => _topMost;
         public void SetTopMost(WindowHandle window, bool enabled)

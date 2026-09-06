@@ -69,9 +69,9 @@ public sealed class LegacySendOutputCompatibilityTests
         Assert.Equal(20, keyboard.Events.Count);
         Assert.Equal(Event(WindowsKeyMap.Control, KeyEventKind.Down), keyboard.Events[0]);
         Assert.Equal(Event(WindowsKeyMap.Control, KeyEventKind.Up), keyboard.Events[1]);
-        Assert.Equal(new KeyboardKey(0x1C, 0x79), keyboard.Events[2].Key);
-        Assert.Equal(new KeyboardKey(0x1D, 0x7B), keyboard.Events[4].Key);
-        Assert.Equal(new KeyboardKey(0xF3, 0x29), keyboard.Events[6].Key);
+        Assert.Equal(new KeyboardKey(0x1C, 0x79, PreserveVirtualKeyWithScanCode: true), keyboard.Events[2].Key);
+        Assert.Equal(new KeyboardKey(0x1D, 0x7B, PreserveVirtualKeyWithScanCode: true), keyboard.Events[4].Key);
+        Assert.Equal(new KeyboardKey(0xF3, 0x29, PreserveVirtualKeyWithScanCode: true), keyboard.Events[6].Key);
         Assert.Equal(Event(WindowsKeyMap.VolumeUp, KeyEventKind.Down), keyboard.Events[8]);
         Assert.Equal(Event(WindowsKeyMap.VolumeMute, KeyEventKind.Down), keyboard.Events[10]);
         Assert.Equal(Event(WindowsKeyMap.VolumeDown, KeyEventKind.Down), keyboard.Events[12]);
