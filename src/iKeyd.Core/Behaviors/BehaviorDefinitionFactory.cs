@@ -4,9 +4,9 @@ using iKeyd.Core.Configuration;
 namespace iKeyd.Core.Behaviors;
 
 /// <summary>
-/// Converts the profile/IR representation of standard behavior invocations into
-/// executable behavior definitions. User-defined behavior definitions will be
-/// added to this compilation boundary later; the event runtime remains generic.
+/// Converts the profile/IR representation of standard and user-defined behavior
+/// invocations into executable behavior definitions. The event runtime remains
+/// generic and does not branch on behavior names.
 /// </summary>
 public static class BehaviorDefinitionFactory
 {
@@ -17,13 +17,21 @@ public static class BehaviorDefinitionFactory
     ];
 
     public static BehaviorDefinition Create(BehaviorInvocationProfile invocation)
+        => Create(invocation, new Dictionary<string, UserBehaviorDefinitionProfile>(StringComparer.OrdinalIgnoreCase));
+
+    public static BehaviorDefinition Create(
+        BehaviorInvocationProfile invocation,
+        IReadOnlyDictionary<string, UserBehaviorDefinitionProfile> userDefinitions)
     {
         ArgumentNullException.ThrowIfNull(invocation);
+        ArgumentNullException.ThrowIfNull(userDefinitions);
 
         if (string.Equals(invocation.Name, "LT", StringComparison.OrdinalIgnoreCase))
             return CreateLayerTap(invocation);
         if (string.Equals(invocation.Name, "MT", StringComparison.OrdinalIgnoreCase))
             return CreateModTap(invocation);
+        if (userDefinitions.TryGetValue(invocation.Name, out var userDefinition))
+            return new ScriptedBehaviorDefinition(userDefinition, invocation);
 
         throw new NotSupportedException($"Unknown behavior '{invocation.Name}'.");
     }
