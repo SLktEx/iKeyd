@@ -90,6 +90,47 @@ public sealed class RealWindowsDesktopE2ETests
         }
     }
 
+    [Fact]
+    [Trait("Category", "RealWindowsCompatibilityE2E")]
+    public void Pointer_relative_move_uses_SendInput_without_a_large_burst_and_restores_position()
+    {
+        if (!IsEnabled())
+            return;
+
+        var backend = new WindowsDesktopBackend();
+        var original = backend.GetPointerPosition();
+        var workArea = backend.GetPrimaryWorkArea();
+        var anchor = new DesktopPoint(
+            workArea.X + Math.Max(1, workArea.Width / 2),
+            workArea.Y + Math.Max(1, workArea.Height / 2));
+
+        try
+        {
+            backend.MovePointer(anchor);
+            Assert.True(WaitUntil(() => backend.GetPointerPosition() == anchor));
+
+            // Relative mouse input is intentionally subject to the user's Windows
+            // pointer settings, so exact pixel distance is not a compatibility
+            // invariant. We verify the real SendInput path moves in the requested
+            // direction and does not turn one small step into a runaway burst.
+            backend.MovePointerBy(24, 16);
+            Assert.True(WaitUntil(() => backend.GetPointerPosition() != anchor));
+
+            var moved = backend.GetPointerPosition();
+            var deltaX = moved.X - anchor.X;
+            var deltaY = moved.Y - anchor.Y;
+            Assert.True(deltaX > 0, $"Relative mouse X moved in the wrong direction: {deltaX}.");
+            Assert.True(deltaY > 0, $"Relative mouse Y moved in the wrong direction: {deltaY}.");
+            Assert.InRange(deltaX, 1, 512);
+            Assert.InRange(deltaY, 1, 512);
+        }
+        finally
+        {
+            backend.MovePointer(original);
+            Assert.True(WaitUntil(() => backend.GetPointerPosition() == original));
+        }
+    }
+
     private static bool IsEnabled()
         => OperatingSystem.IsWindows() &&
            string.Equals(Environment.GetEnvironmentVariable(EnvironmentVariable), "1", StringComparison.Ordinal);
