@@ -19,28 +19,17 @@ class IKeydDslTests(unittest.TestCase):
     def test_current_hotkeyskg_dsl_compiles_to_canonical_json(self):
         dsl_path = ROOT / "config" / "hotkeySKG.ikeyd"
         json_path = ROOT / "config" / "hotkeySKG.behavior.json"
-
         actual = module.compile_dsl(dsl_path.read_text(encoding="utf-8"), dsl_path)
         expected = json.loads(json_path.read_text(encoding="utf-8"))
-
         self.assertEqual(expected, actual)
 
     def test_duplicate_chords_preserve_legacy_first_declaration_wins_metadata(self):
         dsl_path = ROOT / "config" / "hotkeySKG.ikeyd"
         profile = module.compile_dsl(dsl_path.read_text(encoding="utf-8"), dsl_path)
-
         self.assertEqual(
             [
-                {
-                    "keys": ["scolon", "v"],
-                    "outputs": ["nya", "pya"],
-                    "effectiveOutput": "nya",
-                },
-                {
-                    "keys": ["f", "u"],
-                    "outputs": ["she", "je"],
-                    "effectiveOutput": "she",
-                },
+                {"keys": ["scolon", "v"], "outputs": ["nya", "pya"], "effectiveOutput": "nya"},
+                {"keys": ["f", "u"], "outputs": ["she", "je"], "effectiveOutput": "she"},
             ],
             profile["knownQuirks"]["duplicateChordPatterns"]["K"],
         )
@@ -61,14 +50,9 @@ keymap BASE {
     combo POS[1,2] + E = "other"
 }
 """.strip()
-
         profile = module.compile_dsl(text, Path("profile.ikeyd"))
-
         self.assertEqual({"Q": "x", "W": "y"}, profile["singleStroke"]["BASE"])
-        self.assertEqual(
-            [["Q", "S", "escape"], ["W", "E", "other"]],
-            profile["chords"]["BASE"],
-        )
+        self.assertEqual([["Q", "S", "escape"], ["W", "E", "other"]], profile["chords"]["BASE"])
         self.assertNotIn("layouts", profile)
 
     def test_position_references_are_independent_of_base_outputs(self):
@@ -86,14 +70,9 @@ keymap BASE {
 }
 """.strip()
         second = first.replace('Q = "q"', 'Q = "x"').replace('W = "w"', 'W = "y"')
-
         first_profile = module.compile_dsl(first, Path("first.ikeyd"))
         second_profile = module.compile_dsl(second, Path("second.ikeyd"))
-
-        self.assertEqual(
-            first_profile["chords"]["BASE"],
-            second_profile["chords"]["BASE"],
-        )
+        self.assertEqual(first_profile["chords"]["BASE"], second_profile["chords"]["BASE"])
         self.assertEqual([["Q", "W", "escape"]], second_profile["chords"]["BASE"])
 
     def test_behavior_invocation_compiles_separately_from_string_mappings(self):
@@ -109,17 +88,10 @@ keymap BASE {
     POS[1,2] = "w"
 }
 """.strip()
-
         profile = module.compile_dsl(text, Path("profile.ikeyd"))
-
         self.assertEqual({"W": "w"}, profile["singleStroke"]["BASE"])
         self.assertEqual(
-            {
-                "Q": {
-                    "name": "LT",
-                    "arguments": ["NUM", "Z"],
-                }
-            },
+            {"Q": {"name": "LT", "arguments": ["NUM", "Z"]}},
             profile["behaviors"]["BASE"],
         )
 
@@ -141,24 +113,89 @@ keymap NUM {
     C = "num-c"
 }
 """.strip()
-
         profile = module.compile_dsl(text, Path("profile.ikeyd"))
-
         self.assertEqual(
             {
                 "name": "LT",
                 "arguments": ["NUM", "Z"],
-                "options": {
-                    "tapping_term": "170ms",
-                    "hold_on_other_key_press": "false",
-                },
+                "options": {"tapping_term": "170ms", "hold_on_other_key_press": "false"},
             },
             profile["behaviors"]["S"]["A"],
         )
+        self.assertEqual({"name": "MT", "arguments": ["Ctrl", "X"]}, profile["behaviors"]["S"]["B"])
+
+    def test_user_behavior_compiles_bool_state_handlers_and_if(self):
+        text = """
+profile demo {
+    chord_window = 40ms
+}
+behavior SMART_LT(tap_key, layer_name) {
+    var interrupted: bool = false
+
+    on_interrupt(other) {
+        interrupted = true
+        layer.on(layer_name)
+    }
+
+    on_release {
+        if interrupted {
+            layer.off(layer_name)
+        } else {
+            send tap_key
+        }
+    }
+}
+keymap S {
+    A = SMART_LT(X, NUM)
+}
+keymap K {
+}
+keymap NUM {
+    B = "num-b"
+}
+""".strip()
+        profile = module.compile_dsl(text, Path("profile.ikeyd"))
+        definition = profile["behaviorDefinitions"]["SMART_LT"]
+        self.assertEqual(["tap_key", "layer_name"], definition["parameters"])
+        self.assertEqual({"interrupted": False}, definition["locals"])
         self.assertEqual(
-            {"name": "MT", "arguments": ["Ctrl", "X"]},
-            profile["behaviors"]["S"]["B"],
+            [
+                {"op": "set_bool", "target": "interrupted", "value": "true"},
+                {"op": "layer_on", "value": "layer_name"},
+            ],
+            definition["handlers"]["interrupt"]["statements"],
         )
+        release = definition["handlers"]["release"]["statements"][0]
+        self.assertEqual("if_bool", release["op"])
+        self.assertEqual("interrupted", release["condition"])
+        self.assertEqual([{"op": "layer_off", "value": "layer_name"}], release["then"])
+        self.assertEqual([{"op": "send", "value": "tap_key"}], release["else"])
+        self.assertEqual(
+            {"name": "SMART_LT", "arguments": ["X", "NUM"]},
+            profile["behaviors"]["S"]["A"],
+        )
+
+    def test_user_behavior_can_emit_modifier_actions(self):
+        text = """
+profile demo {
+    chord_window = 40ms
+}
+behavior HOLD_CTRL() {
+    on_press {
+        modifier.down(Ctrl)
+    }
+    on_release {
+        modifier.up(Ctrl)
+    }
+}
+keymap S {
+    A = HOLD_CTRL()
+}
+""".strip()
+        profile = module.compile_dsl(text, Path("profile.ikeyd"))
+        handlers = profile["behaviorDefinitions"]["HOLD_CTRL"]["handlers"]
+        self.assertEqual([{"op": "modifier_down", "value": "Ctrl"}], handlers["press"]["statements"])
+        self.assertEqual([{"op": "modifier_up", "value": "Ctrl"}], handlers["release"]["statements"])
 
     def test_duplicate_behavior_option_is_rejected(self):
         text = """
@@ -172,7 +209,6 @@ keymap S {
     }
 }
 """.strip()
-
         with self.assertRaisesRegex(module.DslError, r"duplicate behavior option 'tapping_term'"):
             module.compile_dsl(text, Path("profile.ikeyd"))
 
@@ -185,11 +221,7 @@ keymap BASE {
     Q = LT(NUM, bad-arg)
 }
 """.strip()
-
-        with self.assertRaisesRegex(
-            module.DslError,
-            r"profile\.ikeyd:5: behavior arguments must be identifiers",
-        ):
+        with self.assertRaisesRegex(module.DslError, r"profile\.ikeyd:5: behavior arguments must be identifiers"):
             module.compile_dsl(text, Path("profile.ikeyd"))
 
     def test_string_and_behavior_mapping_cannot_share_the_same_key(self):
@@ -202,7 +234,6 @@ keymap BASE {
     Q = LT(NUM, Z)
 }
 """.strip()
-
         with self.assertRaisesRegex(module.DslError, r"duplicate key mapping 'BASE\.Q'"):
             module.compile_dsl(text, Path("profile.ikeyd"))
 
@@ -218,11 +249,7 @@ keymap BASE {
     combo BASE[1,3] + BASE[1,1] = "escape"
 }
 """.strip()
-
-        with self.assertRaisesRegex(
-            module.DslError,
-            r"profile\.ikeyd:8: column 3 is out of range for layout 'BASE' row 1",
-        ):
+        with self.assertRaisesRegex(module.DslError, r"profile\.ikeyd:8: column 3 is out of range for layout 'BASE' row 1"):
             module.compile_dsl(text, Path("profile.ikeyd"))
 
     def test_reports_source_line_for_invalid_statement(self):
@@ -234,7 +261,6 @@ keymap S {
     this is not valid
 }
 """.strip()
-
         with self.assertRaisesRegex(module.DslError, r"profile\.ikeyd:5: unknown keymap statement"):
             module.compile_dsl(text, Path("profile.ikeyd"))
 

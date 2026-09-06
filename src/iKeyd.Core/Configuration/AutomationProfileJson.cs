@@ -5,6 +5,8 @@ namespace iKeyd.Core.Configuration;
 
 public static class AutomationProfileJson
 {
+    private const int MaxUserBehaviorStatementDepth = 32;
+
     public static AutomationProfile Load(string path)
     {
         if (string.IsNullOrWhiteSpace(path))
@@ -101,14 +103,7 @@ public static class AutomationProfileJson
                         throw new InvalidDataException($"behaviors.{mode}.{item.Name}.arguments must be an array.");
                     }
 
-                    var arguments = new List<string>();
-                    foreach (var argument in argumentsElement.EnumerateArray())
-                    {
-                        if (argument.ValueKind != JsonValueKind.String)
-                            throw new InvalidDataException($"behaviors.{mode}.{item.Name}.arguments must contain strings.");
-                        arguments.Add(argument.GetString()!);
-                    }
-
+                    var arguments = ReadStringArray(argumentsElement, $"behaviors.{mode}.{item.Name}.arguments");
                     var options = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
                     if (invocation.TryGetProperty("options", out var optionsElement))
                     {
@@ -148,7 +143,13 @@ public static class AutomationProfileJson
             }
         }
 
-        return new AutomationProfile(chordWindowMs, keymaps, startupMode, hotkeys);
+        var behaviorDefinitions = ParseUserBehaviorDefinitions(root);
+        return new AutomationProfile(
+            chordWindowMs,
+            keymaps,
+            startupMode,
+            hotkeys,
+            behaviorDefinitions);
     }
 
     public static void Save(AutomationProfile profile, string path)
@@ -190,15 +191,11 @@ public static class AutomationProfileJson
         {
             writer.WritePropertyName(keymap.Name);
             writer.WriteStartObject();
-
-            // AHK single-stroke variables are last-write-wins. Emit the effective
-            // mapping while keeping chord declaration order separately below.
             var effectiveSingles = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             foreach (var mapping in keymap.SingleMappings)
                 effectiveSingles[mapping.Key.Value] = mapping.Output;
             foreach (var mapping in effectiveSingles.OrderBy(pair => pair.Key, StringComparer.OrdinalIgnoreCase))
                 writer.WriteString(mapping.Key, mapping.Value);
-
             writer.WriteEndObject();
         }
         writer.WriteEndObject();
@@ -254,6 +251,9 @@ public static class AutomationProfileJson
             writer.WriteEndObject();
         }
 
+        if (profile.BehaviorDefinitions.Count != 0)
+            WriteUserBehaviorDefinitions(profile.BehaviorDefinitions.Values, writer);
+
         if (profile.Hotkeys.Count > 0)
         {
             writer.WritePropertyName("hotkeys");
@@ -270,6 +270,184 @@ public static class AutomationProfileJson
 
         writer.WriteEndObject();
         writer.Flush();
+    }
+
+    private static IReadOnlyList<UserBehaviorDefinitionProfile> ParseUserBehaviorDefinitions(JsonElement root)
+    {
+        if (!root.TryGetProperty("behaviorDefinitions", out var definitionsElement))
+            return [];
+        if (definitionsElement.ValueKind != JsonValueKind.Object)
+            throw new InvalidDataException("behaviorDefinitions must be an object.");
+
+        var result = new List<UserBehaviorDefinitionProfile>();
+        foreach (var item in definitionsElement.EnumerateObject())
+        {
+            if (item.Value.ValueKind != JsonValueKind.Object)
+                throw new InvalidDataException($"behaviorDefinitions.{item.Name} must be an object.");
+
+            var definition = item.Value;
+            if (!definition.TryGetProperty("parameters", out var parametersElement) ||
+                parametersElement.ValueKind != JsonValueKind.Array)
+            {
+                throw new InvalidDataException($"behaviorDefinitions.{item.Name}.parameters must be an array.");
+            }
+            var parameters = ReadStringArray(parametersElement, $"behaviorDefinitions.{item.Name}.parameters");
+
+            var locals = new List<UserBehaviorLocalProfile>();
+            if (definition.TryGetProperty("locals", out var localsElement))
+            {
+                if (localsElement.ValueKind != JsonValueKind.Object)
+                    throw new InvalidDataException($"behaviorDefinitions.{item.Name}.locals must be an object.");
+                foreach (var local in localsElement.EnumerateObject())
+                {
+                    if (local.Value.ValueKind is not (JsonValueKind.True or JsonValueKind.False))
+                        throw new InvalidDataException($"behaviorDefinitions.{item.Name}.locals.{local.Name} must be boolean.");
+                    locals.Add(new UserBehaviorLocalProfile(local.Name, local.Value.GetBoolean()));
+                }
+            }
+
+            var handlers = new List<UserBehaviorHandlerProfile>();
+            if (definition.TryGetProperty("handlers", out var handlersElement))
+            {
+                if (handlersElement.ValueKind != JsonValueKind.Object)
+                    throw new InvalidDataException($"behaviorDefinitions.{item.Name}.handlers must be an object.");
+                foreach (var handler in handlersElement.EnumerateObject())
+                {
+                    if (handler.Value.ValueKind != JsonValueKind.Object)
+                        throw new InvalidDataException($"behaviorDefinitions.{item.Name}.handlers.{handler.Name} must be an object.");
+                    var handlerParameters = handler.Value.TryGetProperty("parameters", out var handlerParametersElement)
+                        ? ReadStringArray(handlerParametersElement, $"behaviorDefinitions.{item.Name}.handlers.{handler.Name}.parameters")
+                        : [];
+                    if (!handler.Value.TryGetProperty("statements", out var statementsElement) ||
+                        statementsElement.ValueKind != JsonValueKind.Array)
+                    {
+                        throw new InvalidDataException($"behaviorDefinitions.{item.Name}.handlers.{handler.Name}.statements must be an array.");
+                    }
+                    handlers.Add(new UserBehaviorHandlerProfile(
+                        handler.Name,
+                        handlerParameters,
+                        ParseStatements(statementsElement, 0)));
+                }
+            }
+
+            result.Add(new UserBehaviorDefinitionProfile(item.Name, parameters, locals, handlers));
+        }
+        return result;
+    }
+
+    private static IReadOnlyList<UserBehaviorStatementProfile> ParseStatements(JsonElement array, int depth)
+    {
+        if (depth > MaxUserBehaviorStatementDepth)
+            throw new InvalidDataException("User behavior statement nesting exceeds the supported limit.");
+        if (array.ValueKind != JsonValueKind.Array)
+            throw new InvalidDataException("User behavior statements must be an array.");
+
+        var result = new List<UserBehaviorStatementProfile>();
+        foreach (var element in array.EnumerateArray())
+        {
+            if (element.ValueKind != JsonValueKind.Object)
+                throw new InvalidDataException("A user behavior statement must be an object.");
+            var op = element.GetProperty("op").GetString()
+                ?? throw new InvalidDataException("User behavior statement op must be a string.");
+            var target = element.TryGetProperty("target", out var targetElement) ? targetElement.GetString() : null;
+            var value = element.TryGetProperty("value", out var valueElement) ? valueElement.GetString() : null;
+            var condition = element.TryGetProperty("condition", out var conditionElement) ? conditionElement.GetString() : null;
+            var thenStatements = element.TryGetProperty("then", out var thenElement)
+                ? ParseStatements(thenElement, depth + 1)
+                : [];
+            var elseStatements = element.TryGetProperty("else", out var elseElement)
+                ? ParseStatements(elseElement, depth + 1)
+                : [];
+            result.Add(new UserBehaviorStatementProfile(op, target, value, condition, thenStatements, elseStatements));
+        }
+        return result;
+    }
+
+    private static void WriteUserBehaviorDefinitions(
+        IEnumerable<UserBehaviorDefinitionProfile> definitions,
+        Utf8JsonWriter writer)
+    {
+        writer.WritePropertyName("behaviorDefinitions");
+        writer.WriteStartObject();
+        foreach (var definition in definitions.OrderBy(value => value.Name, StringComparer.OrdinalIgnoreCase))
+        {
+            writer.WritePropertyName(definition.Name);
+            writer.WriteStartObject();
+            writer.WritePropertyName("parameters");
+            writer.WriteStartArray();
+            foreach (var parameter in definition.Parameters)
+                writer.WriteStringValue(parameter);
+            writer.WriteEndArray();
+
+            writer.WritePropertyName("locals");
+            writer.WriteStartObject();
+            foreach (var local in definition.Locals.OrderBy(value => value.Name, StringComparer.OrdinalIgnoreCase))
+                writer.WriteBoolean(local.Name, local.InitialValue);
+            writer.WriteEndObject();
+
+            writer.WritePropertyName("handlers");
+            writer.WriteStartObject();
+            foreach (var handler in definition.Handlers.OrderBy(value => value.Event, StringComparer.OrdinalIgnoreCase))
+            {
+                writer.WritePropertyName(handler.Event);
+                writer.WriteStartObject();
+                writer.WritePropertyName("parameters");
+                writer.WriteStartArray();
+                foreach (var parameter in handler.Parameters)
+                    writer.WriteStringValue(parameter);
+                writer.WriteEndArray();
+                writer.WritePropertyName("statements");
+                WriteStatements(handler.Statements, writer);
+                writer.WriteEndObject();
+            }
+            writer.WriteEndObject();
+            writer.WriteEndObject();
+        }
+        writer.WriteEndObject();
+    }
+
+    private static void WriteStatements(
+        IReadOnlyList<UserBehaviorStatementProfile> statements,
+        Utf8JsonWriter writer)
+    {
+        writer.WriteStartArray();
+        foreach (var statement in statements)
+        {
+            writer.WriteStartObject();
+            writer.WriteString("op", statement.Op);
+            if (statement.Target is not null)
+                writer.WriteString("target", statement.Target);
+            if (statement.Value is not null)
+                writer.WriteString("value", statement.Value);
+            if (statement.Condition is not null)
+                writer.WriteString("condition", statement.Condition);
+            if (statement.Then.Count != 0)
+            {
+                writer.WritePropertyName("then");
+                WriteStatements(statement.Then, writer);
+            }
+            if (statement.Else.Count != 0)
+            {
+                writer.WritePropertyName("else");
+                WriteStatements(statement.Else, writer);
+            }
+            writer.WriteEndObject();
+        }
+        writer.WriteEndArray();
+    }
+
+    private static IReadOnlyList<string> ReadStringArray(JsonElement element, string location)
+    {
+        if (element.ValueKind != JsonValueKind.Array)
+            throw new InvalidDataException($"{location} must be an array.");
+        var result = new List<string>();
+        foreach (var item in element.EnumerateArray())
+        {
+            if (item.ValueKind != JsonValueKind.String)
+                throw new InvalidDataException($"{location} must contain strings.");
+            result.Add(item.GetString()!);
+        }
+        return result;
     }
 
     private static string ReadBehaviorOptionValue(JsonElement value, string location)
