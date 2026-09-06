@@ -33,11 +33,18 @@ jobs:
           set -e
           if [ "$status" -ne 0 ]; then
             conflicts="$(git diff --name-only --diff-filter=U)"
-            unexpected="$(printf '%s\n' "$conflicts" | grep -v -E '^(src/iKeyd.App/WindowsKeyMap.cs|tests/iKeyd.Windows.Tests/LegacySendEventScenarioRunner.cs)$' || true)"
+            unexpected="$(printf '%s\n' "$conflicts" | grep -v -E '^(src/iKeyd.App/IKeydRuntimeHandler.cs|src/iKeyd.App/WindowsKeyMap.cs|tests/iKeyd.Windows.Tests/LegacySendEventScenarioRunner.cs)$' || true)"
             if [ -n "$unexpected" ]; then
               echo "Unexpected conflicts:"
               echo "$unexpected"
               exit 1
+            fi
+            if printf '%s\n' "$conflicts" | grep -Fxq 'src/iKeyd.App/IKeydRuntimeHandler.cs'; then
+              # Branch runtime contains the same SM coverage plus the observed legacy
+              # right-button release-only typo, window groups, process hotkeys and
+              # macro/clipboard reachability. Keep that superset.
+              git checkout --ours -- src/iKeyd.App/IKeydRuntimeHandler.cs
+              git add src/iKeyd.App/IKeydRuntimeHandler.cs
             fi
             for path in src/iKeyd.App/WindowsKeyMap.cs tests/iKeyd.Windows.Tests/LegacySendEventScenarioRunner.cs; do
               if printf '%s\n' "$conflicts" | grep -Fxq "$path"; then
@@ -47,7 +54,7 @@ jobs:
             done
           fi
           python -B tools/issue46_sync_latest_main.py
-          git add src/iKeyd.App/WindowsKeyMap.cs tests/iKeyd.Windows.Tests/LegacySendEventScenarioRunner.cs
+          git add src/iKeyd.App/IKeydRuntimeHandler.cs src/iKeyd.App/WindowsKeyMap.cs tests/iKeyd.Windows.Tests/LegacySendEventScenarioRunner.cs
       - name: Restore
         run: dotnet restore iKeyd.sln
       - name: Build
@@ -63,4 +70,4 @@ jobs:
           git add -A
           git commit -m "Merge latest main into hotkeySKG compatibility"
           git push origin HEAD:issue-46-hotkeyskg-full-compat
-# rerun: semantic patch is idempotent after Git auto-merge
+# rerun: preserve observed legacy right-button quirk and runtime superset
