@@ -38,6 +38,12 @@ public static class BehaviorDefinitionFactory
             return CreateUnicode(invocation);
         if (string.Equals(invocation.Name, "TEXT", StringComparison.OrdinalIgnoreCase))
             return CreateText(invocation);
+        if (string.Equals(invocation.Name, "EXEC", StringComparison.OrdinalIgnoreCase))
+            return CreateExec(invocation);
+        if (string.Equals(invocation.Name, "SHELL", StringComparison.OrdinalIgnoreCase))
+            return CreateShell(invocation);
+        if (string.Equals(invocation.Name, "QUERY", StringComparison.OrdinalIgnoreCase))
+            return CreateQuery(invocation);
         if (userDefinitions.TryGetValue(invocation.Name, out var userDefinition))
             return new ScriptedBehaviorDefinition(userDefinition, invocation);
 
@@ -101,6 +107,37 @@ public static class BehaviorDefinitionFactory
 
     private static BehaviorDefinition CreateText(BehaviorInvocationProfile invocation)
         => StandardBehaviors.Text(ReadLiteralValue(invocation, "TEXT"));
+
+    private static BehaviorDefinition CreateExec(BehaviorInvocationProfile invocation)
+    {
+        RequireNoOptions(invocation);
+        if (invocation.Arguments.Count < 1)
+            throw new InvalidDataException("EXEC requires an executable followed by optional argv values.");
+
+        return StandardBehaviors.Press(
+            BehaviorAction.Exec(invocation.Arguments[0], invocation.Arguments.Skip(1)));
+    }
+
+    private static BehaviorDefinition CreateShell(BehaviorInvocationProfile invocation)
+    {
+        RequireNoOptions(invocation);
+        RequireCount(invocation, 1, "SHELL(command)");
+        return StandardBehaviors.Press(BehaviorAction.Shell(invocation.Arguments[0]));
+    }
+
+    private static BehaviorDefinition CreateQuery(BehaviorInvocationProfile invocation)
+    {
+        RequireNoOptions(invocation);
+        RequireCount(invocation, 1, "QUERY(system.query)");
+        try
+        {
+            return StandardBehaviors.Press(BehaviorAction.Query(invocation.Arguments[0]));
+        }
+        catch (ArgumentException exception)
+        {
+            throw new InvalidDataException(exception.Message, exception);
+        }
+    }
 
     private static string ReadLiteralValue(BehaviorInvocationProfile invocation, string helper)
     {
