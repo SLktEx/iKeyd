@@ -1,3 +1,4 @@
+using iKeyd.Core.Behaviors;
 using iKeyd.Core.Chords;
 using iKeyd.Core.Configuration;
 using Xunit;
@@ -43,7 +44,39 @@ public sealed class AutomationProfileTests
     }
 
     [Fact]
-    public void Profile_round_trip_preserves_effective_mappings_and_chord_order()
+    public void Profile_parser_lowers_LT_behavior_invocation_to_generic_runtime()
+    {
+        const string json = """
+        {
+          "source": { "chordWindowMs": 40 },
+          "startupMode": "Base",
+          "singleStroke": { "Base": { "W": "w" } },
+          "chords": { "Base": [] },
+          "behaviors": {
+            "Base": {
+              "Q": { "name": "LT", "arguments": ["NUM", "Z"] }
+            }
+          }
+        }
+        """;
+
+        var profile = AutomationProfileJson.Parse(json);
+        var keymap = profile.GetKeymap("Base");
+        var bindings = keymap.BuildBehaviorBindings();
+        var runtime = new BehaviorRuntime(bindings);
+
+        Assert.Single(keymap.BehaviorMappings);
+        Assert.True(runtime.IsBound("Q"));
+
+        var down = runtime.OnKeyDown("Q", 0);
+        var up = runtime.OnKeyUp("Q", 100);
+
+        Assert.True(down.Suppress);
+        Assert.Equal([BehaviorAction.SendKey("Z")], up.Actions);
+    }
+
+    [Fact]
+    public void Profile_round_trip_preserves_effective_mappings_chord_order_and_behaviors()
     {
         var profile = new AutomationProfile(
             40,
@@ -57,19 +90,40 @@ public sealed class AutomationProfileTests
                     [
                         new ChordMapping<string>("K", "Q", "first"),
                         new ChordMapping<string>("Q", "K", "second")
+                    ],
+                    [
+                        new BehaviorMappingProfile(
+                            "A",
+                            new BehaviorInvocationProfile("LT", ["NUM", "Z"]))
                     ])
             ],
             hotkeys: [new HotkeyBinding("F1", "Send, help")]);
 
         var parsed = AutomationProfileJson.Parse(AutomationProfileJson.Serialize(profile));
-        var keymap = parsed.GetKeymap("S").BuildKeymap();
+        var parsedKeymap = parsed.GetKeymap("S");
+        var keymap = parsedKeymap.BuildKeymap();
 
         Assert.True(keymap.TryGetSingle("Q", out var single));
         Assert.Equal("new", single);
         Assert.True(keymap.TryGetChord("K", "Q", out var chord));
         Assert.Equal("first", chord);
-        Assert.Equal(2, parsed.GetKeymap("S").ChordMappings.Count);
+        Assert.Equal(2, parsedKeymap.ChordMappings.Count);
+        Assert.Single(parsedKeymap.BehaviorMappings);
+        Assert.Equal("LT", parsedKeymap.BehaviorMappings[0].Invocation.Name);
+        Assert.Equal(["NUM", "Z"], parsedKeymap.BehaviorMappings[0].Invocation.Arguments);
         Assert.Equal("Send, help", parsed.Hotkeys[0].Action);
+    }
+
+    [Fact]
+    public void Keymap_rejects_a_string_and_behavior_mapping_on_the_same_key()
+    {
+        var error = Assert.Throws<ArgumentException>(() => new AutomationKeymapProfile(
+            "S",
+            [new SingleMapping<string>("Q", "q")],
+            [],
+            [new BehaviorMappingProfile("Q", new BehaviorInvocationProfile("LT", ["NUM", "Z"]))]));
+
+        Assert.Contains("both", error.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
