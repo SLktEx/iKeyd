@@ -35,14 +35,22 @@ public sealed record IKeydConfiguration
     public AutomationProfile Profile { get; init; }
     public InputMode StartupMode { get; init; }
     public int ChordWindowMs => Profile.ChordWindowMs;
+    public MouseMotionProfile Mouse => Profile.Mouse;
     public Keymap<string> SKeymap { get; }
     public Keymap<string> KKeymap { get; }
 
     public static IKeydConfiguration Load(string path)
-        => FromProfile(AutomationProfileJson.Load(path));
+    {
+        var profile = AutomationProfileJson.Load(path);
+        var json = File.ReadAllText(path);
+        return FromProfile(MouseMotionProfileJson.Apply(profile, json));
+    }
 
     public static IKeydConfiguration Parse(string json)
-        => FromProfile(AutomationProfileJson.Parse(json));
+    {
+        var profile = AutomationProfileJson.Parse(json);
+        return FromProfile(MouseMotionProfileJson.Apply(profile, json));
+    }
 
     private static IKeydConfiguration FromProfile(AutomationProfile profile)
     {
