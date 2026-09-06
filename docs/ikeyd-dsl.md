@@ -2,6 +2,8 @@
 
 The `.ikeyd` format is an authoring language that compiles to the existing iKeyd JSON profile. Runtime code does not parse the DSL and does not carry authoring-only layout metadata.
 
+Use `python tools/compile-ikeyd.py input.ikeyd output.json` as the public compiler entry point. `compile-ikeyd-dsl.py` remains the compatibility parser core used by that front-end.
+
 ## Position-based key references
 
 A layout gives stable coordinates to physical input keys:
@@ -180,6 +182,50 @@ Settings:
 
 The persisted history contains authenticated ciphertext rather than plaintext clipboard payloads. `persist = false` bypasses persistence entirely. Omitting the entire `clipboard` block preserves the current compatible defaults and keeps generated legacy JSON unchanged.
 
+## Mouse motion settings
+
+The optional top-level `mouse` block controls the continuous keyboard-driven pointer engine independently from the key bindings that activate mouse directions or buttons.
+
+```text
+mouse {
+    engine = virtual_stick
+    update = 8ms
+
+    response {
+        press = 45ms
+        release = 2ms
+        curve = smoothstep
+    }
+
+    speed {
+        normal = 2200
+        precision = 800
+        fine = 240
+        fast = 4400
+    }
+
+    socd = neutral
+    tap_nudge = 1px
+    max_catchup = 32ms
+}
+```
+
+Settings:
+
+- `engine = virtual_stick` — selects the digital-key to virtual-stick motion model. `virtual_stick` is the only engine currently supported.
+- `update = <duration>` — motion-loop cadence. Default: `8ms` (125 Hz). It must be greater than zero.
+- `response.press = <duration>` — virtual-stick rise time constant. Default: `45ms`.
+- `response.release = <duration>` — return-to-center time constant after release. Default: `2ms`; at the default 8 ms cadence this is effectively stopped by the next tick.
+- `response.curve = linear|smoothstep` — radial response curve applied to stick magnitude. Default: `smoothstep`; radial application keeps diagonal and cardinal transient speed consistent.
+- `speed.normal`, `speed.precision`, `speed.fine`, `speed.fast` — pointer velocity bands in pixels per second. A bare number or a value such as `800px/s` is accepted. Defaults: `2200`, `800`, `240`, and `4400`.
+- `socd = neutral` — opposite directions cancel (`J+L => X=0`, `I+K => Y=0`). `neutral` is the only policy currently supported.
+- `tap_nudge = <pixels>` — deterministic immediate movement for a tap shorter than one motion tick. Default: `1px`; `0px` disables it.
+- `max_catchup = <duration>` — maximum delayed time integrated after scheduler stalls, preventing one large catch-up jump under load. Default: `32ms`.
+
+The block compiles to a `mouse` object in the generated JSON profile. Windows snapshots the selected mouse profile when the app starts and uses it for the virtual-stick controller; ordinary absolute pointer warps remain separate from these continuous-motion settings.
+
+Omitting the entire `mouse` block preserves the built-in defaults and leaves the legacy JSON shape unchanged.
+
 ## Rules
 
 - Rows and columns are 1-based.
@@ -189,8 +235,8 @@ The persisted history contains authenticated ciphertext rather than plaintext cl
 - `layout` blocks are compile-time-only and do not appear in generated JSON.
 - Position references are resolved before behavior mappings are emitted.
 - Behavior option blocks belong to one behavior invocation and may not contain duplicate option names.
-- A profile may contain at most one top-level `clipboard` block, and duplicate clipboard settings are compile errors.
-- Out-of-range coordinates, unknown layouts, unsupported clipboard values, and invalid settings are compile errors with source line numbers.
+- A profile may contain at most one top-level `clipboard` block and at most one top-level `mouse` block; duplicate settings are compile errors.
+- Out-of-range coordinates, unknown layouts, unsupported clipboard/mouse values, and invalid settings are compile errors with source line numbers.
 
 ## Why position references exist
 
