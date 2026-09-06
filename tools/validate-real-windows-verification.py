@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 ALLOWED_STATUSES = {"pass", "fail", "skipped", "pending"}
+ALLOWED_AUTOMATED_STATUSES = {"pass", "fail", "skipped", "not-run"}
 
 
 def load_json(path: Path) -> dict[str, Any]:
@@ -108,6 +109,18 @@ def validate_report(plan: dict[str, Any], report: dict[str, Any], require_comple
         if status == "fail" and not str(check.get("notes", "")).strip():
             errors.append(f"{check_id}: failed checks require notes")
 
+    automated = report.get("automated", {})
+    for automated_id in ("legacyDifferential", "backendCompatibility", "clipboardCompatibility"):
+        automated_item = automated.get(automated_id)
+        if not isinstance(automated_item, dict):
+            errors.append(f"automated.{automated_id} is required")
+            continue
+        status = automated_item.get("status")
+        if status not in ALLOWED_AUTOMATED_STATUSES:
+            errors.append(f"automated.{automated_id}: invalid status {status!r}")
+        if status == "fail" and not str(automated_item.get("message", "")).strip():
+            errors.append(f"automated.{automated_id}: failed checks require a message")
+
     binaries = report.get("binaries", {})
     legacy = binaries.get("legacy", {})
     if legacy.get("sha256") != plan.get("pinnedLegacyExeSha256"):
@@ -124,11 +137,12 @@ def validate_report(plan: dict[str, Any], report: dict[str, Any], require_comple
         incomplete = [cid for cid, item in actual_checks.items() if item.get("status") != "pass"]
         if incomplete:
             errors.append("checks are not complete: " + ", ".join(sorted(incomplete)))
-        automated = report.get("automated", {})
         if automated.get("legacyDifferential", {}).get("status") != "pass":
             errors.append("automated legacy differential did not pass")
         if automated.get("backendCompatibility", {}).get("status") != "pass":
             errors.append("real-Win32 backend E2E did not pass")
+        if automated.get("clipboardCompatibility", {}).get("status") not in {"pass", "skipped"}:
+            errors.append("safe clipboard E2E was not attempted")
         if not report.get("environment", {}).get("japaneseImeConfigured"):
             errors.append("Japanese IME was not recorded as configured")
         if not binaries.get("ikeyd", {}).get("sha256"):

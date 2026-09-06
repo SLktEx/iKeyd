@@ -13,7 +13,8 @@ param(
 
     [switch]$Interactive,
     [switch]$SkipDifferential,
-    [switch]$SkipBackendE2E
+    [switch]$SkipBackendE2E,
+    [switch]$SkipClipboardE2E
 )
 
 $ErrorActionPreference = "Stop"
@@ -86,6 +87,8 @@ $resolvedReportDirectory = [System.IO.Path]::GetFullPath($ReportDirectory)
 New-Item -ItemType Directory -Force -Path $resolvedReportDirectory | Out-Null
 $differentialDirectory = Join-Path $resolvedReportDirectory "legacy-differential"
 $backendDirectory = Join-Path $resolvedReportDirectory "win32-backend"
+$clipboardDirectory = Join-Path $resolvedReportDirectory "clipboard"
+$clipboardResultPath = Join-Path $clipboardDirectory "clipboard-e2e-result.json"
 
 $userLanguages = @()
 try {
@@ -135,6 +138,11 @@ $automated = [ordered]@{
         reportDirectory = $backendDirectory
         message = $null
     }
+    clipboardCompatibility = [ordered]@{
+        status = "not-run"
+        resultPath = $clipboardResultPath
+        message = $null
+    }
 }
 
 if (-not $SkipDifferential) {
@@ -176,6 +184,42 @@ if (-not $SkipBackendE2E) {
     }
     finally {
         $env:IKEYD_REAL_WINDOWS_E2E = $previousRealWindowsE2E
+    }
+}
+
+if (-not $SkipClipboardE2E) {
+    Write-Host "Running safe real-Windows clipboard E2E..."
+    New-Item -ItemType Directory -Force -Path $clipboardDirectory | Out-Null
+    Remove-Item -LiteralPath $clipboardResultPath -Force -ErrorAction SilentlyContinue
+    $previousClipboardE2E = $env:IKEYD_REAL_WINDOWS_CLIPBOARD_E2E
+    $previousClipboardResult = $env:IKEYD_REAL_WINDOWS_CLIPBOARD_RESULT
+    try {
+        $env:IKEYD_REAL_WINDOWS_CLIPBOARD_E2E = "1"
+        $env:IKEYD_REAL_WINDOWS_CLIPBOARD_RESULT = $clipboardResultPath
+        & dotnet test tests/iKeyd.Windows.Tests/iKeyd.Windows.Tests.csproj `
+            --configuration Release `
+            --filter "Category=RealWindowsClipboardE2E"
+        if ($LASTEXITCODE -ne 0) {
+            throw "Real-Windows clipboard E2E exited with code $LASTEXITCODE."
+        }
+        if (-not (Test-Path -LiteralPath $clipboardResultPath -PathType Leaf)) {
+            throw "Clipboard E2E did not produce its result marker."
+        }
+        $clipboardResult = Get-Content -LiteralPath $clipboardResultPath -Raw | ConvertFrom-Json
+        if ($clipboardResult.status -notin @("pass", "skipped")) {
+            throw "Unexpected clipboard E2E status '$($clipboardResult.status)'."
+        }
+        $automated.clipboardCompatibility.status = $clipboardResult.status
+        $automated.clipboardCompatibility.message = $clipboardResult.message
+    }
+    catch {
+        $automated.clipboardCompatibility.status = "fail"
+        $automated.clipboardCompatibility.message = $_.Exception.Message
+        Write-Warning "Real-Windows clipboard E2E failed: $($_.Exception.Message)"
+    }
+    finally {
+        $env:IKEYD_REAL_WINDOWS_CLIPBOARD_E2E = $previousClipboardE2E
+        $env:IKEYD_REAL_WINDOWS_CLIPBOARD_RESULT = $previousClipboardResult
     }
 }
 
@@ -224,9 +268,11 @@ $inventoryIds = @($plan.checks | ForEach-Object { @($_.inventoryIds) })
 $uniqueInventoryIds = @($inventoryIds | Sort-Object -Unique)
 $statuses = @($checkResults | ForEach-Object { $_.status })
 $manualComplete = $statuses.Count -gt 0 -and @($statuses | Where-Object { $_ -ne "pass" }).Count -eq 0
+$clipboardAttemptedSafely = $automated.clipboardCompatibility.status -in @("pass", "skipped")
 $complete = (
     $automated.legacyDifferential.status -eq "pass" -and
     $automated.backendCompatibility.status -eq "pass" -and
+    $clipboardAttemptedSafely -and
     $manualComplete -and
     -not [string]::IsNullOrWhiteSpace($iKeydSha) -and
     $japaneseImeConfigured -and
@@ -271,6 +317,7 @@ Write-Host "Real-Windows verification report: $reportPath"
 Write-Host "Inventory covered by plan: $($uniqueInventoryIds.Count)/$($plan.expectedRealWindowsInventoryCount)"
 Write-Host "Automated differential: $($automated.legacyDifferential.status)"
 Write-Host "Real-Win32 backend E2E: $($automated.backendCompatibility.status)"
+Write-Host "Clipboard E2E: $($automated.clipboardCompatibility.status)"
 Write-Host "Manual checks: pass=$($report.summary.passedChecks), fail=$($report.summary.failedChecks), skipped=$($report.summary.skippedChecks), pending=$($report.summary.pendingChecks)"
 Write-Host "Complete: $complete"
 

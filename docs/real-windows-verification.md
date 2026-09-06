@@ -44,14 +44,24 @@ The runner:
 2. records Windows build, locale, user input methods, active keyboard layout, repository commit and binary hashes,
 3. runs the real-IME `LegacyDifferentialE2E` comparison,
 4. runs a safe real-Win32 backend E2E against disposable test windows and restores the original pointer position,
-5. walks each manual verification group and records pass/fail/skip plus notes,
-6. writes `TestResults/real-windows/verification-report.json`.
+5. attempts a safe text-clipboard service E2E with exact original-content restoration,
+6. walks each manual verification group and records pass/fail/skip plus notes,
+7. writes `TestResults/real-windows/verification-report.json`.
 
-Without `-Interactive`, manual checks remain `pending`; this is useful for collecting environment + automated evidence first. `-SkipDifferential` and `-SkipBackendE2E` are available only when deliberately collecting partial evidence; reports produced with either automated check skipped cannot be complete.
+Without `-Interactive`, manual checks remain `pending`; this is useful for collecting environment + automated evidence first. `-SkipDifferential`, `-SkipBackendE2E`, and `-SkipClipboardE2E` are available only when deliberately collecting partial evidence. A complete report requires the differential and backend E2E to pass and the clipboard E2E to have been attempted safely.
 
 ## Automated real-Win32 backend E2E
 
 `RealWindowsDesktopE2ETests` is gated by `IKEYD_REAL_WINDOWS_E2E=1` and is enabled only by the #59 runner. It uses a disposable WinForms window for move/resize, minimize/maximize/restore, topmost, opacity and caption operations, and it saves/restores the real pointer position around the absolute pointer-move check. It does not intentionally click, scroll, send media keys, or alter the clipboard.
+
+## Safe clipboard E2E
+
+`RealWindowsClipboardE2ETests` is gated by `IKEYD_REAL_WINDOWS_CLIPBOARD_E2E=1`. Before changing the global clipboard it inspects the existing content:
+
+- empty or Unicode-text clipboard: save it, write a unique marker through `WindowsClipboardService`, verify `WM_CLIPBOARDUPDATE`, `ReadText()` and text `ReadPayload()`, then restore the original clipboard in `finally`;
+- non-text/custom clipboard: make **no clipboard mutation** and record the automated check as `skipped`.
+
+The runner stores this as `automated.clipboardCompatibility`. A complete report requires the clipboard E2E to be attempted (`pass` or safe `skipped`); `not-run` and `fail` are not accepted. A safe skip does not satisfy the manual `clipboard-ui` group: picker selection, capture/paste behavior and real target-application interaction must still be marked `pass` separately.
 
 ## Input diagnostics for #130 / #131 / #132
 
@@ -96,6 +106,7 @@ Completion requires all of the following:
 - every plan + supplemental check is `pass`,
 - the real-IME legacy differential passed,
 - the real-Win32 backend E2E passed,
+- the clipboard E2E was attempted safely (`pass` or protected `skipped`),
 - Japanese IME was detected in the recorded user language configuration,
 - the production legacy executable hash matches the pin,
 - the tested iKeyd executable hash is present,
@@ -105,6 +116,6 @@ A failing check must include notes. Turn every reproducible mismatch into a mini
 
 ## Safety / cleanup
 
-The automated differential uses a dedicated input sink. The backend E2E uses only disposable windows and restores the pointer position. Manual groups can intentionally change clipboard contents, pointer position, CapsLock, media state and window state. Restore those states after each group. Prefer disposable test windows and non-critical media/clipboard content.
+The automated differential uses a dedicated input sink. The backend E2E uses only disposable windows and restores the pointer position. The clipboard E2E mutates only empty/text clipboard state and restores the original text; it refuses to touch non-text/custom clipboard contents. Manual groups can intentionally change clipboard contents, pointer position, CapsLock, media state and window state. Restore those states after each group. Prefer disposable test windows and non-critical media/clipboard content.
 
 Do not mark a group `pass` from deterministic CI evidence alone; the purpose of this plan is the final real-machine observation.
