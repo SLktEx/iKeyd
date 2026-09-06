@@ -13,11 +13,11 @@ internal sealed class ConfiguredBehaviorKeyboardHandler : IKeyboardEventHandler
 
     public ConfiguredBehaviorKeyboardHandler(
         KeyBehaviorProfile profile,
-        LegacySendOutput send,
+        IKeyboardOutput keyboard,
         IDesktopBackend desktop,
         IKeyboardEventHandler fallback)
     {
-        _configured = new ConfiguredBehaviorDispatcher(profile, send, desktop);
+        _configured = new ConfiguredBehaviorDispatcher(profile, keyboard, desktop);
         _fallback = fallback ?? throw new ArgumentNullException(nameof(fallback));
     }
 
