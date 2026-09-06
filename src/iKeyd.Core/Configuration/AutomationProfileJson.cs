@@ -380,9 +380,26 @@ public static class AutomationProfileJson
                     throw new InvalidDataException($"behaviorDefinitions.{item.Name}.locals must be an object.");
                 foreach (var local in localsElement.EnumerateObject())
                 {
-                    if (local.Value.ValueKind is not (JsonValueKind.True or JsonValueKind.False))
-                        throw new InvalidDataException($"behaviorDefinitions.{item.Name}.locals.{local.Name} must be boolean.");
-                    locals.Add(new UserBehaviorLocalProfile(local.Name, local.Value.GetBoolean()));
+                    switch (local.Value.ValueKind)
+                    {
+                        case JsonValueKind.True:
+                        case JsonValueKind.False:
+                            locals.Add(new UserBehaviorLocalProfile(local.Name, local.Value.GetBoolean()));
+                            break;
+
+                        case JsonValueKind.Number:
+                            if (!local.Value.TryGetInt32(out var intValue) || !UserBehaviorLocalProfile.IsValidInt(intValue))
+                            {
+                                throw new InvalidDataException(
+                                    $"behaviorDefinitions.{item.Name}.locals.{local.Name} integer must be between {UserBehaviorLocalProfile.MinIntValue} and {UserBehaviorLocalProfile.MaxIntValue}.");
+                            }
+                            locals.Add(new UserBehaviorLocalProfile(local.Name, intValue));
+                            break;
+
+                        default:
+                            throw new InvalidDataException(
+                                $"behaviorDefinitions.{item.Name}.locals.{local.Name} must be boolean or a bounded integer.");
+                    }
                 }
             }
 
@@ -462,7 +479,19 @@ public static class AutomationProfileJson
             writer.WritePropertyName("locals");
             writer.WriteStartObject();
             foreach (var local in definition.Locals.OrderBy(value => value.Name, StringComparer.OrdinalIgnoreCase))
-                writer.WriteBoolean(local.Name, local.InitialValue);
+            {
+                switch (local.Type)
+                {
+                    case UserBehaviorLocalType.Bool:
+                        writer.WriteBoolean(local.Name, local.InitialBoolValue);
+                        break;
+                    case UserBehaviorLocalType.Int:
+                        writer.WriteNumber(local.Name, local.InitialIntValue);
+                        break;
+                    default:
+                        throw new ArgumentOutOfRangeException(nameof(local.Type), local.Type, "Unknown behavior local type.");
+                }
+            }
             writer.WriteEndObject();
 
             writer.WritePropertyName("handlers");
