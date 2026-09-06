@@ -6,10 +6,17 @@ namespace iKeyd.Core.Behaviors;
 
 internal sealed class ScriptedBehaviorDefinition : BehaviorDefinition
 {
+    private static readonly string[] TapHoldOptionNames =
+    [
+        "tapping_term",
+        "hold_on_other_key_press"
+    ];
+
     private readonly UserBehaviorDefinitionProfile _definition;
     private readonly IReadOnlyDictionary<string, string> _arguments;
     private readonly RuntimeStateProfile _stateProfile;
     private readonly IRuntimeStateStore _runtimeState;
+    private readonly ScriptedTapHoldOptions _tapHoldOptions;
 
     public ScriptedBehaviorDefinition(
         UserBehaviorDefinitionProfile definition,
@@ -33,12 +40,12 @@ internal sealed class ScriptedBehaviorDefinition : BehaviorDefinition
             throw new InvalidDataException(
                 $"Behavior '{definition.Name}' requires {definition.Parameters.Count} arguments but got {invocation.Arguments.Count}.");
         }
-        if (invocation.Options.Count != 0)
-            throw new InvalidDataException($"User behavior '{definition.Name}' does not support invocation options yet.");
 
         _definition = definition;
         _stateProfile = stateProfile;
         _runtimeState = runtimeState;
+        _tapHoldOptions = ReadTapHoldOptions(invocation);
+
         var arguments = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         for (var index = 0; index < definition.Parameters.Count; index++)
             arguments.Add(definition.Parameters[index], invocation.Arguments[index]);
@@ -48,7 +55,55 @@ internal sealed class ScriptedBehaviorDefinition : BehaviorDefinition
     }
 
     internal override BehaviorInstance CreateInstance(KeyId sourceKey, long timestampMs)
-        => new ScriptedBehaviorInstance(sourceKey, _definition, _arguments, _runtimeState);
+        => new ScriptedBehaviorInstance(
+            sourceKey,
+            _definition,
+            _arguments,
+            _runtimeState,
+            _tapHoldOptions,
+            timestampMs);
+
+    private ScriptedTapHoldOptions ReadTapHoldOptions(BehaviorInvocationProfile invocation)
+    {
+        var enabled = _definition.FindHandler("tap") is not null ||
+                      _definition.FindHandler("hold") is not null;
+        if (!enabled)
+        {
+            if (invocation.Options.Count != 0)
+                throw new InvalidDataException($"User behavior '{_definition.Name}' does not support invocation options yet.");
+            return ScriptedTapHoldOptions.Disabled;
+        }
+
+        foreach (var option in invocation.Options.Keys)
+        {
+            if (!TapHoldOptionNames.Contains(option, StringComparer.OrdinalIgnoreCase))
+                throw new InvalidDataException($"User behavior '{_definition.Name}' does not support option '{option}'.");
+        }
+
+        var tappingTermMs = LayerTapOptions.DefaultTappingTermMs;
+        if (invocation.Options.TryGetValue("tapping_term", out var rawTerm))
+        {
+            if (!rawTerm.EndsWith("ms", StringComparison.OrdinalIgnoreCase) ||
+                !int.TryParse(rawTerm.AsSpan(0, rawTerm.Length - 2), out tappingTermMs) ||
+                tappingTermMs < 0)
+            {
+                throw new InvalidDataException(
+                    $"{_definition.Name}.tapping_term must be a non-negative duration such as '170ms'.");
+            }
+        }
+
+        var holdOnOtherKeyPress = true;
+        if (invocation.Options.TryGetValue("hold_on_other_key_press", out var rawHold))
+        {
+            if (!bool.TryParse(rawHold, out holdOnOtherKeyPress))
+            {
+                throw new InvalidDataException(
+                    $"{_definition.Name}.hold_on_other_key_press must be true or false.");
+            }
+        }
+
+        return new ScriptedTapHoldOptions(true, tappingTermMs, holdOnOtherKeyPress);
+    }
 
     private void ValidateDefinition()
     {
@@ -58,6 +113,8 @@ internal sealed class ScriptedBehaviorDefinition : BehaviorDefinition
             switch (eventName)
             {
                 case "press":
+                case "hold":
+                case "tap":
                 case "release":
                     if (handler.Parameters.Count != 0)
                         throw new InvalidDataException($"Handler '{handler.Event}' does not accept parameters.");
@@ -171,33 +228,59 @@ internal sealed class ScriptedBehaviorDefinition : BehaviorDefinition
         }
     }
 
-    private void ValidateOperand(string? operand, string op)
+    private static void ValidateOperand(string? operand, string op)
     {
         if (string.IsNullOrWhiteSpace(operand))
             throw new InvalidDataException($"{op} requires an operand.");
     }
 }
 
+internal readonly record struct ScriptedTapHoldOptions(
+    bool Enabled,
+    int TappingTermMs,
+    bool HoldOnOtherKeyPress)
+{
+    public static ScriptedTapHoldOptions Disabled { get; } = new(false, 0, false);
+}
+
 internal sealed class ScriptedBehaviorInstance : BehaviorInstance
 {
+    private enum TapHoldResolution
+    {
+        Disabled,
+        Pending,
+        Hold,
+        Released
+    }
+
     private readonly UserBehaviorDefinitionProfile _definition;
     private readonly IReadOnlyDictionary<string, string> _arguments;
     private readonly IRuntimeStateStore _runtimeState;
     private readonly Dictionary<string, bool> _locals;
     private readonly Dictionary<string, int> _ownedLayers = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, int> _ownedModifiers = new(StringComparer.OrdinalIgnoreCase);
+    private readonly ScriptedTapHoldOptions _tapHoldOptions;
+    private readonly long _pressedAtMs;
+    private TapHoldResolution _tapHoldResolution;
     private bool _released;
 
     public ScriptedBehaviorInstance(
         KeyId sourceKey,
         UserBehaviorDefinitionProfile definition,
         IReadOnlyDictionary<string, string> arguments,
-        IRuntimeStateStore runtimeState)
+        IRuntimeStateStore runtimeState,
+        ScriptedTapHoldOptions tapHoldOptions,
+        long pressedAtMs)
         : base(sourceKey)
     {
         _definition = definition;
         _arguments = arguments;
         _runtimeState = runtimeState ?? throw new ArgumentNullException(nameof(runtimeState));
+        _tapHoldOptions = tapHoldOptions;
+        _pressedAtMs = pressedAtMs;
+        _tapHoldResolution = tapHoldOptions.Enabled
+            ? TapHoldResolution.Pending
+            : TapHoldResolution.Disabled;
         _locals = definition.Locals.ToDictionary(
             local => local.Name,
             local => local.InitialValue,
@@ -207,15 +290,34 @@ internal sealed class ScriptedBehaviorInstance : BehaviorInstance
     internal override void OnPress(long timestampMs, List<BehaviorAction> actions)
         => ExecuteHandler("press", null, actions);
 
+    internal override void AdvanceTo(long timestampMs, List<BehaviorAction> actions)
+    {
+        if (_released || _tapHoldResolution != TapHoldResolution.Pending)
+            return;
+
+        if (timestampMs - _pressedAtMs >= _tapHoldOptions.TappingTermMs)
+            ResolveHold(actions);
+    }
+
     internal override void OnInterrupt(KeyId otherKey, long timestampMs, List<BehaviorAction> actions)
-        => ExecuteHandler("interrupt", otherKey.Value, actions);
+    {
+        if (_tapHoldResolution == TapHoldResolution.Pending && _tapHoldOptions.HoldOnOtherKeyPress)
+            ResolveHold(actions);
+
+        ExecuteHandler("interrupt", otherKey.Value, actions);
+    }
 
     internal override void OnRelease(long timestampMs, List<BehaviorAction> actions)
     {
         if (_released)
             return;
+
+        if (_tapHoldResolution == TapHoldResolution.Pending)
+            ExecuteHandler("tap", null, actions);
+
         ExecuteHandler("release", null, actions);
         CleanupOwned(actions);
+        _tapHoldResolution = TapHoldResolution.Released;
         _released = true;
     }
 
@@ -224,7 +326,17 @@ internal sealed class ScriptedBehaviorInstance : BehaviorInstance
         if (_released)
             return;
         CleanupOwned(actions);
+        _tapHoldResolution = TapHoldResolution.Released;
         _released = true;
+    }
+
+    private void ResolveHold(List<BehaviorAction> actions)
+    {
+        if (_tapHoldResolution != TapHoldResolution.Pending)
+            return;
+
+        _tapHoldResolution = TapHoldResolution.Hold;
+        ExecuteHandler("hold", null, actions);
     }
 
     private void ExecuteHandler(string eventName, string? eventValue, List<BehaviorAction> actions)

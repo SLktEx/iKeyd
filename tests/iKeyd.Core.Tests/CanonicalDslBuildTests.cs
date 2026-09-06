@@ -54,17 +54,11 @@ public sealed class CanonicalDslBuildTests
         }
 
         behavior SMART_LT(layer, tap) {
-            var active: bool = false
-
-            on_press {
-                active = true
+            on_hold {
                 layer.on(layer)
             }
 
-            on_release {
-                if active {
-                    layer.off(layer)
-                }
+            on_tap {
                 send tap
             }
         }
@@ -81,6 +75,9 @@ public sealed class CanonicalDslBuildTests
         keymap K {
             Q = "q"
             W = "w"
+        }
+
+        keymap NUM {
         }
 
         clipboard {
@@ -114,6 +111,8 @@ public sealed class CanonicalDslBuildTests
         Assert.Equal("SMART_LT", definition.Name);
         Assert.Equal(["layer", "tap"], definition.Parameters);
         Assert.Equal(2, definition.Handlers.Count);
+        Assert.NotNull(definition.FindHandler("hold"));
+        Assert.NotNull(definition.FindHandler("tap"));
 
         Assert.True(profile.Clipboard.History);
         Assert.Equal(100, profile.Clipboard.MaxItems);
