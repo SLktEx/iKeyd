@@ -38,6 +38,10 @@ public sealed class LayerSelectionDslTests
         Assert.Equal("NAV", mappings[0].Invocation.Arguments.Single());
         Assert.Equal("TO", mappings[1].Invocation.Name);
         Assert.Equal("NUM", mappings[1].Invocation.Arguments.Single());
+
+        var generated = TypedProfileCompiler.Compile(document.Profile);
+        Assert.Contains("new BehaviorInvocationProfile(\"TG\"", generated, StringComparison.Ordinal);
+        Assert.Contains("new BehaviorInvocationProfile(\"TO\"", generated, StringComparison.Ordinal);
     }
 
     [Theory]
