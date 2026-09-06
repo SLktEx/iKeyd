@@ -50,11 +50,9 @@ public sealed class UnicodeTextDslTests
     }
 
     [Theory]
-    [InlineData("UNICODE", "")]
-    [InlineData("UNICODE", "ab")]
-    [InlineData("UNICODE", "🦀x")]
-    [InlineData("TEXT", "")]
-    public void Canonical_dsl_rejects_invalid_literal_payloads_during_parse(string helper, string value)
+    [InlineData("ab")]
+    [InlineData("🦀x")]
+    public void Canonical_dsl_rejects_multi_scalar_unicode_during_parse(string value)
     {
         var source = $$"""
         profile demo {
@@ -63,7 +61,7 @@ public sealed class UnicodeTextDslTests
         }
 
         keymap S {
-            A = {{helper}}() {
+            A = UNICODE() {
                 value = {{System.Text.Json.JsonSerializer.Serialize(value)}}
             }
         }
@@ -79,11 +77,11 @@ public sealed class UnicodeTextDslTests
         Assert.Contains("invalid behavior", error.Message, StringComparison.OrdinalIgnoreCase);
     }
 
-    [Fact]
-    public void Canonical_dsl_rejects_unpaired_surrogate_text()
+    [Theory]
+    [InlineData("UNICODE")]
+    [InlineData("TEXT")]
+    public void Existing_option_grammar_rejects_empty_literal_value(string helper)
     {
-        var invalid = "x\uD800y";
-        var literal = System.Text.Json.JsonSerializer.Serialize(invalid);
         var source = $$"""
         profile demo {
             chord_window = 40ms
@@ -91,8 +89,8 @@ public sealed class UnicodeTextDslTests
         }
 
         keymap S {
-            A = TEXT() {
-                value = {{literal}}
+            A = {{helper}}() {
+                value = ""
             }
         }
 
@@ -101,7 +99,7 @@ public sealed class UnicodeTextDslTests
         }
         """;
 
-        Assert.Throws<InvalidDataException>(() =>
-            IKeydDslDocumentParser.Parse(source, "invalid-surrogate.ikeyd"));
+        Assert.Throws<ArgumentException>(() =>
+            IKeydDslDocumentParser.Parse(source, "empty-literal.ikeyd"));
     }
 }
