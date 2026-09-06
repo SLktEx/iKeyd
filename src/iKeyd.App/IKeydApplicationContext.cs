@@ -12,6 +12,7 @@ internal sealed class IKeydApplicationContext : ApplicationContext
 {
     private readonly WindowsKeyboardBackend _keyboard;
     private readonly IKeydRuntimeHandler _runtime;
+    private readonly BehaviorWindowsInputRouter _keyboardHandler;
     private readonly WindowsClipboardService _clipboardService;
     private readonly WindowsClipboardController _clipboard;
     private readonly NotifyIcon _notifyIcon;
@@ -41,13 +42,20 @@ internal sealed class IKeydApplicationContext : ApplicationContext
             new WindowsClipboardPicker(),
             _keyboard);
 
+        var inputMethod = new WindowsInputMethod();
         _runtime = new IKeydRuntimeHandler(
             configuration,
-            new WindowsInputMethod(),
+            inputMethod,
             _keyboard.State,
             send,
             desktop,
             _clipboard);
+        _keyboardHandler = new BehaviorWindowsInputRouter(
+            configuration.Profile,
+            () => _runtime.Mode.Route(inputMethod).Keymap?.ToString(),
+            send,
+            _keyboard,
+            _runtime);
 
         _macroExecutor = new MacroExecutor(send, _runtime);
 
@@ -85,7 +93,7 @@ internal sealed class IKeydApplicationContext : ApplicationContext
         _notifyIcon.DoubleClick += (_, _) => ShowClipboardHistory();
 
         UpdateModeChecks();
-        _keyboard.Start(_runtime);
+        _keyboard.Start(_keyboardHandler);
     }
 
     protected override void ExitThreadCore()
@@ -105,6 +113,7 @@ internal sealed class IKeydApplicationContext : ApplicationContext
         {
             _clipboard.Dispose();
             _clipboardService.Dispose();
+            _keyboardHandler.Dispose();
             _runtime.Dispose();
             _keyboard.Dispose();
             _notifyIcon.Dispose();

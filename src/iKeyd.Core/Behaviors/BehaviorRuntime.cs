@@ -69,6 +69,27 @@ public sealed class BehaviorRuntime
 
     public BehaviorDispatchResult OnKeyDown(KeyId key, long timestampMs)
     {
+        var observed = ObserveKeyDown(key, timestampMs);
+        var started = BeginKeyDown(key, timestampMs);
+        if (observed.Actions.Count == 0)
+            return started;
+        if (started.Actions.Count == 0)
+            return new BehaviorDispatchResult(started.Suppress, observed.Actions);
+
+        var actions = new List<BehaviorAction>(observed.Actions.Count + started.Actions.Count);
+        actions.AddRange(observed.Actions);
+        actions.AddRange(started.Actions);
+        return new BehaviorDispatchResult(started.Suppress, actions);
+    }
+
+    /// <summary>
+    /// Advances active instances and reports an unrelated key-down as an
+    /// interruption without starting a newly bound behavior. Routers can use this
+    /// before layer resolution, apply emitted actions, then decide which keymap's
+    /// binding should start for the same physical key event.
+    /// </summary>
+    public BehaviorDispatchResult ObserveKeyDown(KeyId key, long timestampMs)
+    {
         EnsureMonotonic(timestampMs);
         var actions = new List<BehaviorAction>();
         AdvanceActive(timestampMs, actions);
@@ -78,6 +99,19 @@ public sealed class BehaviorRuntime
             if (active.SourceKey != key)
                 active.OnInterrupt(key, timestampMs, actions);
         }
+
+        return Result(false, actions);
+    }
+
+    /// <summary>
+    /// Starts the behavior bound to <paramref name="key"/> without delivering a
+    /// second interruption notification to already-active instances.
+    /// </summary>
+    public BehaviorDispatchResult BeginKeyDown(KeyId key, long timestampMs)
+    {
+        EnsureMonotonic(timestampMs);
+        var actions = new List<BehaviorAction>();
+        AdvanceActive(timestampMs, actions);
 
         if (!_bindings.TryGetValue(key, out var definition))
             return Result(false, actions);
