@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Compile the small iKeyd authoring DSL prototype to the existing JSON profile schema."""
+"""Compile the iKeyd authoring DSL to the static JSON profile IR."""
 
 from __future__ import annotations
 
@@ -12,6 +12,7 @@ from pathlib import Path
 
 IDENT = r"[A-Za-z0-9_]+"
 KEY_REF = rf"{IDENT}(?:\[\s*\d+\s*,\s*\d+\s*\])?"
+MAX_BEHAVIOR_STATEMENT_DEPTH = 32
 
 
 class DslError(ValueError):
@@ -132,9 +133,6 @@ def resolve_key_ref(
     if row < 1 or column < 1:
         raise DslError(path, lineno, f"key positions are 1-based: '{value}'")
 
-    # POS is the canonical physical-position spelling. BASE is the default
-    # authoring layout, so POS[r,c] aliases BASE[r,c] unless POS is declared
-    # explicitly.
     resolved_layout_name = layout_name
     if layout_name == "POS" and "POS" not in layouts and "BASE" in layouts:
         resolved_layout_name = "BASE"
@@ -143,19 +141,11 @@ def resolve_key_ref(
     if layout is None:
         raise DslError(path, lineno, f"unknown layout '{layout_name}' in key reference '{value}'")
     if row > len(layout):
-        raise DslError(
-            path,
-            lineno,
-            f"row {row} is out of range for layout '{layout_name}'",
-        )
+        raise DslError(path, lineno, f"row {row} is out of range for layout '{layout_name}'")
 
     layout_row = layout[row - 1]
     if column > len(layout_row):
-        raise DslError(
-            path,
-            lineno,
-            f"column {column} is out of range for layout '{layout_name}' row {row}",
-        )
+        raise DslError(path, lineno, f"column {column} is out of range for layout '{layout_name}' row {row}")
     return layout_row[column - 1]
 
 
@@ -182,7 +172,199 @@ def duplicate_chord_metadata(chords: dict[str, list[list[str]]]) -> dict[str, li
     return result
 
 
+def _brace_delta(line: str) -> int:
+    return line.count("{") - line.count("}")
+
+
+def _normalize_behavior_tokens(
+    raw_lines: list[tuple[int, str]],
+) -> list[tuple[int, str]]:
+    result: list[tuple[int, str]] = []
+    for lineno, raw in raw_lines:
+        line = strip_comment(raw).strip()
+        if not line:
+            continue
+        if re.fullmatch(r"}\s*else\s*{", line):
+            result.append((lineno, "}"))
+            result.append((lineno, "else {"))
+        else:
+            result.append((lineno, line))
+    return result
+
+
+def _parse_behavior_statements(
+    path: Path,
+    tokens: list[tuple[int, str]],
+    index: int,
+    depth: int,
+) -> tuple[list[dict[str, object]], int]:
+    if depth > MAX_BEHAVIOR_STATEMENT_DEPTH:
+        line = tokens[index][0] if index < len(tokens) else 1
+        raise DslError(path, line, "behavior statement nesting is too deep")
+
+    statements: list[dict[str, object]] = []
+    while index < len(tokens):
+        lineno, line = tokens[index]
+        line = line.rstrip(";").strip()
+        if line == "}":
+            return statements, index + 1
+
+        if_match = re.fullmatch(rf"if\s+({IDENT})\s*\{{", line)
+        if if_match:
+            then_statements, index = _parse_behavior_statements(path, tokens, index + 1, depth + 1)
+            else_statements: list[dict[str, object]] = []
+            if index < len(tokens) and tokens[index][1].rstrip(";").strip() == "else {":
+                else_statements, index = _parse_behavior_statements(path, tokens, index + 1, depth + 1)
+            statements.append(OrderedDict([
+                ("op", "if_bool"),
+                ("condition", if_match.group(1)),
+                ("then", then_statements),
+                ("else", else_statements),
+            ]))
+            continue
+
+        assign = re.fullmatch(rf"({IDENT})\s*=\s*(true|false)", line, re.IGNORECASE)
+        if assign:
+            statements.append(OrderedDict([
+                ("op", "set_bool"),
+                ("target", assign.group(1)),
+                ("value", assign.group(2).lower()),
+            ]))
+            index += 1
+            continue
+
+        send = re.fullmatch(rf"send\s+({IDENT})", line)
+        if send:
+            statements.append(OrderedDict([("op", "send"), ("value", send.group(1))]))
+            index += 1
+            continue
+
+        action = re.fullmatch(
+            rf"(layer\.on|layer\.off|modifier\.down|modifier\.up)\s*\(\s*({IDENT})\s*\)",
+            line,
+        )
+        if action:
+            op = {
+                "layer.on": "layer_on",
+                "layer.off": "layer_off",
+                "modifier.down": "modifier_down",
+                "modifier.up": "modifier_up",
+            }[action.group(1)]
+            statements.append(OrderedDict([("op", op), ("value", action.group(2))]))
+            index += 1
+            continue
+
+        raise DslError(path, lineno, f"unsupported behavior statement: {line}")
+
+    line = tokens[-1][0] if tokens else 1
+    raise DslError(path, line, "unclosed behavior statement block")
+
+
+def _parse_user_behavior_definition(
+    path: Path,
+    name: str,
+    parameters: list[str],
+    raw_lines: list[tuple[int, str]],
+) -> dict[str, object]:
+    tokens = _normalize_behavior_tokens(raw_lines)
+    locals_map: OrderedDict[str, bool] = OrderedDict()
+    handlers: OrderedDict[str, dict[str, object]] = OrderedDict()
+    index = 0
+
+    while index < len(tokens):
+        lineno, line = tokens[index]
+        line = line.rstrip(";").strip()
+        local = re.fullmatch(rf"var\s+({IDENT})\s*:\s*bool\s*=\s*(true|false)", line, re.IGNORECASE)
+        if local:
+            local_name = local.group(1)
+            if local_name in locals_map or any(local_name.casefold() == p.casefold() for p in parameters):
+                raise DslError(path, lineno, f"duplicate/conflicting behavior local '{local_name}'")
+            locals_map[local_name] = local.group(2).lower() == "true"
+            index += 1
+            continue
+
+        handler = re.fullmatch(rf"on_(press|release)\s*\{{", line)
+        handler_params: list[str] = []
+        event_name: str | None = None
+        if handler:
+            event_name = handler.group(1)
+        else:
+            interrupt = re.fullmatch(rf"on_interrupt\s*\(\s*({IDENT})\s*\)\s*\{{", line)
+            if interrupt:
+                event_name = "interrupt"
+                handler_params = [interrupt.group(1)]
+
+        if event_name is not None:
+            if event_name in handlers:
+                raise DslError(path, lineno, f"duplicate behavior handler 'on_{event_name}'")
+            statements, index = _parse_behavior_statements(path, tokens, index + 1, 0)
+            handlers[event_name] = OrderedDict([
+                ("parameters", handler_params),
+                ("statements", statements),
+            ])
+            continue
+
+        raise DslError(path, lineno, f"unsupported behavior declaration: {line}")
+
+    return OrderedDict([
+        ("parameters", parameters),
+        ("locals", locals_map),
+        ("handlers", handlers),
+    ])
+
+
+def extract_user_behaviors(
+    text: str,
+    path: Path,
+) -> tuple[str, OrderedDict[str, dict[str, object]]]:
+    lines = text.splitlines()
+    definitions: OrderedDict[str, dict[str, object]] = OrderedDict()
+    output = list(lines)
+    index = 0
+
+    while index < len(lines):
+        line = strip_comment(lines[index]).strip()
+        header = re.fullmatch(rf"behavior\s+({IDENT})\s*\(([^)]*)\)\s*\{{", line)
+        if not header:
+            index += 1
+            continue
+
+        name = header.group(1)
+        if name in definitions:
+            raise DslError(path, index + 1, f"duplicate behavior definition '{name}'")
+        raw_parameters = header.group(2).strip()
+        parameters: list[str] = []
+        if raw_parameters:
+            for parameter in raw_parameters.split(","):
+                token = parameter.strip()
+                if not re.fullmatch(IDENT, token):
+                    raise DslError(path, index + 1, f"invalid behavior parameter '{token}'")
+                if any(token.casefold() == existing.casefold() for existing in parameters):
+                    raise DslError(path, index + 1, f"duplicate behavior parameter '{token}'")
+                parameters.append(token)
+
+        depth = _brace_delta(line)
+        body: list[tuple[int, str]] = []
+        output[index] = ""
+        cursor = index + 1
+        while cursor < len(lines) and depth > 0:
+            current = strip_comment(lines[cursor])
+            depth += _brace_delta(current)
+            output[cursor] = ""
+            if depth > 0:
+                body.append((cursor + 1, current))
+            cursor += 1
+        if depth != 0:
+            raise DslError(path, index + 1, f"unclosed behavior '{name}'")
+
+        definitions[name] = _parse_user_behavior_definition(path, name, parameters, body)
+        index = cursor
+
+    return "\n".join(output), definitions
+
+
 def compile_dsl(text: str, path: Path) -> dict[str, object]:
+    text, user_behavior_definitions = extract_user_behaviors(text, path)
     source: OrderedDict[str, object] = OrderedDict()
     layouts: OrderedDict[str, list[list[str]]] = OrderedDict()
     single: OrderedDict[str, OrderedDict[str, str]] = OrderedDict()
@@ -295,11 +477,7 @@ def compile_dsl(text: str, path: Path) -> dict[str, object]:
                         break
                     row_seen.add(folded)
                 if duplicate_in_row is not None:
-                    raise DslError(
-                        path,
-                        lineno,
-                        f"duplicate key '{duplicate_in_row}' in layout '{name}'",
-                    )
+                    raise DslError(path, lineno, f"duplicate key '{duplicate_in_row}' in layout '{name}'")
                 layouts[name].append(row)
                 continue
             raise DslError(path, lineno, f"unknown layout statement: {line}")
@@ -310,11 +488,7 @@ def compile_dsl(text: str, path: Path) -> dict[str, object]:
             if match:
                 first = resolve_key_ref(path, lineno, match.group(1), layouts)
                 second = resolve_key_ref(path, lineno, match.group(2), layouts)
-                chords[name].append([
-                    first,
-                    second,
-                    parse_json_string(path, lineno, match.group(3)),
-                ])
+                chords[name].append([first, second, parse_json_string(path, lineno, match.group(3))])
                 continue
 
             option_block = re.fullmatch(rf"({KEY_REF})\s*=\s*(.+?)\s*\{{", line)
@@ -374,6 +548,8 @@ def compile_dsl(text: str, path: Path) -> dict[str, object]:
     ])
     if any(behaviors_by_mode for behaviors_by_mode in behaviors.values()):
         result["behaviors"] = behaviors
+    if user_behavior_definitions:
+        result["behaviorDefinitions"] = user_behavior_definitions
     result["knownQuirks"] = OrderedDict([
         ("duplicateChordPatterns", duplicate_chord_metadata(chords)),
         ("duplicateFlagDefinitions", duplicate_flags),
@@ -385,11 +561,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Compile iKeyd DSL to the existing JSON profile schema.")
     parser.add_argument("input", type=Path, help="input .ikeyd file")
     parser.add_argument("output", type=Path, help="output .json file")
-    parser.add_argument(
-        "--check-against",
-        type=Path,
-        help="fail unless generated JSON is semantically equal to this file",
-    )
+    parser.add_argument("--check-against", type=Path, help="fail unless generated JSON is semantically equal to this file")
     args = parser.parse_args(argv)
 
     try:
@@ -401,10 +573,7 @@ def main(argv: list[str] | None = None) -> int:
                 return 1
 
         args.output.parent.mkdir(parents=True, exist_ok=True)
-        args.output.write_text(
-            json.dumps(profile, ensure_ascii=False, separators=(",", ":")),
-            encoding="utf-8",
-        )
+        args.output.write_text(json.dumps(profile, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
         return 0
     except (OSError, DslError, json.JSONDecodeError) as exc:
         print(f"iKeyd DSL compilation failed: {exc}", file=sys.stderr)
