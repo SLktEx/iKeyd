@@ -1,0 +1,11 @@
+{
+  "id": "runtime-window-right-half-mh-r",
+  "description": "M then H plus R places the active window in the right half.",
+  "initialState": { "mode": "S", "ime": "off", "layers": ["M", "H"] },
+  "input": [
+    { "atMs": 10, "kind": "keyDown", "key": "R" },
+    { "atMs": 11, "kind": "keyUp", "key": "R" }
+  ],
+  "expected": { "actions": [ { "kind": "window", "value": "move-resize:960,0,960,1080" } ] },
+  "tags": ["legacy", "runtime-long-tail", "window", "deterministic"]
+}

@@ -1,0 +1,13 @@
+{
+  "id": "runtime-mouse-move-left-10-sm-e-j",
+  "description": "Holding E in Space-then-M mouse mode changes J movement to 10 pixels left.",
+  "initialState": { "mode": "S", "ime": "off", "layers": ["S", "M"] },
+  "input": [
+    { "atMs": 10, "kind": "keyDown", "key": "E" },
+    { "atMs": 20, "kind": "keyDown", "key": "J" },
+    { "atMs": 21, "kind": "keyUp", "key": "J" },
+    { "atMs": 30, "kind": "keyUp", "key": "E" }
+  ],
+  "expected": { "actions": [ { "kind": "mouse", "value": "move-by:-10,0" } ] },
+  "tags": ["legacy", "runtime-long-tail", "mouse", "input-state", "deterministic"]
+}
