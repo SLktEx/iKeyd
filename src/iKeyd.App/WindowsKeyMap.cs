@@ -40,8 +40,17 @@ internal static class WindowsKeyMap
     public const ushort Backspace = 0x08;
     public const ushort Tab = 0x09;
     public const ushort Enter = 0x0D;
-    public const ushort OemSemicolon = 0xBA;
-    public const ushort OemPlus = 0xBB;
+
+    // JIS 106/109 physical punctuation positions. The Windows VK names are
+    // layout-neutral and misleading here: VK_OEM_1 (0xBA) is the JIS ':'/'*'
+    // position, while VK_OEM_PLUS (0xBB) is the JIS ';'/'+' position.
+    // Keep the semantic aliases below as the single source used by input,
+    // Behavior output, legacy Send and deterministic scenario helpers.
+    public const ushort JisColon = 0xBA;
+    public const ushort JisSemicolon = 0xBB;
+    public const ushort OemSemicolon = JisSemicolon;
+    public const ushort OemPlus = JisColon;
+
     public const ushort OemComma = 0xBC;
     public const ushort OemMinus = 0xBD;
     public const ushort OemPeriod = 0xBE;
@@ -59,8 +68,8 @@ internal static class WindowsKeyMap
 
         return virtualKey switch
         {
-            OemSemicolon => new KeyId(KeyCode.SColon),
-            OemPlus => new KeyId(KeyCode.Colon),
+            JisSemicolon => new KeyId(KeyCode.SColon),
+            JisColon => new KeyId(KeyCode.Colon),
             OemComma => new KeyId(KeyCode.Comma),
             OemPeriod => new KeyId(KeyCode.Dot),
             OemSlash => new KeyId(KeyCode.Slash),
@@ -136,8 +145,8 @@ internal static class WindowsKeyMap
             case >= 'A' and <= 'Z': virtualKey = character; break;
             case >= '0' and <= '9': virtualKey = character; break;
             case ' ': virtualKey = Space; break;
-            case ';': virtualKey = OemSemicolon; break;
-            case ':': virtualKey = OemPlus; break;
+            case ';': virtualKey = JisSemicolon; break;
+            case ':': virtualKey = JisColon; break;
             case ',': virtualKey = OemComma; break;
             case '.': virtualKey = OemPeriod; break;
             case '/': virtualKey = OemSlash; break;
