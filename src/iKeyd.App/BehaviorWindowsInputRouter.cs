@@ -4,6 +4,7 @@ using iKeyd.Core.Chords;
 using iKeyd.Core.Configuration;
 using iKeyd.Core.Input;
 using iKeyd.Core.Keymaps;
+using iKeyd.Core.State;
 
 namespace iKeyd.App;
 
@@ -21,6 +22,7 @@ internal sealed class BehaviorWindowsInputRouter : IKeyboardEventHandler, IInput
     private readonly IKeyboardOutput _keyboard;
     private readonly IKeyboardEventHandler _fallback;
     private readonly Action<BehaviorAction>? _postHostAction;
+    private readonly IRuntimeStateStore _runtimeState;
     private readonly Dictionary<string, BehaviorRuntime> _behaviorRuntimes;
     private readonly Dictionary<string, Keymap<string>> _keymaps;
     private readonly List<string> _activeLayers = [];
@@ -35,7 +37,8 @@ internal sealed class BehaviorWindowsInputRouter : IKeyboardEventHandler, IInput
         IKeyboardOutput keyboard,
         IKeyboardEventHandler fallback,
         Action<BehaviorAction>? postHostAction = null,
-        ISystemQuerySnapshot? systemQueries = null)
+        ISystemQuerySnapshot? systemQueries = null,
+        IRuntimeStateStore? runtimeState = null)
     {
         _profile = profile ?? throw new ArgumentNullException(nameof(profile));
         _baseKeymapName = baseKeymapName ?? throw new ArgumentNullException(nameof(baseKeymapName));
@@ -44,6 +47,9 @@ internal sealed class BehaviorWindowsInputRouter : IKeyboardEventHandler, IInput
         _fallback = fallback ?? throw new ArgumentNullException(nameof(fallback));
         _postHostAction = postHostAction;
         systemQueries ??= EmptySystemQuerySnapshot.Instance;
+        _runtimeState = runtimeState ?? (profile.State.Count == 0
+            ? EmptyRuntimeStateStore.Instance
+            : new RuntimeStateStore(profile.State));
 
         _keymaps = new Dictionary<string, Keymap<string>>(StringComparer.OrdinalIgnoreCase);
         _behaviorRuntimes = new Dictionary<string, BehaviorRuntime>(StringComparer.OrdinalIgnoreCase);
@@ -54,7 +60,11 @@ internal sealed class BehaviorWindowsInputRouter : IKeyboardEventHandler, IInput
             {
                 _behaviorRuntimes.Add(
                     pair.Key,
-                    new BehaviorRuntime(pair.Value.BuildBehaviorBindings(profile.BehaviorDefinitions, systemQueries)));
+                    new BehaviorRuntime(pair.Value.BuildBehaviorBindings(
+                        profile.BehaviorDefinitions,
+                        systemQueries,
+                        profile.State,
+                        _runtimeState)));
             }
         }
 
@@ -112,20 +122,14 @@ internal sealed class BehaviorWindowsInputRouter : IKeyboardEventHandler, IInput
         _activeBehaviorKeys.Clear();
         _layerMappedKeys.Clear();
         _activeLayers.Clear();
+        _runtimeState.Reset();
     }
 
     private KeyboardDisposition HandleKeyDown(KeyboardEvent keyboardEvent, KeyId keyId)
     {
-        // First let every already-active behavior observe this physical key. An LT
-        // can resolve to hold here, which may change the active named layer before
-        // this very same key is looked up.
         foreach (var activeRuntime in _behaviorRuntimes.Values)
             ApplyActions(activeRuntime.ObserveKeyDown(keyId, keyboardEvent.TimestampMs).Actions);
 
-        // Auto-repeat belongs to the behavior instance that consumed the original
-        // down even if that behavior has since activated a different layer. Route
-        // the repeated down back to that owner so repeatable output actions can
-        // react without replaying stateful layer/modifier/host transitions.
         if (_activeBehaviorKeys.Contains(keyId))
         {
             foreach (var activeRuntime in _behaviorRuntimes.Values)
@@ -153,8 +157,6 @@ internal sealed class BehaviorWindowsInputRouter : IKeyboardEventHandler, IInput
             }
         }
 
-        // Named layers activated by behaviors are intentionally evaluated before
-        // the existing HotkeySKG state machine. Unmapped keys remain transparent.
         var activeLayer = ActiveLayer;
         if (activeLayer is not null &&
             _keymaps.TryGetValue(activeLayer, out var layerKeymap) &&
@@ -232,13 +234,23 @@ internal sealed class BehaviorWindowsInputRouter : IKeyboardEventHandler, IInput
                     _keyboard.SendKey(ResolveModifier(action.Name), KeyEventKind.Up);
                     break;
 
+                case BehaviorActionKind.StateSet:
+                    if (action.Name is null || action.Text is null)
+                        throw new InvalidOperationException("StateSet action is missing field/value data.");
+                    _runtimeState.SetScalar(action.Name, action.Text);
+                    break;
+
+                case BehaviorActionKind.StateToggle:
+                    if (action.Name is null)
+                        throw new InvalidOperationException("StateToggle action is missing a field name.");
+                    _runtimeState.Toggle(action.Name);
+                    break;
+
                 case BehaviorActionKind.Exec:
                 case BehaviorActionKind.Shell:
                 case BehaviorActionKind.Query:
                     if (_postHostAction is null)
                         throw new InvalidOperationException($"Behavior action '{action.Kind}' requires a host-action sink.");
-                    // The supplied sink is a capability boundary: it must only post
-                    // bounded work and return promptly to the low-level hook path.
                     _postHostAction(action);
                     break;
 
