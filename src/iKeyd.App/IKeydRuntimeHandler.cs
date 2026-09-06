@@ -26,6 +26,7 @@ internal sealed class IKeydRuntimeHandler : IKeyboardEventHandler, IMacroActionD
     private readonly HashSet<ushort> _suppressedKeys = new(64);
     private readonly Timer _chordTimer;
 
+    private ILegacyMacroSlotActions? _macroSlots;
     private InputModeState _mode;
     private LayerRuntimeState _layers = LayerRuntimeState.Empty;
     private KeymapMode? _timerMode;
@@ -63,6 +64,18 @@ internal sealed class IKeydRuntimeHandler : IKeyboardEventHandler, IMacroActionD
         }
     }
 
+    internal void AttachMacroSlotActions(ILegacyMacroSlotActions macroSlots)
+    {
+        ArgumentNullException.ThrowIfNull(macroSlots);
+        lock (_gate)
+        {
+            ThrowIfDisposed();
+            if (_macroSlots is not null)
+                throw new InvalidOperationException("Legacy macro-slot actions are already attached.");
+            _macroSlots = macroSlots;
+        }
+    }
+
     public void SetMode(InputMode mode)
     {
         lock (_gate)
@@ -77,6 +90,14 @@ internal sealed class IKeydRuntimeHandler : IKeyboardEventHandler, IMacroActionD
     {
         if (keyboardEvent.Origin != KeyEventOrigin.Physical)
             return KeyboardDisposition.PassThrough;
+
+        if (keyboardEvent.Kind == KeyEventKind.Down && keyboardEvent.Key.VirtualKey == WindowsKeyMap.Escape)
+        {
+            ILegacyMacroSlotActions? slots;
+            lock (_gate)
+                slots = _macroSlots;
+            slots?.Cancel();
+        }
 
         lock (_gate)
         {
@@ -139,6 +160,29 @@ internal sealed class IKeydRuntimeHandler : IKeyboardEventHandler, IMacroActionD
     public ValueTask DispatchAsync(MacroHotkey hotkey, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
+
+        var slot = char.ToUpperInvariant(hotkey.Key);
+        if (slot is 'H' or 'Y')
+        {
+            ILegacyMacroSlotActions? macroSlots;
+            lock (_gate)
+            {
+                ThrowIfDisposed();
+                macroSlots = _macroSlots;
+            }
+
+            if (macroSlots is null)
+                return ValueTask.CompletedTask;
+
+            return hotkey.State.ToUpperInvariant() switch
+            {
+                "M" => macroSlots.RunAsync(slot, cancellationToken),
+                "MH" => macroSlots.EditTemplateAsync(slot, cancellationToken),
+                "HM" => macroSlots.EditRepeatAsync(cancellationToken),
+                _ => ValueTask.CompletedTask
+            };
+        }
+
         lock (_gate)
         {
             ThrowIfDisposed();
@@ -151,16 +195,19 @@ internal sealed class IKeydRuntimeHandler : IKeyboardEventHandler, IMacroActionD
 
     public void Dispose()
     {
+        ILegacyMacroSlotActions? slots;
         lock (_gate)
         {
             if (_disposed)
                 return;
             _disposed = true;
+            slots = _macroSlots;
             CancelTimeout();
             _sEngine.Cancel();
             _kEngine.Cancel();
             _suppressedKeys.Clear();
         }
+        slots?.Cancel();
         _chordTimer.Dispose();
     }
 
@@ -310,14 +357,17 @@ internal sealed class IKeydRuntimeHandler : IKeyboardEventHandler, IMacroActionD
                 if (state.IsExact(LayerKey.M, LayerKey.H)) { _clipboard.CaptureLatest(); return true; }
                 if (state.IsExact(LayerKey.H, LayerKey.M)) { _clipboard.PasteCaptured(); return true; }
                 break;
+
+            case KeyCode.Y:
+                return DispatchMacroSlotDetached('Y', state);
+
+            case KeyCode.H:
+                return DispatchMacroSlotDetached('H', state);
         }
 
         return false;
     }
 
-    // Macro actions use legacy state strings and are not on the physical keyboard
-    // hot path. Keep this overload for compatibility without making layered input
-    // stringify LayerState on every event.
     private bool DispatchFunctionKey(KeyId key, string state)
     {
         if (TrySwitchLegacyModeKey(key.Code))
@@ -385,6 +435,9 @@ internal sealed class IKeydRuntimeHandler : IKeyboardEventHandler, IMacroActionD
             if (state == "HM") { _clipboard.PasteCaptured(); return true; }
         }
 
+        if (name is "Y" or "H")
+            return true;
+
         return false;
     }
 
@@ -405,6 +458,40 @@ internal sealed class IKeydRuntimeHandler : IKeyboardEventHandler, IMacroActionD
         FlushAllPending();
         _mode = _mode.SwitchTo(target.Value);
         return true;
+    }
+
+    private bool DispatchMacroSlotDetached(char slot, LayerState state)
+    {
+        var macroSlots = _macroSlots;
+        if (macroSlots is not null)
+        {
+            if (state.IsExact(LayerKey.M))
+                ObserveDetached(macroSlots.RunAsync(slot));
+            else if (state.IsExact(LayerKey.M, LayerKey.H))
+                ObserveDetached(macroSlots.EditTemplateAsync(slot));
+            else if (state.IsExact(LayerKey.H, LayerKey.M))
+                ObserveDetached(macroSlots.EditRepeatAsync());
+        }
+
+        return true;
+    }
+
+    private static void ObserveDetached(ValueTask action)
+    {
+        if (action.IsCompletedSuccessfully)
+            return;
+        _ = ObserveDetachedAsync(action);
+    }
+
+    private static async Task ObserveDetachedAsync(ValueTask action)
+    {
+        try
+        {
+            await action.ConfigureAwait(false);
+        }
+        catch
+        {
+        }
     }
 
     private bool DispatchMouseMedia(KeyId key)

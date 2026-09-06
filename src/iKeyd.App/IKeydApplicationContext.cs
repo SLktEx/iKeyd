@@ -21,6 +21,7 @@ internal sealed class IKeydApplicationContext : ApplicationContext
     private readonly ToolStripMenuItem _cancelMacroItem;
     private readonly WindowsMacroEditor _macroEditor = new();
     private readonly MacroExecutor _macroExecutor;
+    private readonly LegacyMacroSlotController _legacyMacroSlots;
 
     private string _macroTemplate = string.Empty;
     private MacroRepeat _macroRepeat = MacroRepeat.Once;
@@ -58,6 +59,11 @@ internal sealed class IKeydApplicationContext : ApplicationContext
             _runtime);
 
         _macroExecutor = new MacroExecutor(send, _runtime);
+        _legacyMacroSlots = new LegacyMacroSlotController(
+            _macroExecutor,
+            _macroEditor,
+            ShowError);
+        _runtime.AttachMacroSlotActions(_legacyMacroSlots);
 
         _menu = new ContextMenuStrip();
         _menu.Items.Add(new ToolStripMenuItem("iKeyd") { Enabled = false });
@@ -75,9 +81,9 @@ internal sealed class IKeydApplicationContext : ApplicationContext
 
         _menu.Items.Add(new ToolStripMenuItem("Clipboard History...", null, (_, _) => ShowClipboardHistory()));
         _menu.Items.Add(new ToolStripMenuItem("Macro...", null, async (_, _) => await EditAndRunMacroAsync()));
-        _cancelMacroItem = new ToolStripMenuItem("Cancel Macro", null, (_, _) => _macroCancellation?.Cancel())
+        _cancelMacroItem = new ToolStripMenuItem("Cancel Macro", null, (_, _) => CancelMacros())
         {
-            Enabled = false
+            Enabled = true
         };
         _menu.Items.Add(_cancelMacroItem);
         _menu.Items.Add(new ToolStripSeparator());
@@ -102,7 +108,7 @@ internal sealed class IKeydApplicationContext : ApplicationContext
             return;
         _stopping = true;
 
-        _macroCancellation?.Cancel();
+        CancelMacros();
         _notifyIcon.Visible = false;
 
         try
@@ -111,6 +117,7 @@ internal sealed class IKeydApplicationContext : ApplicationContext
         }
         finally
         {
+            _legacyMacroSlots.Dispose();
             _clipboard.Dispose();
             _clipboardService.Dispose();
             _keyboardHandler.Dispose();
@@ -172,7 +179,6 @@ internal sealed class IKeydApplicationContext : ApplicationContext
             _macroTemplate = edited.Template;
             _macroRepeat = edited.Repeat;
             _macroCancellation = new CancellationTokenSource();
-            _cancelMacroItem.Enabled = true;
 
             var result = await _macroExecutor.ExecuteAsync(
                 _macroTemplate,
@@ -187,10 +193,15 @@ internal sealed class IKeydApplicationContext : ApplicationContext
         }
         finally
         {
-            _cancelMacroItem.Enabled = false;
             _macroCancellation?.Dispose();
             _macroCancellation = null;
         }
+    }
+
+    private void CancelMacros()
+    {
+        _macroCancellation?.Cancel();
+        _legacyMacroSlots.Cancel();
     }
 
     private static void ShowError(string message, Exception exception)

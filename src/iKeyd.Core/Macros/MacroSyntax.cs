@@ -54,7 +54,18 @@ public sealed record MacroExecutionResult(
     int CompletedIterations,
     bool Cancelled);
 
-public sealed record MacroEditRequest(string Name, string Template, MacroRepeat Repeat);
+public enum MacroEditScope
+{
+    Both,
+    Template,
+    Repeat
+}
+
+public sealed record MacroEditRequest(
+    string Name,
+    string Template,
+    MacroRepeat Repeat,
+    MacroEditScope Scope = MacroEditScope.Both);
 
 public sealed record MacroEditResult(string Template, MacroRepeat Repeat);
 
@@ -76,6 +87,14 @@ public interface IMacroDelay
 public interface IMacroEditor
 {
     MacroEditResult? Edit(MacroEditRequest request);
+}
+
+public interface ILegacyMacroSlotActions
+{
+    ValueTask RunAsync(char slot, CancellationToken cancellationToken = default);
+    ValueTask EditTemplateAsync(char slot, CancellationToken cancellationToken = default);
+    ValueTask EditRepeatAsync(CancellationToken cancellationToken = default);
+    void Cancel();
 }
 
 public sealed class SystemMacroDelay : IMacroDelay
