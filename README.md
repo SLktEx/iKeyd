@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/assets/brand/readme-hero.jpg" alt="iKeyd — I keyed it my way." width="100%">
+  <img src="docs/assets/brand/ikeyd-icon.png" alt="iKeyd official icon" width="180">
 </p>
 
 <h1 align="center">iKeyd</h1>
@@ -14,6 +14,10 @@
   · <a href="docs/ikeyd-dsl.md">iKeyd DSL</a>
   · <a href="docs/json-configuration.md">JSON schema</a>
   · <a href="docs/implementation-details.md">Implementation details</a>
+</p>
+
+<p align="center">
+  <img src="docs/assets/brand/readme-hero.jpg" alt="iKeyd — I keyed it my way." width="100%">
 </p>
 
 ---
@@ -113,6 +117,8 @@ dotnet test iKeyd.sln
 ## Brand
 
 The public name is **iKeyd** and the naming line is **“I Key'd / I keyed it my way.”**
+
+The cyan `K` mark shown at the top of this README is the official iKeyd application and tray icon.
 
 Brand assets and the visual direction live under [`docs/assets/brand/`](docs/assets/brand/) and are summarized in [`docs/brand.md`](docs/brand.md).
 
