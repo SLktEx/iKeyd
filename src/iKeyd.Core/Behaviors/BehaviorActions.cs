@@ -18,6 +18,8 @@ public enum BehaviorActionKind
     SendText,
     LayerOn,
     LayerOff,
+    LayerToggle,
+    LayerSet,
     ModifierDown,
     ModifierUp,
     Exec,
@@ -90,6 +92,21 @@ public readonly record struct BehaviorAction
 
     public static BehaviorAction LayerOff(string layer)
         => new(BehaviorActionKind.LayerOff, default, RequireName(layer, nameof(layer)), null, null, BehaviorRepeatPolicy.Never);
+
+    /// <summary>
+    /// Toggles persistent membership of a layer. This is deliberately separate
+    /// from LayerOn/LayerOff ownership so a TG-style latch cannot consume or leak
+    /// a momentary MO/LT activation.
+    /// </summary>
+    public static BehaviorAction LayerToggle(string layer)
+        => new(BehaviorActionKind.LayerToggle, default, RequireName(layer, nameof(layer)), null, null, BehaviorRepeatPolicy.Never);
+
+    /// <summary>
+    /// Replaces the persistent layer selection with one layer. Momentary owned
+    /// layers remain independently owned until their source behavior releases.
+    /// </summary>
+    public static BehaviorAction LayerSet(string layer)
+        => new(BehaviorActionKind.LayerSet, default, RequireName(layer, nameof(layer)), null, null, BehaviorRepeatPolicy.Never);
 
     public static BehaviorAction ModifierDown(string modifier)
         => new(BehaviorActionKind.ModifierDown, default, RequireName(modifier, nameof(modifier)), null, null, BehaviorRepeatPolicy.Never);
