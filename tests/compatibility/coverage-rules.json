@@ -23,10 +23,124 @@
       "evidence": ["tests/iKeyd.Core.Tests","tests/iKeyd.Compatibility.Tests","tests/iKeyd.Windows.Tests"]
     },
     {
-      "name": "mode and layer behavior has regression coverage but long-tail remains",
+      "name": "global onKeyDown hotkey wrappers route into the compiled key/runtime tables",
+      "match": {"kind": "hotkey", "textRegex": "::\\s*onKeyDown\\("},
+      "set": {"implementation":"implemented","unit":"covered","scenario":"regression","exeDiff":"partial","ahkDiff":"partial","realWindows":"unverified","intentionalDifference":"no"},
+      "evidence": ["src/iKeyd.App/IKeydRuntimeHandler.cs","src/iKeyd.App/WindowsKeyMap.cs","tests/iKeyd.Core.Tests/KeymapTableTests.cs","tests/iKeyd.Windows.Tests/IKeydRuntimeScenarioRunnerTests.cs"]
+    },
+    {
+      "name": "legacy M/H/S/K/A physical layer hotkeys are implemented by the layer state machine",
+      "match": {"kind": "hotkey", "ownerRegex": "^hotkey:(?:vk1Dsc07B(?: up)?|vk1Csc079(?: up)?|!vk1Csc079(?: up)?|Space(?: up)?|!Space(?: up)?|sc070|!sc070)$"},
+      "set": {"implementation":"implemented","unit":"covered","scenario":"regression","exeDiff":"partial","ahkDiff":"partial","realWindows":"unverified","intentionalDifference":"no"},
+      "evidence": ["src/iKeyd.Profiles.HotkeySkg/Layers/LayerStateMachine.cs","tests/iKeyd.Core.Tests/LayerStateMachineTests.cs","tests/iKeyd.Windows.Tests/IKeydRuntimeScenarioRunnerTests.cs"]
+    },
+    {
+      "name": "func_* wrappers are represented by direct withFuncKey tables or explicit process routing",
+      "match": {"kind": "function", "ownerRegex": "^function:func_"},
+      "set": {"implementation":"implemented","unit":"covered","scenario":"regression","exeDiff":"partial","ahkDiff":"partial","realWindows":"unverified","intentionalDifference":"no"},
+      "evidence": ["src/iKeyd.App/LegacyFunctionSendMap.cs","src/iKeyd.App/IKeydRuntimeHandler.cs","tests/iKeyd.Windows.Tests/LegacyFunctionSendMapTests.cs","tests/iKeyd.Windows.Tests"]
+    },
+    {
+      "name": "withFuncKey and dynamic processes dispatch are implemented",
+      "match": {"kind": "function", "ownerRegex": "^function:(?:withFuncKey|processes)$"},
+      "set": {"implementation":"implemented","unit":"covered","scenario":"regression","exeDiff":"partial","ahkDiff":"partial","realWindows":"unverified","intentionalDifference":"no"},
+      "evidence": ["src/iKeyd.App/LegacyFunctionSendMap.cs","src/iKeyd.App/IKeydRuntimeHandler.cs","tests/iKeyd.Windows.Tests/LegacyFunctionSendMapTests.cs","tests/iKeyd.Windows.Tests/PinnedSendSyntaxInventoryTests.cs"]
+    },
+    {
+      "name": "process E/R/T/Y/F/G/B/H/V/1-4 routes are implemented with deterministic regressions",
+      "match": {"kind": "function", "ownerRegex": "^function:process(?:E|R|T|Y|F|G|B|H|V|[1-4])$"},
+      "set": {"implementation":"implemented","unit":"covered","scenario":"regression","exeDiff":"partial","ahkDiff":"partial","realWindows":"required","intentionalDifference":"no"},
+      "evidence": ["src/iKeyd.App/IKeydRuntimeHandler.cs","tests/iKeyd.Windows.Tests","tests/iKeyd.Compatibility.Tests/Scenarios"]
+    },
+    {
+      "name": "legacy macro engine and processMacroSend are implemented",
+      "match": {"kind": "function", "ownerRegex": "^function:(?:processMacro|processMacroSend)$"},
+      "set": {"implementation":"implemented","unit":"covered","scenario":"regression","exeDiff":"missing","ahkDiff":"missing","realWindows":"required","intentionalDifference":"no"},
+      "evidence": ["src/iKeyd.Core/Macros","src/iKeyd.App/LegacyMacroSlotController.cs","tests/iKeyd.Core.Tests/MacroExecutorTests.cs","tests/iKeyd.Core.Tests/MacroParserTests.cs","tests/iKeyd.Windows.Tests/LegacyMacroSlotControllerTests.cs"]
+    },
+    {
+      "name": "kaiseki/calc preserve the pinned regex-reduction arithmetic quirks",
+      "match": {"kind": "function", "ownerRegex": "^function:(?:kaiseki|calc)$"},
+      "set": {"implementation":"implemented","unit":"covered","scenario":"regression","exeDiff":"unverified","ahkDiff":"unverified","realWindows":"not-required","intentionalDifference":"no"},
+      "evidence": ["src/iKeyd.Core/Macros/MacroExpressionEvaluator.cs","tests/iKeyd.Core.Tests/MacroParserTests.cs","issue:#57"]
+    },
+    {
+      "name": "whenSM and moveMouse are implemented by mouse/media dispatch",
+      "match": {"kind": "function", "ownerRegex": "^function:(?:whenSM|moveMouse)$"},
+      "set": {"implementation":"implemented","unit":"covered","scenario":"regression","exeDiff":"partial","ahkDiff":"partial","realWindows":"required","intentionalDifference":"no"},
+      "evidence": ["src/iKeyd.App/IKeydRuntimeHandler.cs","tests/iKeyd.Compatibility.Tests/Scenarios","tests/iKeyd.Windows.Tests/IKeydRuntimeScenarioRunnerTests.cs"]
+    },
+    {
+      "name": "pasteAction is implemented by clipboard picker/controller routing",
+      "match": {"kind": "function", "ownerRegex": "^function:pasteAction$"},
+      "set": {"implementation":"implemented","unit":"covered","scenario":"regression","exeDiff":"missing","ahkDiff":"missing","realWindows":"required","intentionalDifference":"no"},
+      "evidence": ["src/iKeyd.Windows/Clipboard/WindowsClipboardController.cs","tests/iKeyd.Windows.Tests/ClipboardControllerTests.cs","tests/iKeyd.Windows.Tests/IKeydRuntimeClipboardTests.cs"]
+    },
+    {
+      "name": "legacy chord timer input-state operations are implemented",
+      "match": {"kind": "input-state-operation", "ownerRegex": "^label:(?:onKeyUp|onOnKeyDown)$"},
+      "set": {"implementation":"implemented","unit":"covered","scenario":"regression","exeDiff":"partial","ahkDiff":"partial","realWindows":"unverified","intentionalDifference":"no"},
+      "evidence": ["src/iKeyd.Core/Chords/ChordEngine.cs","tests/iKeyd.Core.Tests/ChordEngineTests.cs","tests/iKeyd.Windows.Tests/WindowsScenarioRunnerTests.cs"]
+    },
+    {
+      "name": "processF CapsLock input-state query is implemented",
+      "match": {"id": "legacy-input-state-operation-d2c7880049"},
+      "set": {"implementation":"implemented","unit":"covered","scenario":"regression","exeDiff":"partial","ahkDiff":"partial","realWindows":"required","intentionalDifference":"no"},
+      "evidence": ["src/iKeyd.App/IKeydRuntimeHandler.cs","tests/iKeyd.Compatibility.Tests/Scenarios/runtime-process-f-mh-capslock-toggle.json"]
+    },
+    {
+      "name": "macro Escape wait/cancel input-state operations are implemented",
+      "match": {"kind": "input-state-operation", "ownerRegex": "^(?:label:outer|function:processMacroSend)$"},
+      "set": {"implementation":"implemented","unit":"covered","scenario":"regression","exeDiff":"missing","ahkDiff":"missing","realWindows":"required","intentionalDifference":"no"},
+      "evidence": ["src/iKeyd.Core/Macros/MacroExecutor.cs","src/iKeyd.App/LegacyMacroSlotController.cs","tests/iKeyd.Core.Tests/MacroExecutorTests.cs","tests/iKeyd.Windows.Tests/LegacyMacroSlotControllerTests.cs"]
+    },
+    {
+      "name": "mouse held-button and movement modifier state queries are implemented",
+      "match": {"kind": "input-state-operation", "ownerRegex": "^function:(?:whenSM|moveMouse)$"},
+      "set": {"implementation":"implemented","unit":"covered","scenario":"regression","exeDiff":"partial","ahkDiff":"partial","realWindows":"required","intentionalDifference":"no"},
+      "evidence": ["src/iKeyd.App/IKeydRuntimeHandler.cs","tests/iKeyd.Compatibility.Tests/Scenarios","tests/iKeyd.Windows.Tests/IKeydRuntimeScenarioRunnerTests.cs"]
+    },
+    {
+      "name": "legacy chord callback labels are represented by deterministic chord regressions",
+      "match": {"kind": "label", "ownerRegex": "^label:(?:onKeyUp|onOnKeyDown)$"},
+      "set": {"implementation":"implemented","unit":"covered","scenario":"regression","exeDiff":"partial","ahkDiff":"partial","realWindows":"unverified","intentionalDifference":"no"},
+      "evidence": ["src/iKeyd.Core/Chords/ChordEngine.cs","tests/iKeyd.Core.Tests/ChordEngineTests.cs"]
+    },
+    {
+      "name": "legacy macro outer label is represented by MacroExecutor iteration/cancellation regressions",
+      "match": {"kind": "label", "ownerRegex": "^label:outer$"},
+      "set": {"implementation":"implemented","unit":"covered","scenario":"regression","exeDiff":"missing","ahkDiff":"missing","realWindows":"required","intentionalDifference":"no"},
+      "evidence": ["src/iKeyd.Core/Macros/MacroExecutor.cs","tests/iKeyd.Core.Tests/MacroExecutorTests.cs"]
+    },
+    {
+      "name": "legacy clipboard picker labels are implemented but require real Windows UI verification",
+      "match": {"kind": "label", "ownerRegex": "^label:(?:MenuAction|MenuActionF|MyPasteBox|OnEnter|GuiEscape|GuiClose)$"},
+      "set": {"implementation":"implemented","unit":"covered","scenario":"real-windows:#59","exeDiff":"missing","ahkDiff":"missing","realWindows":"required","intentionalDifference":"no"},
+      "evidence": ["src/iKeyd.Windows/Clipboard/WindowsClipboardController.cs","src/iKeyd.Windows/Clipboard/WindowsClipboardPicker.cs","tests/iKeyd.Windows.Tests/ClipboardControllerTests.cs","issue:#59"]
+    },
+    {
+      "name": "legacy Ctrl+Esc suspend lifecycle is implemented",
+      "match": {"id": "legacy-hotkey-6622307724"},
+      "set": {"implementation":"implemented","unit":"covered","scenario":"regression","exeDiff":"unverified","ahkDiff":"unverified","realWindows":"unverified","intentionalDifference":"no"},
+      "evidence": ["src/iKeyd.App/LegacySuspendToggleHandler.cs","tests/iKeyd.Windows.Tests/LegacySuspendToggleHandlerTests.cs","issue:#57"]
+    },
+    {
+      "name": "legacy Suspend Toggle lifecycle operation is implemented",
+      "match": {"id": "legacy-lifecycle-operation-510603b874"},
+      "set": {"implementation":"implemented","unit":"covered","scenario":"regression","exeDiff":"unverified","ahkDiff":"unverified","realWindows":"unverified","intentionalDifference":"no"},
+      "evidence": ["src/iKeyd.App/LegacySuspendToggleHandler.cs","tests/iKeyd.Windows.Tests/LegacySuspendToggleHandlerTests.cs","issue:#57"]
+    },
+    {
+      "name": "dynamic process dispatch is implemented by explicit runtime process routing",
+      "match": {"kind": "process-operation", "ownerRegex": "^function:processes$"},
+      "set": {"implementation":"implemented","unit":"covered","scenario":"regression","exeDiff":"partial","ahkDiff":"partial","realWindows":"unverified","intentionalDifference":"no"},
+      "evidence": ["src/iKeyd.App/IKeydRuntimeHandler.cs","tests/iKeyd.Windows.Tests","tests/iKeyd.Compatibility.Tests/Scenarios"]
+    },
+    {
+      "name": "mode and layer behavior has regression coverage but real-Windows edges remain",
       "match": {"tag": ["mode", "layer"]},
       "set": {"implementation":"partial","unit":"covered","scenario":"partial","exeDiff":"partial","ahkDiff":"partial","realWindows":"unverified","intentionalDifference":"no"},
-      "evidence": ["tests/iKeyd.LegacySpec.Tests/LegacyRuntimeSpecTests.cs","tests/COMPATIBILITY.md"]
+      "evidence": ["tests/iKeyd.LegacySpec.Tests/LegacyRuntimeSpecTests.cs","tests/iKeyd.Windows.Tests/IKeydRuntimeModeSwitchTests.cs","tests/COMPATIBILITY.md"]
     },
     {
       "name": "hotkeySKG Send grammar is implemented and exhaustively checked for every finite pinned-source expression",
@@ -41,28 +155,28 @@
       ]
     },
     {
-      "name": "desktop window operations",
+      "name": "desktop window operations are implemented with deterministic regression coverage",
       "match": {"tag": "window"},
-      "set": {"implementation":"partial","unit":"partial","scenario":"missing","exeDiff":"missing","ahkDiff":"missing","realWindows":"required","intentionalDifference":"no"},
-      "evidence": ["tests/iKeyd.Windows.Tests","tests/COMPATIBILITY.md"]
+      "set": {"implementation":"implemented","unit":"covered","scenario":"regression","exeDiff":"partial","ahkDiff":"partial","realWindows":"required","intentionalDifference":"no"},
+      "evidence": ["src/iKeyd.Core/Desktop/DesktopActions.cs","src/iKeyd.App/IKeydRuntimeHandler.cs","tests/iKeyd.Core.Tests/DesktopActionServiceTests.cs","tests/iKeyd.Windows.Tests","tests/iKeyd.Compatibility.Tests/Scenarios"]
     },
     {
-      "name": "mouse and media operations",
+      "name": "mouse and media operations are implemented with deterministic regression coverage",
       "match": {"tag": ["mouse", "media"]},
-      "set": {"implementation":"partial","unit":"partial","scenario":"missing","exeDiff":"missing","ahkDiff":"missing","realWindows":"required","intentionalDifference":"no"},
-      "evidence": ["tests/iKeyd.Windows.Tests","tests/COMPATIBILITY.md"]
+      "set": {"implementation":"implemented","unit":"covered","scenario":"regression","exeDiff":"partial","ahkDiff":"partial","realWindows":"required","intentionalDifference":"no"},
+      "evidence": ["src/iKeyd.App/IKeydRuntimeHandler.cs","tests/iKeyd.Windows.Tests","tests/iKeyd.Compatibility.Tests/Scenarios"]
     },
     {
-      "name": "clipboard history and picker",
+      "name": "clipboard history and picker behavior are implemented; UI/callback verification remains real-Windows",
       "match": {"tag": "clipboard"},
-      "set": {"implementation":"partial","unit":"covered","scenario":"missing","exeDiff":"missing","ahkDiff":"missing","realWindows":"required","intentionalDifference":"no"},
-      "evidence": ["tests/iKeyd.Core.Tests","tests/iKeyd.Windows.Tests","tests/COMPATIBILITY.md"]
+      "set": {"implementation":"implemented","unit":"covered","scenario":"regression","exeDiff":"missing","ahkDiff":"missing","realWindows":"required","intentionalDifference":"no"},
+      "evidence": ["src/iKeyd.Core/Clipboard","src/iKeyd.Windows/Clipboard","src/iKeyd.App/IKeydRuntimeHandler.cs","tests/iKeyd.Core.Tests/ClipboardHistoryTests.cs","tests/iKeyd.Windows.Tests/ClipboardControllerTests.cs","tests/iKeyd.Windows.Tests/IKeydRuntimeClipboardTests.cs"]
     },
     {
-      "name": "macro engine behavior",
+      "name": "macro engine behavior is implemented; modal editor verification remains real-Windows",
       "match": {"tag": "macro"},
-      "set": {"implementation":"partial","unit":"covered","scenario":"missing","exeDiff":"missing","ahkDiff":"missing","realWindows":"required","intentionalDifference":"no"},
-      "evidence": ["tests/iKeyd.Core.Tests","tests/iKeyd.Windows.Tests","tests/COMPATIBILITY.md"]
+      "set": {"implementation":"implemented","unit":"covered","scenario":"regression","exeDiff":"missing","ahkDiff":"missing","realWindows":"required","intentionalDifference":"no"},
+      "evidence": ["src/iKeyd.Core/Macros","src/iKeyd.App/LegacyMacroSlotController.cs","src/iKeyd.Windows/Macros/WindowsMacroEditor.cs","tests/iKeyd.Core.Tests/MacroExecutorTests.cs","tests/iKeyd.Core.Tests/MacroParserTests.cs","tests/iKeyd.Windows.Tests/LegacyMacroSlotControllerTests.cs"]
     },
     {
       "name": "clipboard operations have explicit deterministic regression coverage",
@@ -77,6 +191,12 @@
       "evidence": ["tests/iKeyd.Core.Tests/MacroExecutorTests.cs","tests/iKeyd.Core.Tests/MacroParserTests.cs","tests/COMPATIBILITY.md"]
     },
     {
+      "name": "legacy processV/pasteAction GUI operations require real Windows UI verification",
+      "match": {"kind": "ui-operation", "ownerRegex": "^(?:function:processV|function:pasteAction|label:GuiClose)$"},
+      "set": {"implementation":"implemented","unit":"partial","scenario":"real-windows:#59","exeDiff":"missing","ahkDiff":"missing","realWindows":"required","intentionalDifference":"no"},
+      "evidence": ["src/iKeyd.Windows/Clipboard/WindowsClipboardPicker.cs","src/iKeyd.Windows/Clipboard/WindowsClipboardController.cs","tests/iKeyd.Windows.Tests/ClipboardControllerTests.cs","issue:#59"]
+    },
+    {
       "name": "IME behavior requires a real Japanese IME for final verification",
       "match": {"tag": "ime"},
       "set": {"implementation":"partial","unit":"partial","scenario":"partial","exeDiff":"partial","ahkDiff":"partial","realWindows":"required","intentionalDifference":"no"},
@@ -89,16 +209,10 @@
       "evidence": ["issue:#57","tests/COMPATIBILITY.md"]
     },
     {
-      "name": "unlinked window/mouse long-tail is explicitly handed to compatibility-fix work",
-      "match": {"tag": ["window", "mouse"]},
-      "set": {"scenario": "deferred:#57"},
-      "evidence": ["issue:#57","tests/iKeyd.Compatibility.Tests/Scenarios"]
-    },
-    {
       "name": "legacy macro function shells are represented by deterministic macro regressions",
       "match": {"kind": "function", "tag": "macro"},
       "set": {"scenario": "regression"},
-      "evidence": ["tests/iKeyd.Core.Tests/MacroExecutorTests.cs","tests/iKeyd.Core.Tests/MacroParserTests.cs"]
+      "evidence": ["tests/iKeyd.Core.Tests/MacroExecutorTests.cs","tests/iKeyd.Core.Tests/MacroParserTests.cs","tests/iKeyd.Windows.Tests/LegacyMacroSlotControllerTests.cs"]
     },
     {
       "name": "interactive macro UI requires real Windows verification",
