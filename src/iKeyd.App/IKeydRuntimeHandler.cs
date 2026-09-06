@@ -18,6 +18,7 @@ internal sealed class IKeydRuntimeHandler : IKeyboardEventHandler, IMacroActionD
     private readonly LegacySendOutput _send;
     private readonly IDesktopBackend _desktop;
     private readonly DesktopActionService _desktopActions;
+    private readonly WindowGroupController _windowGroups;
     private readonly ChordEngine<string> _sEngine;
     private readonly ChordEngine<string> _kEngine;
     private readonly HashSet<ushort> _suppressedKeys = new(64);
@@ -42,6 +43,7 @@ internal sealed class IKeydRuntimeHandler : IKeyboardEventHandler, IMacroActionD
         _send = send ?? throw new ArgumentNullException(nameof(send));
         _desktop = desktop ?? throw new ArgumentNullException(nameof(desktop));
         _desktopActions = new DesktopActionService(desktop);
+        _windowGroups = new WindowGroupController(desktop);
         _sEngine = new ChordEngine<string>(configuration.SKeymap, configuration.ChordWindowMs);
         _kEngine = new ChordEngine<string>(configuration.KKeymap, configuration.ChordWindowMs);
         _mode = InputModeState.Initial.SwitchTo(configuration.StartupMode);
@@ -281,13 +283,17 @@ internal sealed class IKeydRuntimeHandler : IKeyboardEventHandler, IMacroActionD
                 break;
 
             case KeyCode.G:
+                if (state.IsExact(LayerKey.M)) { _windowGroups.ActivateNext(); return true; }
                 if (state.IsExact(LayerKey.M, LayerKey.H)) { _send.SendChord(WindowsKeyMap.Control, WindowsKeyMap.Tab); return true; }
                 if (state.IsExact(LayerKey.H, LayerKey.M)) { _send.SendChord(WindowsKeyMap.Control, WindowsKeyMap.Shift, WindowsKeyMap.Tab); return true; }
+                if (state.IsExact(LayerKey.M, LayerKey.S)) { _windowGroups.ToggleActiveWindow(); return true; }
                 break;
 
             case KeyCode.B:
+                if (state.IsExact(LayerKey.M)) { _desktopActions.ActivateBottomWindowOfActiveClass(); return true; }
                 if (state.IsExact(LayerKey.M, LayerKey.H)) { _send.SendChord(WindowsKeyMap.Alt, WindowsKeyMap.Escape); return true; }
                 if (state.IsExact(LayerKey.H, LayerKey.M)) { _send.SendChord(WindowsKeyMap.Alt, WindowsKeyMap.Shift, WindowsKeyMap.Escape); return true; }
+                if (state.IsExact(LayerKey.M, LayerKey.S)) { _windowGroups.ResetAndAdvance(); return true; }
                 break;
         }
 
@@ -340,14 +346,18 @@ internal sealed class IKeydRuntimeHandler : IKeyboardEventHandler, IMacroActionD
 
         if (name == "G")
         {
+            if (state == "M") { _windowGroups.ActivateNext(); return true; }
             if (state == "MH") { _send.SendChord(WindowsKeyMap.Control, WindowsKeyMap.Tab); return true; }
             if (state == "HM") { _send.SendChord(WindowsKeyMap.Control, WindowsKeyMap.Shift, WindowsKeyMap.Tab); return true; }
+            if (state == "MS") { _windowGroups.ToggleActiveWindow(); return true; }
         }
 
         if (name == "B")
         {
+            if (state == "M") { _desktopActions.ActivateBottomWindowOfActiveClass(); return true; }
             if (state == "MH") { _send.SendChord(WindowsKeyMap.Alt, WindowsKeyMap.Escape); return true; }
             if (state == "HM") { _send.SendChord(WindowsKeyMap.Alt, WindowsKeyMap.Shift, WindowsKeyMap.Escape); return true; }
+            if (state == "MS") { _windowGroups.ResetAndAdvance(); return true; }
         }
 
         return false;
