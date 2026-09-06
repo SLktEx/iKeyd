@@ -1,0 +1,19 @@
+{
+  "id": "runtime-process-f-mh-capslock-toggle",
+  "description": "M then H plus F toggles CapsLock through the legacy processF branch.",
+  "initialState": { "mode": "S", "ime": "off", "layers": ["M", "H"] },
+  "input": [
+    { "atMs": 10, "kind": "keyDown", "key": "F" },
+    { "atMs": 11, "kind": "keyUp", "key": "F" }
+  ],
+  "expected": {
+    "events": [
+      { "kind": "keyDown", "key": "VK_14" },
+      { "kind": "keyUp", "key": "VK_14" }
+    ]
+  },
+  "tags": ["legacy", "runtime-long-tail", "process", "input-state", "send-event-diff", "hosted-windows"],
+  "inventoryIds": ["legacy-function-cc28bb2f7b", "legacy-input-state-operation-d2c7880049"],
+  "requiredEnvironment": ["hosted-windows"],
+  "oracleTargets": ["compiled-exe", "ahk-source", "ikeyd-runtime"]
+}
