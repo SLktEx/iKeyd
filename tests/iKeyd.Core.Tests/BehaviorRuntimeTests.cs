@@ -1,5 +1,6 @@
 using iKeyd.Core.Behaviors;
 using iKeyd.Core.Chords;
+using iKeyd.Core.Configuration;
 using Xunit;
 
 namespace iKeyd.Core.Tests;
@@ -106,6 +107,81 @@ public sealed class BehaviorRuntimeTests
 
         var fastUp = runtime.OnKeyUp(fastSource, 151);
         Assert.Equal([BehaviorAction.LayerOff("FAST")], fastUp.Actions);
+    }
+
+    [Fact]
+    public void Profile_LT_options_change_runtime_resolution()
+    {
+        var source = new KeyId("A");
+        var invocation = new BehaviorInvocationProfile(
+            "LT",
+            ["NUM", "Z"],
+            new Dictionary<string, string>
+            {
+                ["tapping_term"] = "170ms",
+                ["hold_on_other_key_press"] = "false"
+            });
+        var runtime = CreateRuntime(source, invocation.BuildDefinition());
+
+        runtime.OnKeyDown(source, 0);
+        var interrupt = runtime.OnKeyDown(new KeyId("B"), 100);
+        var hold = runtime.AdvanceTo(170);
+        var up = runtime.OnKeyUp(source, 171);
+
+        Assert.Empty(interrupt.Actions);
+        Assert.Equal([BehaviorAction.LayerOn("NUM")], hold);
+        Assert.Equal([BehaviorAction.LayerOff("NUM")], up.Actions);
+    }
+
+    [Fact]
+    public void MT_tap_emits_tap_key()
+    {
+        var source = new KeyId("A");
+        var tap = new KeyId("X");
+        var runtime = CreateRuntime(source, StandardBehaviors.MT("Ctrl", tap));
+
+        runtime.OnKeyDown(source, 0);
+        var up = runtime.OnKeyUp(source, 100);
+
+        Assert.Equal([BehaviorAction.SendKey(tap)], up.Actions);
+    }
+
+    [Fact]
+    public void MT_interrupt_holds_modifier_until_source_release()
+    {
+        var source = new KeyId("A");
+        var runtime = CreateRuntime(source, StandardBehaviors.MT("Ctrl", new KeyId("X")));
+
+        runtime.OnKeyDown(source, 0);
+        var interrupt = runtime.OnKeyDown(new KeyId("B"), 50);
+        var up = runtime.OnKeyUp(source, 60);
+
+        Assert.Equal([BehaviorAction.ModifierDown("Ctrl")], interrupt.Actions);
+        Assert.Equal([BehaviorAction.ModifierUp("Ctrl")], up.Actions);
+    }
+
+    [Fact]
+    public void MT_cancel_releases_modifier_after_hold()
+    {
+        var source = new KeyId("A");
+        var runtime = CreateRuntime(source, StandardBehaviors.MT("Shift", new KeyId("X")));
+
+        runtime.OnKeyDown(source, 0);
+        runtime.OnKeyDown(new KeyId("B"), 50);
+
+        Assert.Equal([BehaviorAction.ModifierUp("Shift")], runtime.CancelAll());
+    }
+
+    [Fact]
+    public void Unknown_tap_hold_option_is_rejected()
+    {
+        var invocation = new BehaviorInvocationProfile(
+            "LT",
+            ["NUM", "Z"],
+            new Dictionary<string, string> { ["mystery"] = "true" });
+
+        var error = Assert.Throws<InvalidDataException>(() => invocation.BuildDefinition());
+        Assert.Contains("mystery", error.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
