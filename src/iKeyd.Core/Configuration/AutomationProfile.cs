@@ -11,7 +11,8 @@ public sealed record AutomationProfile
         int chordWindowMs,
         IEnumerable<AutomationKeymapProfile> keymaps,
         string startupMode = "S",
-        IEnumerable<HotkeyBinding>? hotkeys = null)
+        IEnumerable<HotkeyBinding>? hotkeys = null,
+        KeyBehaviorProfile? keyBehaviors = null)
     {
         if (chordWindowMs < 0)
             throw new ArgumentOutOfRangeException(nameof(chordWindowMs));
@@ -22,6 +23,7 @@ public sealed record AutomationProfile
         ChordWindowMs = chordWindowMs;
         StartupMode = startupMode;
         Hotkeys = (hotkeys ?? []).ToArray();
+        KeyBehaviors = keyBehaviors ?? KeyBehaviorProfile.Empty;
 
         var byName = new Dictionary<string, AutomationKeymapProfile>(StringComparer.OrdinalIgnoreCase);
         foreach (var keymap in keymaps)
@@ -37,6 +39,7 @@ public sealed record AutomationProfile
     public int ChordWindowMs { get; }
     public string StartupMode { get; }
     public IReadOnlyList<HotkeyBinding> Hotkeys { get; }
+    public KeyBehaviorProfile KeyBehaviors { get; }
     public IReadOnlyDictionary<string, AutomationKeymapProfile> Keymaps => _keymaps;
 
     public AutomationKeymapProfile GetKeymap(string name)
