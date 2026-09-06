@@ -15,6 +15,8 @@ public sealed class LegacySendEventScenarioRunner : ICompatibilityScenarioRunner
 {
     private const nuint ForeignMarker = (nuint)0x35792468U;
     private const byte VkAlt = 0x12;
+    private const byte VkCapsLock = 0x14;
+    private const byte CapsLockScanCode = 0x3A;
     private const byte VkKana = 0x15;
     private const byte KanaScanCode = 0x70;
     private const byte VkNonConvert = 0x1D;
@@ -57,6 +59,7 @@ public sealed class LegacySendEventScenarioRunner : ICompatibilityScenarioRunner
         var executable = ResolveExecutable();
         var sha256 = ComputeSha256(executable);
         VerifySha256(sha256);
+        var initialCapsLock = IsCapsLockOn();
 
         using var process = StartLegacyExecutable(executable);
         try
@@ -79,13 +82,15 @@ public sealed class LegacySendEventScenarioRunner : ICompatibilityScenarioRunner
             capture.Start();
 
             var heldLayers = ApplyInitialLayers(scenario.InitialState.Layers);
-            // InitialState is pre-existing state, not scenario output. AHK's Alt
-            // hotkey implementation may inject a menu-mask Ctrl pulse while A is
-            // materialized; discard every setup-side event before observed input.
+            // InitialState is pre-existing state, not scenario output. AHK hotkeys
+            // can inject menu-mask/toggle normalization events asynchronously while
+            // that state is materialized. Let those settle, then drop all setup-side
+            // events so only scenario input and release-side effects remain observed.
+            await Task.Delay(100, cancellationToken);
             capture.Clear();
+            await Task.Delay(20, cancellationToken);
             try
             {
-                await Task.Delay(30, cancellationToken);
                 var stopwatch = Stopwatch.StartNew();
                 foreach (var input in scenario.Input)
                 {
@@ -129,6 +134,7 @@ public sealed class LegacySendEventScenarioRunner : ICompatibilityScenarioRunner
         finally
         {
             StopProcess(process);
+            RestoreCapsLockState(initialCapsLock);
         }
     }
 
@@ -243,6 +249,19 @@ public sealed class LegacySendEventScenarioRunner : ICompatibilityScenarioRunner
             scanCode,
             keyUp ? KeyEventKeyUp : 0u,
             ForeignMarker);
+
+    private static bool IsCapsLockOn()
+        => (NativeMethods.GetKeyState(VkCapsLock) & 1) != 0;
+
+    private static void RestoreCapsLockState(bool expectedOn)
+    {
+        if (IsCapsLockOn() == expectedOn)
+            return;
+
+        SendKey(VkCapsLock, CapsLockScanCode, keyUp: false);
+        SendKey(VkCapsLock, CapsLockScanCode, keyUp: true);
+        Thread.Sleep(50);
+    }
 
     private static async Task DelayUntilAsync(Stopwatch stopwatch, long targetMs, CancellationToken cancellationToken)
     {
@@ -494,6 +513,9 @@ public sealed class LegacySendEventScenarioRunner : ICompatibilityScenarioRunner
     {
         [DllImport("user32.dll")]
         public static extern void keybd_event(byte virtualKey, byte scanCode, uint flags, nuint extraInfo);
+
+        [DllImport("user32.dll")]
+        public static extern short GetKeyState(int virtualKey);
 
         [DllImport("kernel32.dll")]
         public static extern uint GetCurrentThreadId();
