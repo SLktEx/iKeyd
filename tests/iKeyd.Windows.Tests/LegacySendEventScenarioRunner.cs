@@ -14,6 +14,9 @@ namespace iKeyd.Windows.Tests;
 public sealed class LegacySendEventScenarioRunner : ICompatibilityScenarioRunner
 {
     private const nuint ForeignMarker = (nuint)0x35792468U;
+    private const byte VkAlt = 0x12;
+    private const byte VkKana = 0x15;
+    private const byte KanaScanCode = 0x70;
     private const byte VkNonConvert = 0x1D;
     private const byte NonConvertScanCode = 0x7B;
     private const byte VkConvert = 0x1C;
@@ -46,8 +49,10 @@ public sealed class LegacySendEventScenarioRunner : ICompatibilityScenarioRunner
             throw new NotSupportedException("The first Send-event oracle runner uses the S keymap through hosted T mode.");
         if (scenario.InitialState.Modifiers.Count != 0)
             throw new NotSupportedException("Initial OS modifiers are not supported by the Send-event oracle runner.");
-        if (scenario.InitialState.Layers.Any(layer => layer is not ("M" or "H" or "S")))
-            throw new NotSupportedException("Hosted Send-event scenarios currently support only M/H/S initial layers.");
+        if (scenario.InitialState.Layers.Any(layer => !IsSupportedInitialLayer(layer)))
+            throw new NotSupportedException("Hosted Send-event scenarios support only M/H/S/K/A initial layers.");
+        if (scenario.InitialState.Layers.Any(IsStickyLayer) && !scenario.InitialState.Layers.Any(IsHeldLayer))
+            throw new NotSupportedException("Hosted K/A Send-event scenarios require M/H/S so legacy release cleanup clears the sticky state.");
 
         var executable = ResolveExecutable();
         var sha256 = ComputeSha256(executable);
@@ -123,24 +128,71 @@ public sealed class LegacySendEventScenarioRunner : ICompatibilityScenarioRunner
         }
     }
 
+    internal static bool IsSupportedInitialLayer(string layer)
+        => layer.Trim().ToUpperInvariant() is "M" or "H" or "S" or "K" or "A";
+
+    internal static bool IsStickyLayer(string layer)
+        => layer.Trim().ToUpperInvariant() is "K" or "A";
+
+    internal static bool IsHeldLayer(string layer)
+        => layer.Trim().ToUpperInvariant() is "M" or "H" or "S";
+
     private static List<(byte VirtualKey, byte ScanCode)> ApplyInitialLayers(IReadOnlyList<string> layers)
     {
         var held = new List<(byte VirtualKey, byte ScanCode)>();
         foreach (var raw in layers)
         {
             var layer = raw.Trim().ToUpperInvariant();
-            var key = layer switch
+            switch (layer)
             {
-                "M" => (VkNonConvert, NonConvertScanCode),
-                "H" => (VkConvert, ConvertScanCode),
-                "S" => (VkSpace, (byte)0),
-                _ => throw new NotSupportedException($"Unsupported hosted layer '{raw}'.")
-            };
-            SendKey(key.Item1, key.Item2, keyUp: false);
-            held.Add(key);
+                case "K":
+                    TapKanaLayer(withAlt: false);
+                    break;
+                case "A":
+                    TapKanaLayer(withAlt: true);
+                    break;
+                case "M":
+                    HoldLayer(VkNonConvert, NonConvertScanCode, held);
+                    break;
+                case "H":
+                    HoldLayer(VkConvert, ConvertScanCode, held);
+                    break;
+                case "S":
+                    HoldLayer(VkSpace, 0, held);
+                    break;
+                default:
+                    throw new NotSupportedException($"Unsupported hosted layer '{raw}'.");
+            }
             Thread.Sleep(20);
         }
         return held;
+    }
+
+    private static void TapKanaLayer(bool withAlt)
+    {
+        if (withAlt)
+        {
+            SendKey(VkAlt, 0, keyUp: false);
+            Thread.Sleep(10);
+        }
+
+        SendKey(VkKana, KanaScanCode, keyUp: false);
+        SendKey(VkKana, KanaScanCode, keyUp: true);
+
+        if (withAlt)
+        {
+            Thread.Sleep(10);
+            SendKey(VkAlt, 0, keyUp: true);
+        }
+    }
+
+    private static void HoldLayer(
+        byte virtualKey,
+        byte scanCode,
+        ICollection<(byte VirtualKey, byte ScanCode)> held)
+    {
+        SendKey(virtualKey, scanCode, keyUp: false);
+        held.Add((virtualKey, scanCode));
     }
 
     private static void ReleaseLayers(IReadOnlyList<(byte VirtualKey, byte ScanCode)> layers)
