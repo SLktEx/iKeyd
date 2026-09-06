@@ -72,6 +72,7 @@ public sealed class ConditionalBehaviorTests
         Assert.Equal(SystemQueryKeys.ForegroundProcess, outer.Condition.Query);
         Assert.Equal(SystemQueryConditionOperator.Equals, outer.Condition.Operator);
         Assert.Equal(KeyBehaviorActionKind.Exec, outer.Then.Kind);
+        Assert.Equal("tool.exe", outer.Then.Value);
         Assert.Equal(["hello world", "&literal"], outer.Then.GetArguments());
         Assert.Equal(KeyBehaviorActionKind.When, outer.Else!.Value.Kind);
 
@@ -79,7 +80,9 @@ public sealed class ConditionalBehaviorTests
         Assert.True(reparsed.KeyBehaviors.TryGetLayerAction("APP", "H", out var roundTrip));
         var roundTripOuter = roundTrip.GetConditional();
         Assert.Equal(outer.Condition, roundTripOuter.Condition);
-        Assert.Equal(outer.Then, roundTripOuter.Then);
+        Assert.Equal(KeyBehaviorActionKind.Exec, roundTripOuter.Then.Kind);
+        Assert.Equal(outer.Then.Value, roundTripOuter.Then.Value);
+        Assert.Equal(outer.Then.GetArguments(), roundTripOuter.Then.GetArguments());
         Assert.Equal(KeyBehaviorActionKind.When, roundTripOuter.Else!.Value.Kind);
     }
 }
