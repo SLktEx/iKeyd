@@ -35,6 +35,38 @@ public sealed class CompiledProfileTests
         AssertLookupEquivalent(runtime.KKeymap, generated.KKeymap);
     }
 
+    [Fact]
+    public void Generated_profile_preserves_the_complete_number_row_in_both_keymaps()
+    {
+        var generated = GeneratedProfile.Create();
+
+        for (var digit = 0; digit <= 9; digit++)
+        {
+            var key = new KeyId((KeyCode)((int)KeyCode.Digit0 + digit));
+            var expected = digit.ToString();
+
+            Assert.True(generated.SKeymap.TryGetSingle(key, out var sOutput));
+            Assert.Equal(expected, sOutput);
+            Assert.True(generated.KKeymap.TryGetSingle(key, out var kOutput));
+            Assert.Equal(expected, kOutput);
+        }
+    }
+
+    [Fact]
+    public void Generated_profile_preserves_s_function_row_and_k_keeps_it_transparent()
+    {
+        var generated = GeneratedProfile.Create();
+
+        for (var functionNumber = 1; functionNumber <= 12; functionNumber++)
+        {
+            var key = new KeyId((KeyCode)((int)KeyCode.F1 + functionNumber - 1));
+
+            Assert.True(generated.SKeymap.TryGetSingle(key, out var sOutput));
+            Assert.Equal($"{{F{functionNumber}}}", sOutput);
+            Assert.False(generated.KKeymap.TryGetSingle(key, out _));
+        }
+    }
+
     private static void AssertLookupEquivalent(Keymap<string> expected, Keymap<string> actual)
     {
         for (var firstCode = (int)KeyCode.A; firstCode <= (int)KeyCode.At; firstCode++)
