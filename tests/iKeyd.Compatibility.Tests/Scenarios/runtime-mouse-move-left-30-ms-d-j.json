@@ -1,6 +1,6 @@
 {
   "id": "runtime-mouse-move-left-30-ms-d-j",
-  "description": "Holding D in Space-then-M mouse mode changes J movement to 30 pixels left.",
+  "description": "Legacy oracle: holding D in Space-then-M mouse mode changed J movement to a 30 pixel step. Superseded by the continuous precision speed band in #134.",
   "initialState": { "mode": "S", "ime": "off", "layers": ["S", "M"] },
   "input": [
     { "atMs": 10, "kind": "keyDown", "key": "D" },
@@ -11,5 +11,5 @@
   "expected": {
     "actions": [ { "kind": "mouse", "value": "move-by:-30,0" } ]
   },
-  "tags": ["legacy", "runtime-long-tail", "mouse", "input-state", "deterministic"]
+  "tags": ["legacy", "runtime-long-tail", "mouse", "input-state", "deterministic", "superseded-pointer-motion"]
 }
