@@ -21,7 +21,7 @@ internal sealed class IKeydApplicationContext : ApplicationContext
     private readonly LegacyContextualHotkeyHandler _contextualHotkeys;
     private readonly LegacySuspendToggleHandler _suspendHandler;
     private readonly WindowsCommandActionQueue _commandActions;
-    private readonly WindowsSystemQueryProvider _systemQueries;
+    private readonly WindowsSystemQueryCache _systemQueryCache;
     private readonly WindowsClipboardService _clipboardService;
     private readonly WindowsClipboardHistoryPersistence? _clipboardPersistence;
     private readonly WindowsClipboardController _clipboard;
@@ -68,7 +68,10 @@ internal sealed class IKeydApplicationContext : ApplicationContext
 
         var inputMethod = new WindowsInputMethod();
         _commandActions = new WindowsCommandActionQueue();
-        _systemQueries = new WindowsSystemQueryProvider(inputMethod);
+        var systemQueryProvider = new WindowsSystemQueryProvider(inputMethod);
+        _systemQueryCache = new WindowsSystemQueryCache(
+            systemQueryProvider,
+            configuration.Profile.SystemQueries);
         _commandActions.Completed += OnCommandCompleted;
 
         var clipboardHotkeys = new DeferredClipboardHistoryActions(
@@ -89,7 +92,8 @@ internal sealed class IKeydApplicationContext : ApplicationContext
             send,
             _keyboard,
             _runtime,
-            PostBehaviorHostAction);
+            PostBehaviorHostAction,
+            _systemQueryCache);
         _contextualHotkeys = new LegacyContextualHotkeyHandler(
             _keyboard.State,
             desktop,
@@ -164,6 +168,7 @@ internal sealed class IKeydApplicationContext : ApplicationContext
         finally
         {
             _commandActions.Completed -= OnCommandCompleted;
+            _systemQueryCache.Dispose();
             _commandActions.Dispose();
             _inputDiagnosticsAutoLog.Dispose();
             _legacyMacroSlots.Dispose();
@@ -220,16 +225,8 @@ internal sealed class IKeydApplicationContext : ApplicationContext
         if (_stopping)
             return;
 
-        try
-        {
-            var value = _systemQueries.GetValue(query);
-            if (!_stopping)
-                _keyboard.SendText(value);
-        }
-        catch (Exception exception)
-        {
-            Trace.WriteLine($"iKeyd system query '{query}' failed: {exception.Message}");
-        }
+        if (_systemQueryCache.TryGetValue(query, out var value) && !_stopping)
+            _keyboard.SendText(value);
     }
 
     private static void OnCommandCompleted(CommandResult result)
