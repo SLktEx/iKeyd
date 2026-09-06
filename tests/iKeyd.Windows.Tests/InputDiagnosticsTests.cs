@@ -71,8 +71,25 @@ public sealed class InputDiagnosticsTests
             entry.VirtualKey == WindowsKeyMap.NonConvert &&
             entry.EventKind == KeyEventKind.Up));
         Assert.Equal(0, release.After.HeldLayerCount);
+        Assert.Equal(0, release.After.HeldPhysicalCount);
+        Assert.Equal(KeyboardModifierMask.None, release.After.PhysicalModifiers);
         Assert.Equal(0, release.After.LayerCount);
         Assert.Equal(LayerModifiers.None, release.After.LayerModifiers);
+    }
+
+    [Fact]
+    public void Physical_modifier_summary_is_recorded_without_snapshot_allocation()
+    {
+        using var fixture = CreateRuntime(InputMode.R);
+        const ushort leftControl = 0xA2;
+
+        Dispatch(fixture, leftControl, KeyEventKind.Down, 0);
+        Dispatch(fixture, 'Q', KeyEventKind.Down, 10);
+
+        var q = fixture.Runtime.GetInputDiagnosticSnapshot().Last(entry =>
+            entry.DiagnosticKind == InputDiagnosticKind.Event && entry.VirtualKey == 'Q');
+        Assert.Equal(2, q.After.HeldPhysicalCount);
+        Assert.Equal(KeyboardModifierMask.Control, q.After.PhysicalModifiers);
     }
 
     [Fact]
@@ -121,12 +138,13 @@ public sealed class InputDiagnosticsTests
         var snapshot = fixture.Runtime.GetInputDiagnosticSnapshot();
         Assert.DoesNotContain(snapshot, entry => entry.DiagnosticKind == InputDiagnosticKind.InvariantViolation);
         var last = snapshot.Last(entry => entry.DiagnosticKind == InputDiagnosticKind.Event);
+        Assert.Equal(1, last.After.HeldPhysicalCount);
         Assert.Equal(0, last.After.HeldLayerCount);
         Assert.Equal(0, last.After.LayerCount);
     }
 
     [Fact]
-    public void Panic_reset_is_recorded_and_leaves_all_tracked_transient_state_empty()
+    public void Panic_reset_is_recorded_and_leaves_logical_state_empty_without_falsifying_physical_state()
     {
         using var fixture = CreateRuntime(InputMode.R);
         Dispatch(fixture, WindowsKeyMap.NonConvert, KeyEventKind.Down, 0);
@@ -136,6 +154,7 @@ public sealed class InputDiagnosticsTests
         Assert.Equal(0, reset.After.HeldLayerCount);
         Assert.Equal(0, reset.After.SuppressedKeyCount);
         Assert.Equal(0, reset.After.LayerCount);
+        Assert.Equal(1, reset.After.HeldPhysicalCount);
         Assert.Null(reset.After.TimerMode);
         Assert.Equal(ChordEngineState.Idle, reset.After.SChordState);
         Assert.Equal(ChordEngineState.Idle, reset.After.KChordState);
@@ -147,6 +166,8 @@ public sealed class InputDiagnosticsTests
             0,
             false,
             0,
+            0,
+            KeyboardModifierMask.None,
             0,
             ChordEngineState.Idle,
             ChordEngineState.Idle,
