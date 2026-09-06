@@ -1,0 +1,17 @@
+profile jis109Preset {
+    chord_window = 40ms
+}
+
+keyboard JIS109
+
+keymap S {
+    JIS109.Ro = ro
+    JIS109.Yen = yen
+    combo JIS109.Muhenkan + JIS109.Ro = escape
+}
+
+keymap K {
+    JIS109.Henkan = henkan
+    JIS109.KatakanaHiragana = kana
+    combo JIS109.Henkan + JIS109.Yen = other
+}
