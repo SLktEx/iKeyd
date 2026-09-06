@@ -92,11 +92,11 @@ public sealed class RealInputRegressionTests
     }
 
     [Fact]
-    public void Complete_number_row_is_consumed_and_preserved_in_S_and_K_modes()
+    public void Complete_number_row_is_consumed_and_preserved_when_S_and_K_routes_are_active()
     {
         foreach (var mode in new[] { InputMode.S, InputMode.K })
         {
-            using var fixture = CreateRuntime(mode);
+            using var fixture = CreateRuntime(mode, kanaInputActive: true);
             for (var digit = 0; digit <= 9; digit++)
             {
                 var virtualKey = (ushort)('0' + digit);
@@ -113,9 +113,9 @@ public sealed class RealInputRegressionTests
     }
 
     [Fact]
-    public void S_function_row_is_emitted_and_K_function_row_is_transparent()
+    public void S_function_row_is_emitted_and_K_function_row_is_transparent_on_active_IME_routes()
     {
-        using (var sFixture = CreateRuntime(InputMode.S))
+        using (var sFixture = CreateRuntime(InputMode.S, kanaInputActive: true))
         {
             for (var functionNumber = 1; functionNumber <= 12; functionNumber++)
             {
@@ -138,7 +138,7 @@ public sealed class RealInputRegressionTests
             }
         }
 
-        using (var kFixture = CreateRuntime(InputMode.K))
+        using (var kFixture = CreateRuntime(InputMode.K, kanaInputActive: true))
         {
             for (var functionNumber = 1; functionNumber <= 12; functionNumber++)
             {
@@ -154,6 +154,25 @@ public sealed class RealInputRegressionTests
             Assert.Empty(kFixture.Output.Events);
             Assert.Empty(kFixture.Output.Text);
         }
+    }
+
+    [Theory]
+    [InlineData(InputMode.S)]
+    [InlineData(InputMode.K)]
+    public void Number_and_function_rows_stay_transparent_when_IME_route_is_inactive(InputMode mode)
+    {
+        using var fixture = CreateRuntime(mode, kanaInputActive: false);
+        var keys = new ushort[] { '0', '9', WindowsKeyMap.F1, WindowsKeyMap.F12 };
+
+        for (var index = 0; index < keys.Length; index++)
+        {
+            var virtualKey = keys[index];
+            Assert.Equal(KeyboardDisposition.PassThrough, Dispatch(fixture, virtualKey, KeyEventKind.Down, index * 10L));
+            Assert.Equal(KeyboardDisposition.PassThrough, Dispatch(fixture, virtualKey, KeyEventKind.Up, index * 10L + 1));
+        }
+
+        Assert.Empty(fixture.Output.Events);
+        Assert.Empty(fixture.Output.Text);
     }
 
     [Fact]
@@ -192,7 +211,7 @@ public sealed class RealInputRegressionTests
         Assert.Equal(expected, KeyboardMouseMotion.SpeedForModifiers(precision, fine, fast));
     }
 
-    private static RuntimeFixture CreateRuntime(InputMode startupMode)
+    private static RuntimeFixture CreateRuntime(InputMode startupMode, bool kanaInputActive = false)
     {
         var configuration = IKeydConfiguration.Load(ProfilePath) with { StartupMode = startupMode };
         var keyboardState = new KeyboardState();
@@ -200,7 +219,7 @@ public sealed class RealInputRegressionTests
         var desktop = new RecordingDesktopBackend();
         var runtime = new IKeydRuntimeHandler(
             configuration,
-            new InactiveInputMethod(),
+            new FixedInputMethod(kanaInputActive),
             keyboardState,
             new LegacySendOutput(output),
             desktop);
@@ -234,9 +253,9 @@ public sealed class RealInputRegressionTests
         public void Dispose() => Runtime.Dispose();
     }
 
-    private sealed class InactiveInputMethod : IInputMethod
+    private sealed class FixedInputMethod(bool kanaInputActive) : IInputMethod
     {
-        public bool IsKanaInputActive() => false;
+        public bool IsKanaInputActive() => kanaInputActive;
     }
 
     private sealed class RecordingKeyboardOutput : IKeyboardOutput
