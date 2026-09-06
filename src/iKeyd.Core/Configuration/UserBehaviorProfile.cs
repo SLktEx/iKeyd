@@ -68,18 +68,45 @@ public sealed record UserBehaviorDefinitionProfile
     }
 }
 
+public enum UserBehaviorLocalType
+{
+    Bool,
+    Int
+}
+
 public sealed record UserBehaviorLocalProfile
 {
     public UserBehaviorLocalProfile(string name, bool initialValue = false)
     {
-        if (string.IsNullOrWhiteSpace(name))
-            throw new ArgumentException("Local name must not be empty.", nameof(name));
-        Name = name.Trim();
-        InitialValue = initialValue;
+        Name = NormalizeName(name);
+        Type = UserBehaviorLocalType.Bool;
+        InitialBoolValue = initialValue;
+    }
+
+    public UserBehaviorLocalProfile(string name, int initialValue)
+    {
+        Name = NormalizeName(name);
+        Type = UserBehaviorLocalType.Int;
+        InitialIntValue = initialValue;
     }
 
     public string Name { get; }
-    public bool InitialValue { get; }
+    public UserBehaviorLocalType Type { get; }
+
+    /// <summary>
+    /// Backward-compatible bool initializer used by existing profile/compiler code.
+    /// Integer locals expose their value through <see cref="InitialIntValue"/>.
+    /// </summary>
+    public bool InitialValue => InitialBoolValue;
+    public bool InitialBoolValue { get; }
+    public int InitialIntValue { get; }
+
+    private static string NormalizeName(string name)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+            throw new ArgumentException("Local name must not be empty.", nameof(name));
+        return name.Trim();
+    }
 }
 
 public sealed record UserBehaviorHandlerProfile
@@ -109,8 +136,8 @@ public sealed record UserBehaviorHandlerProfile
 }
 
 /// <summary>
-/// Deliberately small, bounded statement IR for the first custom-behavior slice.
-/// Supported operations are validated by the scripted behavior compiler.
+/// Deliberately small, bounded statement IR for custom behaviors. Operations are
+/// compile-time validated; this is not a general-purpose scripting language.
 /// </summary>
 public sealed record UserBehaviorStatementProfile
 {
