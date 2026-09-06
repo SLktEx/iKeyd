@@ -18,6 +18,7 @@ internal sealed class IKeydRuntimeHandler : IKeyboardEventHandler, IMacroActionD
     private readonly LegacySendOutput _send;
     private readonly IDesktopBackend _desktop;
     private readonly DesktopActionService _desktopActions;
+    private readonly WindowGroupController _windowGroup;
     private readonly ChordEngine<string> _sEngine;
     private readonly ChordEngine<string> _kEngine;
     private readonly HashSet<ushort> _suppressedKeys = new(64);
@@ -42,6 +43,7 @@ internal sealed class IKeydRuntimeHandler : IKeyboardEventHandler, IMacroActionD
         _send = send ?? throw new ArgumentNullException(nameof(send));
         _desktop = desktop ?? throw new ArgumentNullException(nameof(desktop));
         _desktopActions = new DesktopActionService(desktop);
+        _windowGroup = new WindowGroupController(desktop);
         _sEngine = new ChordEngine<string>(configuration.SKeymap, configuration.ChordWindowMs);
         _kEngine = new ChordEngine<string>(configuration.KKeymap, configuration.ChordWindowMs);
         _mode = InputModeState.Initial.SwitchTo(configuration.StartupMode);
@@ -296,13 +298,17 @@ internal sealed class IKeydRuntimeHandler : IKeyboardEventHandler, IMacroActionD
                 break;
 
             case KeyCode.G:
+                if (state.IsExact(LayerKey.M)) { _windowGroup.ActivateNext(); return true; }
                 if (state.IsExact(LayerKey.M, LayerKey.H)) { _send.SendChord(WindowsKeyMap.Control, WindowsKeyMap.Tab); return true; }
                 if (state.IsExact(LayerKey.H, LayerKey.M)) { _send.SendChord(WindowsKeyMap.Control, WindowsKeyMap.Shift, WindowsKeyMap.Tab); return true; }
+                if (state.IsExact(LayerKey.M, LayerKey.S)) { _windowGroup.ToggleActiveWindow(); return true; }
                 break;
 
             case KeyCode.B:
+                if (state.IsExact(LayerKey.M)) { _desktopActions.ActivateBottomWindowOfActiveClass(); return true; }
                 if (state.IsExact(LayerKey.M, LayerKey.H)) { _send.SendChord(WindowsKeyMap.Alt, WindowsKeyMap.Escape); return true; }
                 if (state.IsExact(LayerKey.H, LayerKey.M)) { _send.SendChord(WindowsKeyMap.Alt, WindowsKeyMap.Shift, WindowsKeyMap.Escape); return true; }
+                if (state.IsExact(LayerKey.M, LayerKey.S)) { _windowGroup.ResetAndAdvance(); return true; }
                 break;
         }
 
@@ -375,14 +381,18 @@ internal sealed class IKeydRuntimeHandler : IKeyboardEventHandler, IMacroActionD
 
         if (name == "G")
         {
+            if (state == "M") { _windowGroup.ActivateNext(); return true; }
             if (state == "MH") { _send.SendChord(WindowsKeyMap.Control, WindowsKeyMap.Tab); return true; }
             if (state == "HM") { _send.SendChord(WindowsKeyMap.Control, WindowsKeyMap.Shift, WindowsKeyMap.Tab); return true; }
+            if (state == "MS") { _windowGroup.ToggleActiveWindow(); return true; }
         }
 
         if (name == "B")
         {
+            if (state == "M") { _desktopActions.ActivateBottomWindowOfActiveClass(); return true; }
             if (state == "MH") { _send.SendChord(WindowsKeyMap.Alt, WindowsKeyMap.Escape); return true; }
             if (state == "HM") { _send.SendChord(WindowsKeyMap.Alt, WindowsKeyMap.Shift, WindowsKeyMap.Escape); return true; }
+            if (state == "MS") { _windowGroup.ResetAndAdvance(); return true; }
         }
 
         return false;
@@ -390,7 +400,6 @@ internal sealed class IKeydRuntimeHandler : IKeyboardEventHandler, IMacroActionD
 
     private bool DispatchMouseMedia(KeyId key)
     {
-        var amount = GetMouseMoveAmount();
         switch (key.Code)
         {
             case KeyCode.D:
@@ -398,16 +407,16 @@ internal sealed class IKeydRuntimeHandler : IKeyboardEventHandler, IMacroActionD
             case KeyCode.C:
                 return true;
             case KeyCode.J:
-                _desktop.MovePointerBy(-amount, 0);
+                MoveMouse(-1, 0);
                 return true;
             case KeyCode.K:
-                _desktop.MovePointerBy(0, amount);
+                MoveMouse(0, 1);
                 return true;
             case KeyCode.L:
-                _desktop.MovePointerBy(amount, 0);
+                MoveMouse(1, 0);
                 return true;
             case KeyCode.I:
-                _desktop.MovePointerBy(0, -amount);
+                MoveMouse(0, -1);
                 return true;
             case KeyCode.U:
                 _desktop.Click(DesktopMouseButton.Left);
@@ -417,6 +426,21 @@ internal sealed class IKeydRuntimeHandler : IKeyboardEventHandler, IMacroActionD
                 return true;
             case KeyCode.Comma:
                 _desktop.Click(DesktopMouseButton.Middle);
+                return true;
+            case KeyCode.Y:
+                _desktopActions.ToggleMouseButton(DesktopMouseButton.Left);
+                return true;
+            case KeyCode.H:
+                // Preserve the pinned legacy typo: right-button down is unreachable,
+                // but an already-held right button is released.
+                if (_desktop.IsMouseButtonDown(DesktopMouseButton.Right))
+                    _desktop.SetMouseButton(DesktopMouseButton.Right, false);
+                return true;
+            case KeyCode.N:
+                MovePointerToLegacyWindowCorner(bottomRight: false);
+                return true;
+            case KeyCode.M:
+                MovePointerToLegacyWindowCorner(bottomRight: true);
                 return true;
             case KeyCode.P:
                 _desktop.ScrollVertical(120);
@@ -453,15 +477,43 @@ internal sealed class IKeydRuntimeHandler : IKeyboardEventHandler, IMacroActionD
         }
     }
 
-    private int GetMouseMoveAmount()
+    private void MoveMouse(int xDirection, int yDirection)
     {
         if (_keyboardState.IsVirtualKeyPressed((ushort)'D'))
-            return 30;
+        {
+            _desktop.MovePointerBy(xDirection * 30, yDirection * 30);
+            return;
+        }
         if (_keyboardState.IsVirtualKeyPressed((ushort)'E'))
-            return 10;
+        {
+            _desktop.MovePointerBy(xDirection * 10, yDirection * 10);
+            return;
+        }
         if (_keyboardState.IsVirtualKeyPressed((ushort)'C'))
-            return Math.Max(1, _desktop.GetPrimaryWorkArea().Width / 4);
-        return 100;
+        {
+            var area = _desktop.GetPrimaryWorkArea();
+            _desktop.MovePointerBy(
+                xDirection * Math.Max(1, area.Width / 4),
+                yDirection * Math.Max(1, area.Height / 4));
+            return;
+        }
+        _desktop.MovePointerBy(xDirection * 100, yDirection * 100);
+    }
+
+    private void MovePointerToLegacyWindowCorner(bool bottomRight)
+    {
+        var window = _desktop.GetActiveWindow();
+        if (!_desktop.IsWindow(window))
+            return;
+
+        var bounds = _desktop.GetWindowBounds(window);
+        if (bounds.X < 0)
+            return;
+
+        var point = bottomRight
+            ? new DesktopPoint(bounds.Right - 1, bounds.Bottom - 1)
+            : new DesktopPoint(bounds.X + 1, bounds.Y + 1);
+        _desktop.MovePointer(point);
     }
 
     private void SendLayerAction(LayerAction action)
