@@ -12,6 +12,18 @@ public interface IClipboardPicker
     int? Pick(IReadOnlyList<string> items);
 }
 
+/// <summary>
+/// Legacy hotkeySKG clipboard-history actions used by processV.
+/// Kept platform-neutral so the runtime can route M/MH/HM without depending on
+/// the Windows picker/controller implementation.
+/// </summary>
+public interface IClipboardHistoryActions
+{
+    bool ShowPickerAndPaste();
+    bool CaptureLatest();
+    bool PasteCaptured();
+}
+
 public sealed class ClipboardHistory
 {
     private readonly object _gate = new();
