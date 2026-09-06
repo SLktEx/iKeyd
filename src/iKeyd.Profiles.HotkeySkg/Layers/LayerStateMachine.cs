@@ -292,7 +292,12 @@ public static class LayerStateMachine
         if (state.Layers.IsExact(LayerKey.H))
             return Result(state.MarkConsumed(), LayerAction.Henkan);
         if (state.Layers.IsExact(LayerKey.S))
-            return Result(state.MarkConsumed(), LayerAction.CtrlEsc);
+        {
+            // The pinned compiled hotkeySKG.exe emits Ctrl+Esc without consuming
+            // the pending Space tap. The original AHK source sets the consumed
+            // flag instead; the differential scenario records that divergence.
+            return Result(state, LayerAction.CtrlEsc);
+        }
         if (!state.Layers.Contains(LayerKey.K))
             return Result(state with { Layers = state.Layers.Press(LayerKey.K) });
         if (state.Layers.IsExact(LayerKey.K))
