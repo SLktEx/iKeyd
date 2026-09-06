@@ -1,0 +1,32 @@
+name: Dispatch issue 57 legacy oracle
+
+on:
+  push:
+    branches: [issue-46-hotkeyskg-full-compat]
+    paths:
+      - .github/workflows/issue57-dispatch-legacy.yml
+
+permissions:
+  actions: write
+  contents: write
+
+jobs:
+  dispatch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: issue-46-hotkeyskg-full-compat
+      - name: Dispatch existing legacy differential workflow
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run legacy-differential.yml --ref issue-46-hotkeyskg-full-compat
+      - name: Remove temporary dispatcher
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/issue57-dispatch-legacy.yml
+          git commit -m "chore: remove temporary issue 57 oracle dispatcher"
+          git push origin HEAD:issue-46-hotkeyskg-full-compat
