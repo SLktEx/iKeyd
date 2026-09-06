@@ -13,7 +13,7 @@ public abstract record BehaviorOutputBranch
     internal abstract void Emit(ISystemQuerySnapshot snapshot, List<BehaviorAction> actions);
     internal abstract void CollectSystemQueries(ISet<string> queries);
 
-    public static BehaviorOutputBranch Action(BehaviorAction action)
+    public static BehaviorOutputBranch Primitive(BehaviorAction action)
         => new PrimitiveBehaviorOutputBranch(action);
 
     public static BehaviorOutputBranch When(
