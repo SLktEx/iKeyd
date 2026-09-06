@@ -71,7 +71,7 @@ public sealed class HostAutomationBehaviorTests
         Assert.Equal(3, mappings.Count);
 
         var exec = mappings.Single(mapping => mapping.Key.Value == "A").Invocation;
-        Assert.Equal("EXEC", exec.Name, ignoreCase: true);
+        Assert.True(string.Equals("EXEC", exec.Name, StringComparison.OrdinalIgnoreCase));
         Assert.Equal("tool.exe", exec.Options["executable"]);
         Assert.Equal("--name", exec.Options["arg0"]);
         Assert.Equal("hello world", exec.Options["arg1"]);
