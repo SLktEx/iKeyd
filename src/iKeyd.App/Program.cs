@@ -76,6 +76,9 @@ internal static class Program
         var configuration = explicitConfigPath is null
             ? GeneratedProfile.Create()
             : IKeydConfiguration.Load(explicitConfigPath);
+        var mouseProfile = explicitConfigPath is null
+            ? GeneratedMouseProfile.Create()
+            : configuration.Mouse;
 
         var modeOverride = GetOption(args, "--mode");
         if (!string.IsNullOrWhiteSpace(modeOverride))
@@ -85,7 +88,7 @@ internal static class Program
             configuration = configuration with { StartupMode = mode };
         }
 
-        KeyboardMouseMotion.ConfigureDefaultProfile(configuration.Mouse);
+        KeyboardMouseMotion.ConfigureDefaultProfile(mouseProfile);
         using var context = new IKeydApplicationContext(configuration);
         Application.Run(context);
     }
