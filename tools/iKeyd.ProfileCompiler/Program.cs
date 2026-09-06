@@ -61,6 +61,8 @@ internal static class ProfileCompiler
         if (startupModeCode is not ("S" or "R" or "T" or "K"))
             throw new InvalidDataException($"Unsupported startupMode '{startupMode}' for the Windows app.");
 
+        var clipboard = ParseClipboard(root);
+
         if (!root.TryGetProperty("singleStroke", out var singleRoot) || singleRoot.ValueKind != JsonValueKind.Object)
             throw new InvalidDataException("singleStroke must be an object.");
         if (!root.TryGetProperty("chords", out var chordRoot) || chordRoot.ValueKind != JsonValueKind.Object)
@@ -164,7 +166,15 @@ internal static class ProfileCompiler
         builder.AppendLine("            {");
         if (hasUserBehaviors)
             EmitUserBehaviorDefinitions(builder, userBehaviorRoot, "                ");
-        builder.AppendLine("            });");
+        builder.AppendLine("            },");
+        builder.AppendLine("            clipboard: new ClipboardHistoryProfile(");
+        builder.AppendLine($"                history: {BoolLiteral(clipboard.History)},");
+        builder.AppendLine($"                maxItems: {clipboard.MaxItems},");
+        builder.AppendLine($"                persist: {BoolLiteral(clipboard.Persist)},");
+        builder.AppendLine($"                images: {BoolLiteral(clipboard.Images)},");
+        builder.AppendLine($"                encryption: {Literal(clipboard.Encryption)},");
+        builder.AppendLine($"                cipher: {Literal(clipboard.Cipher)},");
+        builder.AppendLine($"                directory: {(clipboard.Directory is null ? "null" : Literal(clipboard.Directory))}));");
         builder.AppendLine();
         builder.AppendLine($"        return new IKeydConfiguration(profile, InputMode.{startupModeCode}, SKeymap, KKeymap);");
         builder.AppendLine("    }");
@@ -352,6 +362,67 @@ internal static class ProfileCompiler
         builder.AppendLine("    }");
     }
 
+    private static ClipboardSettings ParseClipboard(JsonElement root)
+    {
+        if (!root.TryGetProperty("clipboard", out var element))
+            return ClipboardSettings.Default;
+        if (element.ValueKind != JsonValueKind.Object)
+            throw new InvalidDataException("clipboard must be an object.");
+
+        var settings = ClipboardSettings.Default;
+        var history = ReadOptionalBoolean(element, "history", settings.History);
+        var maxItems = ReadOptionalInt32(element, "maxItems", settings.MaxItems);
+        var persist = ReadOptionalBoolean(element, "persist", settings.Persist);
+        var images = ReadOptionalBoolean(element, "images", settings.Images);
+        var encryption = ReadOptionalString(element, "encryption", settings.Encryption).ToLowerInvariant();
+        var cipher = ReadOptionalString(element, "cipher", settings.Cipher).ToLowerInvariant().Replace('_', '-');
+        string? directory = null;
+        if (element.TryGetProperty("directory", out var directoryElement))
+        {
+            if (directoryElement.ValueKind != JsonValueKind.String)
+                throw new InvalidDataException("clipboard.directory must be a string.");
+            directory = directoryElement.GetString();
+            if (string.IsNullOrWhiteSpace(directory))
+                throw new InvalidDataException("clipboard.directory must not be empty.");
+        }
+
+        if (maxItems <= 0)
+            throw new InvalidDataException("clipboard.maxItems must be greater than zero.");
+        if (encryption != "user")
+            throw new InvalidDataException("clipboard.encryption currently supports only 'user'.");
+        if (cipher is not ("auto" or "chacha20-poly1305"))
+            throw new InvalidDataException("clipboard.cipher currently supports 'auto' or 'chacha20-poly1305'.");
+
+        return new ClipboardSettings(history, maxItems, persist, images, encryption, cipher, directory);
+    }
+
+    private static bool ReadOptionalBoolean(JsonElement element, string name, bool fallback)
+    {
+        if (!element.TryGetProperty(name, out var value))
+            return fallback;
+        if (value.ValueKind is not (JsonValueKind.True or JsonValueKind.False))
+            throw new InvalidDataException($"clipboard.{name} must be a boolean.");
+        return value.GetBoolean();
+    }
+
+    private static int ReadOptionalInt32(JsonElement element, string name, int fallback)
+    {
+        if (!element.TryGetProperty(name, out var value))
+            return fallback;
+        if (value.ValueKind != JsonValueKind.Number || !value.TryGetInt32(out var result))
+            throw new InvalidDataException($"clipboard.{name} must be an integer.");
+        return result;
+    }
+
+    private static string ReadOptionalString(JsonElement element, string name, string fallback)
+    {
+        if (!element.TryGetProperty(name, out var value))
+            return fallback;
+        if (value.ValueKind != JsonValueKind.String)
+            throw new InvalidDataException($"clipboard.{name} must be a string.");
+        return value.GetString() ?? string.Empty;
+    }
+
     private static (JsonElement Singles, JsonElement Chords) GetModeElements(JsonElement singleRoot, JsonElement chordRoot, string mode)
     {
         if (!TryGetPropertyIgnoreCase(singleRoot, mode, out var singlesElement))
@@ -463,6 +534,7 @@ internal static class ProfileCompiler
     }
 
     private static string NullableLiteral(string? value) => value is null ? "null" : Literal(value);
+    private static string BoolLiteral(bool value) => value ? "true" : "false";
 
     private static string Literal(string value)
     {
@@ -491,4 +563,23 @@ internal static class ProfileCompiler
     }
 
     private readonly record struct KeyInfo(string Expression, int Code);
+
+    private readonly record struct ClipboardSettings(
+        bool History,
+        int MaxItems,
+        bool Persist,
+        bool Images,
+        string Encryption,
+        string Cipher,
+        string? Directory)
+    {
+        public static ClipboardSettings Default { get; } = new(
+            History: true,
+            MaxItems: 20,
+            Persist: true,
+            Images: true,
+            Encryption: "user",
+            Cipher: "auto",
+            Directory: null);
+    }
 }
