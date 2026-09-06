@@ -76,6 +76,9 @@ public enum UserBehaviorLocalType
 
 public sealed record UserBehaviorLocalProfile
 {
+    public const int MinIntValue = short.MinValue;
+    public const int MaxIntValue = short.MaxValue;
+
     public UserBehaviorLocalProfile(string name, bool initialValue = false)
     {
         Name = NormalizeName(name);
@@ -86,6 +89,12 @@ public sealed record UserBehaviorLocalProfile
     public UserBehaviorLocalProfile(string name, int initialValue)
     {
         Name = NormalizeName(name);
+        if (!IsValidInt(initialValue))
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(initialValue),
+                $"Integer behavior locals must be between {MinIntValue} and {MaxIntValue}.");
+        }
         Type = UserBehaviorLocalType.Int;
         InitialIntValue = initialValue;
     }
@@ -100,6 +109,15 @@ public sealed record UserBehaviorLocalProfile
     public bool InitialValue => InitialBoolValue;
     public bool InitialBoolValue { get; }
     public int InitialIntValue { get; }
+
+    public static bool IsValidInt(int value)
+        => value is >= MinIntValue and <= MaxIntValue;
+
+    public static int SaturatingAdd(int current, int delta)
+    {
+        var value = (long)current + delta;
+        return (int)Math.Clamp(value, MinIntValue, MaxIntValue);
+    }
 
     private static string NormalizeName(string name)
     {
