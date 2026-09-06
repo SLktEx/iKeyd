@@ -23,10 +23,13 @@ class SendSyntaxInventoryTests(unittest.TestCase):
                 self.feature("repeat", "Send,{Left 3}", "{Left 3}"),
                 self.feature("state", "Send,{Shift down}", "{Shift down}"),
                 self.feature("dynamic", "Send,%key%", "%key%"),
+                self.feature("vk-sc", "Send,{vk1Csc079}", "{vk1Csc079}"),
+                self.feature("media", "Send,{VOLUME_UP}", "{VOLUME_UP}"),
+                self.feature("click", "Send,^{Click,WU}", "^{Click,WU}"),
                 {
                     "id": "false-positive",
                     "kind": "send",
-                    "line": 7,
+                    "line": 10,
                     "owner": "function:IME_IfRomaKana",
                     "text": 'imeget := DllCall("SendMessage"',
                     "details": {"sendCommand": "Send", "expression": 'Message"'},
@@ -36,10 +39,10 @@ class SendSyntaxInventoryTests(unittest.TestCase):
 
         report = module.build_inventory(matrix)
 
-        self.assertEqual(7, report["summary"]["scannerSendFeatureCount"])
-        self.assertEqual(6, report["summary"]["actualSendFeatureCount"])
+        self.assertEqual(10, report["summary"]["scannerSendFeatureCount"])
+        self.assertEqual(9, report["summary"]["actualSendFeatureCount"])
         self.assertEqual(1, report["summary"]["scannerFalsePositiveCount"])
-        self.assertEqual(6, report["summary"]["uniqueExpressionCount"])
+        self.assertEqual(9, report["summary"]["uniqueExpressionCount"])
         self.assertEqual(["false-positive"], [item["id"] for item in report["scannerFalsePositives"]])
 
         by_expression = {item["expression"]: item for item in report["expressions"]}
@@ -50,6 +53,28 @@ class SendSyntaxInventoryTests(unittest.TestCase):
         self.assertEqual("repeat", by_expression["{Left 3}"]["braceTokens"][0]["family"])
         self.assertIn("key-state-token", by_expression["{Shift down}"]["families"])
         self.assertTrue(by_expression["%key%"]["dynamic"])
+        self.assertIn("virtual-scan-code-token", by_expression["{vk1Csc079}"]["families"])
+        self.assertEqual("virtual-scan-code", by_expression["{vk1Csc079}"]["braceTokens"][0]["family"])
+        self.assertIn("media-token", by_expression["{VOLUME_UP}"]["families"])
+        self.assertIn("click-token", by_expression["^{Click,WU}"]["families"])
+
+    def test_ahk_inline_source_comments_are_not_counted_as_send_text(self):
+        report = module.build_inventory({
+            "features": [
+                self.feature(
+                    "menu",
+                    "Send,!{Space}ep     ; command prompt paste",
+                    "!{Space}ep     ; command prompt paste",
+                )
+            ]
+        })
+
+        self.assertEqual(1, report["summary"]["inlineCommentNormalizedCount"])
+        self.assertEqual("!{Space}ep", report["expressions"][0]["expression"])
+        self.assertEqual(
+            ["!{Space}ep     ; command prompt paste"],
+            report["expressions"][0]["rawExpressions"],
+        )
 
     def test_duplicate_expressions_are_grouped_but_keep_inventory_traceability(self):
         matrix = {
