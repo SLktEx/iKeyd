@@ -1,0 +1,21 @@
+{
+  "id": "runtime-function-km-u-control-home",
+  "description": "K then M plus U emits Ctrl+Home through Send,^%mkey%.",
+  "initialState": { "mode": "S", "ime": "off", "layers": ["K", "M"] },
+  "input": [
+    { "atMs": 10, "kind": "keyDown", "key": "U" },
+    { "atMs": 11, "kind": "keyUp", "key": "U" }
+  ],
+  "expected": {
+    "events": [
+      { "kind": "keyDown", "key": "VK_A2" },
+      { "kind": "keyDown", "key": "Home" },
+      { "kind": "keyUp", "key": "Home" },
+      { "kind": "keyUp", "key": "VK_A2" }
+    ]
+  },
+  "tags": ["legacy", "runtime-long-tail", "function-layer", "deterministic"],
+  "inventoryIds": ["legacy-send-3005f5c2e1"],
+  "requiredEnvironment": ["deterministic-windows-runtime"],
+  "oracleTargets": ["ikeyd-runtime"]
+}

@@ -70,13 +70,68 @@ public sealed class LegacyFunctionSendMapTests
     }
 
     [Fact]
-    public void Empty_legacy_arguments_are_still_handled()
+    public void K_and_A_composites_apply_the_legacy_outer_modifier_once_at_initialization()
+    {
+        Assert.True(LegacyFunctionSendMap.TryResolve(
+            KeyCode.U,
+            LayerState.FromSequence(LayerKey.K, LayerKey.M),
+            out var km));
+        Assert.Equal("^{HOME}", km);
+
+        Assert.True(LegacyFunctionSendMap.TryResolve(
+            KeyCode.U,
+            LayerState.FromSequence(LayerKey.K, LayerKey.M, LayerKey.H),
+            out var kmh));
+        Assert.Equal("^+{HOME}", kmh);
+
+        Assert.True(LegacyFunctionSendMap.TryResolve(
+            KeyCode.U,
+            LayerState.FromSequence(LayerKey.K, LayerKey.H, LayerKey.M),
+            out var khm));
+        Assert.Equal("^^{HOME}", khm);
+
+        Assert.True(LegacyFunctionSendMap.TryResolve(
+            KeyCode.U,
+            LayerState.FromSequence(LayerKey.A, LayerKey.M, LayerKey.S),
+            out var ams));
+        Assert.Equal("!^+{HOME}", ams);
+    }
+
+    [Fact]
+    public void Empty_legacy_arguments_are_still_handled_even_with_K_or_A_prefix()
     {
         Assert.True(LegacyFunctionSendMap.TryResolve(
             KeyCode.Digit5,
-            LayerState.FromSequence(LayerKey.M),
-            out var output));
-        Assert.Empty(output);
+            LayerState.FromSequence(LayerKey.K, LayerKey.M),
+            out var km));
+        Assert.Empty(km);
+
+        Assert.True(LegacyFunctionSendMap.TryResolve(
+            KeyCode.Digit5,
+            LayerState.FromSequence(LayerKey.A, LayerKey.M),
+            out var am));
+        Assert.Empty(am);
+    }
+
+    [Fact]
+    public void Hot_path_lookup_allocates_nothing_after_static_initialization()
+    {
+        var state = LayerState.FromSequence(LayerKey.K, LayerKey.M, LayerKey.H);
+        Assert.True(LegacyFunctionSendMap.TryResolve(KeyCode.Slash, state, out _));
+
+        var before = GC.GetAllocatedBytesForCurrentThread();
+        string? last = null;
+        var allResolved = true;
+        for (var i = 0; i < 10_000; i++)
+        {
+            allResolved &= LegacyFunctionSendMap.TryResolve(KeyCode.Slash, state, out var output);
+            last = output;
+        }
+        var allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+
+        GC.KeepAlive(last);
+        Assert.True(allResolved);
+        Assert.Equal(0, allocated);
     }
 
     [Fact]
