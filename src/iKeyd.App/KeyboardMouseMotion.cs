@@ -13,6 +13,8 @@ namespace iKeyd.App;
 /// </summary>
 internal sealed class KeyboardMouseMotion : IDisposable
 {
+    private static MouseMotionProfile s_defaultProfile = MouseMotionProfile.Default;
+
     private readonly object _gate = new();
     private readonly IDesktopBackend _desktop;
     private readonly KeyboardState _keyboardState;
@@ -23,6 +25,14 @@ internal sealed class KeyboardMouseMotion : IDisposable
 
     private long _lastTickAt;
     private bool _disposed;
+
+    internal static void ConfigureDefaultProfile(MouseMotionProfile profile)
+        => Volatile.Write(ref s_defaultProfile, profile ?? throw new ArgumentNullException(nameof(profile)));
+
+    public KeyboardMouseMotion(IDesktopBackend desktop, KeyboardState keyboardState)
+        : this(desktop, keyboardState, Volatile.Read(ref s_defaultProfile))
+    {
+    }
 
     public KeyboardMouseMotion(
         IDesktopBackend desktop,
