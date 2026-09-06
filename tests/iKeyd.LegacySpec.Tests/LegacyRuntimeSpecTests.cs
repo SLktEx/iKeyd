@@ -60,7 +60,10 @@ public sealed class LegacyRuntimeSpecTests
         AssertLayer(cases, "kana-k-toggle-off", "K", 0, "KanaDown", "", 0, []);
         AssertLayer(cases, "kana-m", "M", 0, "KanaDown", "M", 1, ["Muhenkan"]);
         AssertLayer(cases, "kana-h", "H", 0, "KanaDown", "H", 1, ["Henkan"]);
-        AssertLayer(cases, "kana-s", "S", 0, "KanaDown", "S", 1, ["Ctrl+Esc"]);
+        AssertLayer(cases, "kana-s", "S", 0, "KanaDown", "S", 0, ["Ctrl+Esc"]);
+
+        var kanaS = Assert.Single(cases.Where(x => x.GetProperty("name").GetString() == "kana-s"));
+        Assert.Equal(1, kanaS.GetProperty("ahkSourceFinalFlag").GetInt32());
     }
 
     [Fact]
@@ -68,8 +71,8 @@ public sealed class LegacyRuntimeSpecTests
     {
         var cases = Root.GetProperty("modifiedKeyDispatch").EnumerateArray().ToArray();
 
-        AssertDispatch(cases, "K", "Win+key", true);
-        AssertDispatch(cases, "A", "Alt+key", true);
+        AssertDispatch(cases, "K", "Win+defaultKey", true);
+        AssertDispatch(cases, "A", "Alt+defaultKey", true);
         AssertDispatch(cases, "SH", "SHKey", false);
         AssertDispatch(cases, "KSH", "Ctrl+SHKey", false);
         AssertDispatch(cases, "ASH", "Alt+SHKey", false);
@@ -153,6 +156,7 @@ public sealed class LegacyRuntimeSpecTests
         Assert.Contains(quirks, q => q.Contains("TMODE", StringComparison.Ordinal));
         Assert.Contains(quirks, q => q.Contains("KSH", StringComparison.Ordinal));
         Assert.Contains(quirks, q => q.Contains("s tate", StringComparison.Ordinal));
+        Assert.Contains(quirks, q => q.Contains("S+Kana", StringComparison.Ordinal));
         Assert.Contains(quirks, q => q.Contains("selection-sensitive", StringComparison.Ordinal));
     }
 
