@@ -153,7 +153,9 @@ internal sealed class LegacySendOutput : IMacroOutput
             }
 
             var character = legacySendText[index];
-            if (WindowsKeyMap.TryResolveCharacter(character, out var characterKey))
+            if (TryTranslateCharacter(character, out var characterKey, out var characterModifiers))
+                SendCharacterWithModifiers(characterKey, modifiers, characterModifiers);
+            else if (WindowsKeyMap.TryResolveCharacter(character, out characterKey))
                 SendKeyWithModifiers(characterKey, modifiers);
             else
                 SendPlain(legacySendText[modifierStart..(index + 1)]);
@@ -298,7 +300,9 @@ internal sealed class LegacySendOutput : IMacroOutput
             return;
         }
 
-        if (text.Length == 1 && WindowsKeyMap.TryResolveCharacter(text[0], out var key))
+        if (text.Length == 1 && TryTranslateCharacter(text[0], out var translatedKey, out var characterModifiers))
+            SendCharacterWithModifiers(translatedKey, modifiers, characterModifiers);
+        else if (text.Length == 1 && WindowsKeyMap.TryResolveCharacter(text[0], out var key))
             SendKeyWithModifiers(key, modifiers);
         else
             SendPlain(text);
@@ -392,12 +396,37 @@ internal sealed class LegacySendOutput : IMacroOutput
         }
     }
 
-    private List<ushort> PressTemporaryModifiers(IReadOnlyList<ushort> modifiers)
+    private void SendCharacterWithModifiers(
+        KeyboardKey key,
+        IReadOnlyList<ushort> explicitModifiers,
+        IReadOnlyList<ushort> characterModifiers)
+    {
+        var explicitPressed = PressTemporaryModifiers(explicitModifiers);
+        var characterPressed = PressTemporaryModifiers(characterModifiers, explicitPressed);
+        try
+        {
+            _keyboard.SendKeyPress(key);
+        }
+        finally
+        {
+            // AHK v1 releases prefix modifiers before modifiers implicitly needed
+            // to type the character. For example `^:` is observed as
+            // Ctrl down, Shift down, key, Ctrl up, Shift up.
+            ReleaseTemporaryModifiers(explicitPressed);
+            ReleaseTemporaryModifiers(characterPressed);
+        }
+    }
+
+    private List<ushort> PressTemporaryModifiers(
+        IReadOnlyList<ushort> modifiers,
+        IReadOnlyCollection<ushort>? alreadyPressed = null)
     {
         var pressed = new List<ushort>(modifiers.Count);
         foreach (var modifier in modifiers)
         {
-            if (_heldModifiers.Contains(modifier) || pressed.Contains(modifier))
+            if (_heldModifiers.Contains(modifier) ||
+                pressed.Contains(modifier) ||
+                alreadyPressed?.Contains(modifier) == true)
                 continue;
             _keyboard.SendKey(WindowsKeyMap.Keyboard(modifier), KeyEventKind.Down);
             pressed.Add(modifier);
