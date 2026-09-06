@@ -28,6 +28,15 @@ public abstract class BehaviorInstance
     {
     }
 
+    /// <summary>
+    /// Receives a repeated physical key-down for the same still-active source key.
+    /// Stateful behaviors ignore this by default so auto-repeat cannot replay layer
+    /// or modifier transitions. Repeatable output behaviors may override it.
+    /// </summary>
+    internal virtual void OnRepeat(long timestampMs, List<BehaviorAction> actions)
+    {
+    }
+
     internal virtual void AdvanceTo(long timestampMs, List<BehaviorAction> actions)
     {
     }
@@ -70,6 +79,7 @@ public sealed class BehaviorRuntime
     public int ActiveCount => _active.Count;
 
     public bool IsBound(KeyId key) => _bindings.ContainsKey(key);
+    public bool IsActive(KeyId key) => _active.ContainsKey(key);
 
     public BehaviorDispatchResult OnKeyDown(KeyId key, long timestampMs)
     {
@@ -109,7 +119,9 @@ public sealed class BehaviorRuntime
 
     /// <summary>
     /// Starts the behavior bound to <paramref name="key"/> without delivering a
-    /// second interruption notification to already-active instances.
+    /// second interruption notification to already-active instances. A repeated
+    /// physical down is delivered to the existing instance instead of creating a
+    /// second instance or restarting its state.
     /// </summary>
     public BehaviorDispatchResult BeginKeyDown(KeyId key, long timestampMs)
     {
@@ -120,16 +132,15 @@ public sealed class BehaviorRuntime
         if (!_bindings.TryGetValue(key, out var definition))
             return Result(false, actions);
 
-        // Physical keyboard auto-repeat produces repeated downs without a matching
-        // up. A behavior press is a single state-machine instance, so repeated downs
-        // are suppressed but do not restart timers or duplicate local state.
-        if (!_active.ContainsKey(key))
+        if (_active.TryGetValue(key, out var active))
         {
-            var instance = definition.CreateInstance(key, timestampMs);
-            instance.OnPress(timestampMs, actions);
-            _active.Add(key, instance);
+            active.OnRepeat(timestampMs, actions);
+            return Result(true, actions);
         }
 
+        var instance = definition.CreateInstance(key, timestampMs);
+        instance.OnPress(timestampMs, actions);
+        _active.Add(key, instance);
         return Result(true, actions);
     }
 
