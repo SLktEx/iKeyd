@@ -41,7 +41,11 @@ public sealed class MacroParserTests
     [InlineData("2^3^2", 64)]
     [InlineData("2+3*4", 14)]
     [InlineData("-(2+3)*4", -20)]
-    public void Calculator_matches_integer_macro_semantics(string expression, long expected)
+    [InlineData("8-3-2", 3)]
+    [InlineData("1-2+3", -4)]
+    [InlineData("(1-2)+3", -4)]
+    [InlineData("-1+3", -4)]
+    public void Calculator_matches_legacy_regex_reduction_semantics(string expression, long expected)
         => Assert.Equal(expected, new MacroExpressionEvaluator().Evaluate(expression));
 
     [Fact]
