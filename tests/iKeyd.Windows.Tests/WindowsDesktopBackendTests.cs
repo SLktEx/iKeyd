@@ -105,15 +105,16 @@ public sealed class WindowsDesktopBackendTests
     }
 
     [Fact]
-    public void Relative_pointer_move_is_resolved_against_current_cursor_position()
+    public void Relative_pointer_move_uses_native_relative_input_without_cursor_round_trip()
     {
         var native = new FakeNative { Cursor = new NativePoint(100, 200) };
         var backend = Create(native);
 
         backend.MovePointerBy(-30, 10);
 
-        Assert.Equal(70, native.Cursor.X);
-        Assert.Equal(210, native.Cursor.Y);
+        Assert.Equal([(-30, 10)], native.MouseMoves);
+        Assert.Equal(100, native.Cursor.X);
+        Assert.Equal(200, native.Cursor.Y);
     }
 
     private static WindowsDesktopBackend Create(FakeNative native)
@@ -141,6 +142,7 @@ public sealed class WindowsDesktopBackendTests
         public NativePoint Cursor { get; set; } = new(0, 0);
         public nint LastWindowPosInsertAfter { get; private set; }
         public uint LastWindowPosFlags { get; private set; }
+        public List<(int X, int Y)> MouseMoves { get; } = [];
         public List<(DesktopMouseButton Button, bool Down)> MouseButtons { get; } = [];
         public List<int> Wheels { get; } = [];
         public int LastError { get; set; }
@@ -206,6 +208,7 @@ public sealed class WindowsDesktopBackendTests
             return true;
         }
         public short GetAsyncKeyState(int virtualKey) => 0;
+        public void SendMouseMove(int deltaX, int deltaY) => MouseMoves.Add((deltaX, deltaY));
         public void SendMouseButton(DesktopMouseButton button, bool down) => MouseButtons.Add((button, down));
         public void SendMouseWheel(int wheelDelta) => Wheels.Add(wheelDelta);
     }

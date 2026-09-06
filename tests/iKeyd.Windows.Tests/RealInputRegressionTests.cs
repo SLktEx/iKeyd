@@ -56,14 +56,11 @@ public sealed class RealInputRegressionTests
         Dispatch(fixture, WindowsKeyMap.NonConvert, KeyEventKind.Down, 10);
         Dispatch(fixture, 'D', KeyEventKind.Down, 20);
 
-        // Simulate the repeated WH_KEYBOARD_LL Down generated while NonConvert is held.
         Dispatch(fixture, WindowsKeyMap.NonConvert, KeyEventKind.Down, 100);
         Dispatch(fixture, WindowsKeyMap.NonConvert, KeyEventKind.Up, 110);
         Dispatch(fixture, 'D', KeyEventKind.Up, 111);
         Dispatch(fixture, WindowsKeyMap.Space, KeyEventKind.Up, 120);
 
-        // Before the repeat guard, the repeated MDown reset Consumed=false and MUp
-        // incorrectly emitted Shift+Enter from S,M.
         Assert.Empty(fixture.Output.Events);
         Assert.Empty(fixture.Output.Text);
     }
@@ -79,7 +76,6 @@ public sealed class RealInputRegressionTests
         Assert.Equal(KeyboardDisposition.PassThrough, Dispatch(fixture, leftAlt, KeyEventKind.Up, 20));
         Assert.Equal(KeyboardDisposition.Suppress, Dispatch(fixture, WindowsKeyMap.Convert, KeyEventKind.Up, 30));
 
-        // A stale A/H layer would consume Q as an Alt/Ctrl-style layered key.
         Assert.Equal(KeyboardDisposition.PassThrough, Dispatch(fixture, 'Q', KeyEventKind.Down, 40));
     }
 
@@ -95,21 +91,19 @@ public sealed class RealInputRegressionTests
         Assert.Equal(KeyboardDisposition.PassThrough, Dispatch(fixture, 'Q', KeyEventKind.Down, 20));
     }
 
-    [Fact]
-    public void Keyboard_mouse_speed_curve_is_smooth_monotonic_and_bounded()
+    [Theory]
+    [InlineData(false, false, false, 2200.0)]
+    [InlineData(true, false, false, 800.0)]
+    [InlineData(false, true, false, 240.0)]
+    [InlineData(false, false, true, 4400.0)]
+    [InlineData(true, true, true, 800.0)]
+    public void Keyboard_mouse_uses_explicit_velocity_bands_instead_of_hold_time_acceleration(
+        bool precision,
+        bool fine,
+        bool fast,
+        double expected)
     {
-        var initial = KeyboardMouseMotion.SpeedAt(0);
-        var early = KeyboardMouseMotion.SpeedAt(100);
-        var middle = KeyboardMouseMotion.SpeedAt(325);
-        var end = KeyboardMouseMotion.SpeedAt(650);
-        var late = KeyboardMouseMotion.SpeedAt(5000);
-
-        Assert.Equal(KeyboardMouseMotion.InitialSpeedPixelsPerSecond, initial);
-        Assert.True(initial < early);
-        Assert.True(early < middle);
-        Assert.True(middle < end);
-        Assert.Equal(KeyboardMouseMotion.MaxSpeedPixelsPerSecond, end);
-        Assert.Equal(end, late);
+        Assert.Equal(expected, KeyboardMouseMotion.SpeedForModifiers(precision, fine, fast));
     }
 
     private static RuntimeFixture CreateRuntime(InputMode startupMode)

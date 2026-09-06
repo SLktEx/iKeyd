@@ -29,6 +29,7 @@ internal interface IWindowsDesktopNative
     bool GetCursorPos(out NativePoint point);
     bool SetCursorPos(int x, int y);
     short GetAsyncKeyState(int virtualKey);
+    void SendMouseMove(int deltaX, int deltaY);
     void SendMouseButton(DesktopMouseButton button, bool down);
     void SendMouseWheel(int wheelDelta);
 }
@@ -69,6 +70,7 @@ internal sealed class Win32DesktopNative : IWindowsDesktopNative
 {
     private const uint SpiGetWorkArea = 0x0030;
     private const uint InputMouse = 0;
+    private const uint MouseEventMove = 0x0001;
     private const uint MouseEventLeftDown = 0x0002;
     private const uint MouseEventLeftUp = 0x0004;
     private const uint MouseEventRightDown = 0x0008;
@@ -124,6 +126,9 @@ internal sealed class Win32DesktopNative : IWindowsDesktopNative
     public bool SetCursorPos(int x, int y) => NativeMethods.SetCursorPos(x, y);
     public short GetAsyncKeyState(int virtualKey) => NativeMethods.GetAsyncKeyState(virtualKey);
 
+    public void SendMouseMove(int deltaX, int deltaY)
+        => SendMouse(MouseEventMove, 0, deltaX, deltaY);
+
     public void SendMouseButton(DesktopMouseButton button, bool down)
     {
         var flags = (button, down) switch
@@ -142,7 +147,7 @@ internal sealed class Win32DesktopNative : IWindowsDesktopNative
     public void SendMouseWheel(int wheelDelta)
         => SendMouse(MouseEventWheel, unchecked((uint)wheelDelta));
 
-    private static void SendMouse(uint flags, uint data)
+    private static void SendMouse(uint flags, uint data, int x = 0, int y = 0)
     {
         var input = new NativeInput
         {
@@ -151,6 +156,8 @@ internal sealed class Win32DesktopNative : IWindowsDesktopNative
             {
                 Mouse = new MouseInputData
                 {
+                    X = x,
+                    Y = y,
                     MouseData = data,
                     Flags = flags,
                     ExtraInfo = WindowsKeyboardOutput.InjectionMarker
