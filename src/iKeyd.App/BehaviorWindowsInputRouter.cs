@@ -23,7 +23,7 @@ internal sealed class BehaviorWindowsInputRouter : IKeyboardEventHandler, IInput
     private readonly Dictionary<string, Keymap<string>> _keymaps;
     private readonly List<string> _activeLayers = [];
     private readonly HashSet<KeyId> _activeBehaviorKeys = [];
-    private readonly HashSet<ushort> _layerMappedKeys = [];
+    private readonly HashSet<KeyboardKey> _layerMappedKeys = [];
     private bool _disposed;
 
     public BehaviorWindowsInputRouter(
@@ -56,7 +56,7 @@ internal sealed class BehaviorWindowsInputRouter : IKeyboardEventHandler, IInput
         if (_disposed || keyboardEvent.Origin != KeyEventOrigin.Physical || _behaviorRuntimes.Count == 0)
             return _fallback.OnKeyboardEvent(keyboardEvent);
 
-        var keyId = TryResolveInputKeyId(keyboardEvent.Key.VirtualKey);
+        var keyId = WindowsKeyMap.TryResolveKeyId(keyboardEvent.Key);
         if (keyId is null)
             return _fallback.OnKeyboardEvent(keyboardEvent);
 
@@ -139,7 +139,7 @@ internal sealed class BehaviorWindowsInputRouter : IKeyboardEventHandler, IInput
             layerKeymap.TryGetSingle(keyId, out var output))
         {
             _send.Send(output);
-            _layerMappedKeys.Add(keyboardEvent.Key.VirtualKey);
+            _layerMappedKeys.Add(keyboardEvent.Key);
             return KeyboardDisposition.Suppress;
         }
 
@@ -158,7 +158,7 @@ internal sealed class BehaviorWindowsInputRouter : IKeyboardEventHandler, IInput
 
         if (_activeBehaviorKeys.Remove(keyId))
             suppress = true;
-        if (_layerMappedKeys.Remove(keyboardEvent.Key.VirtualKey))
+        if (_layerMappedKeys.Remove(keyboardEvent.Key))
             suppress = true;
 
         return suppress
@@ -179,7 +179,7 @@ internal sealed class BehaviorWindowsInputRouter : IKeyboardEventHandler, IInput
             switch (action.Kind)
             {
                 case BehaviorActionKind.SendKey:
-                    if (!TryResolveOutputKey(action.Key, out var outputKey))
+                    if (!WindowsKeyMap.TryResolveOutputKey(action.Key, out var outputKey))
                         throw new InvalidOperationException($"Behavior output key '{action.Key}' is not supported by the Windows backend.");
                     _keyboard.SendKeyPress(outputKey);
                     break;
@@ -248,88 +248,19 @@ internal sealed class BehaviorWindowsInputRouter : IKeyboardEventHandler, IInput
             modifier.Equals("WIN", StringComparison.OrdinalIgnoreCase) ||
             modifier.Equals("LWIN", StringComparison.OrdinalIgnoreCase))
         {
-            return WindowsKeyMap.Keyboard(WindowsKeyMap.LeftWin);
+            if (WindowsKeyMap.TryResolveOutputKey(new KeyId(KeyCode.LeftWin), out var win))
+                return win;
         }
 
         if (WindowsKeyMap.TryResolveNamedKey(modifier, out var key) &&
-            key.VirtualKey is WindowsKeyMap.Control or WindowsKeyMap.Shift or WindowsKeyMap.Alt)
+            key.VirtualKey is WindowsKeyMap.Control or WindowsKeyMap.Shift or WindowsKeyMap.Alt or
+                WindowsKeyMap.LeftControl or WindowsKeyMap.RightControl or
+                WindowsKeyMap.LeftShift or WindowsKeyMap.RightShift or
+                WindowsKeyMap.LeftAlt or WindowsKeyMap.RightAlt)
         {
             return key;
         }
 
         throw new InvalidOperationException($"Unknown Windows modifier '{modifier}'.");
-    }
-
-    private static KeyId? TryResolveInputKeyId(ushort virtualKey)
-    {
-        var compact = WindowsKeyMap.TryResolveKeyId(virtualKey);
-        if (compact is not null)
-            return compact;
-
-        return virtualKey switch
-        {
-            WindowsKeyMap.Space => new KeyId("Space"),
-            WindowsKeyMap.Tab => new KeyId("Tab"),
-            WindowsKeyMap.Enter => new KeyId("Enter"),
-            WindowsKeyMap.Backspace => new KeyId("Backspace"),
-            WindowsKeyMap.Escape => new KeyId("Escape"),
-            WindowsKeyMap.Convert => new KeyId("Convert"),
-            WindowsKeyMap.NonConvert => new KeyId("NonConvert"),
-            WindowsKeyMap.Kana => new KeyId("Kana"),
-            WindowsKeyMap.Control => new KeyId("Ctrl"),
-            WindowsKeyMap.Shift => new KeyId("Shift"),
-            WindowsKeyMap.Alt => new KeyId("Alt"),
-            WindowsKeyMap.LeftWin => new KeyId("LWin"),
-            _ => (KeyId?)null
-        };
-    }
-
-    private static bool TryResolveOutputKey(KeyId keyId, out KeyboardKey key)
-    {
-        if (keyId.Code is >= KeyCode.A and <= KeyCode.Z)
-        {
-            var offset = (int)keyId.Code - (int)KeyCode.A;
-            key = WindowsKeyMap.Keyboard((ushort)('A' + offset));
-            return true;
-        }
-
-        if (keyId.Code is >= KeyCode.Digit0 and <= KeyCode.Digit9)
-        {
-            var offset = (int)keyId.Code - (int)KeyCode.Digit0;
-            key = WindowsKeyMap.Keyboard((ushort)('0' + offset));
-            return true;
-        }
-
-        if (keyId.Code is >= KeyCode.F1 and <= KeyCode.F12)
-        {
-            var offset = (int)keyId.Code - (int)KeyCode.F1;
-            key = WindowsKeyMap.Keyboard((ushort)(WindowsKeyMap.F1 + offset));
-            return true;
-        }
-
-        var virtualKey = keyId.Code switch
-        {
-            KeyCode.SColon => WindowsKeyMap.OemSemicolon,
-            KeyCode.Colon => WindowsKeyMap.OemPlus,
-            KeyCode.Comma => WindowsKeyMap.OemComma,
-            KeyCode.Dot => WindowsKeyMap.OemPeriod,
-            KeyCode.Slash => WindowsKeyMap.OemSlash,
-            KeyCode.At => WindowsKeyMap.OemAt,
-            _ => (ushort)0
-        };
-        if (virtualKey != 0)
-        {
-            key = WindowsKeyMap.Keyboard(virtualKey);
-            return true;
-        }
-
-        if (keyId.Code == KeyCode.Custom &&
-            WindowsKeyMap.TryResolveNamedKey(keyId.Value, out key))
-        {
-            return true;
-        }
-
-        key = default;
-        return false;
     }
 }
