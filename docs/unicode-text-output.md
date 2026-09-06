@@ -46,7 +46,7 @@ The shared behavior action vocabulary contains separate primitives:
 
 `SendUnicode` carries exactly one validated Unicode scalar. `SendText` carries a validated non-empty Unicode string. Windows UTF-16 code units do not leak into this semantic layer.
 
-Invalid/unpaired UTF-16 source strings are rejected while compiling/parsing the canonical `.ikeyd` profile rather than being deferred to normal runtime input processing.
+The semantic action constructors reject unpaired UTF-16 or otherwise invalid scalar/string values. Canonical `.ikeyd` literals are decoded by the existing JSON-string grammar first and the resulting `UNICODE` / `TEXT` values are validated during document compilation; malformed string syntax fails before normal runtime dispatch.
 
 ## Repeat policy
 
