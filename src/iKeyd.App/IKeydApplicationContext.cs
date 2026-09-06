@@ -83,7 +83,7 @@ internal sealed class IKeydApplicationContext : ApplicationContext
         _notifyIcon.DoubleClick += (_, _) => ShowClipboardHistory();
 
         UpdateModeChecks();
-        _keyboard.Start(_runtime);
+        _keyboard.Start(new ConfiguredBehaviorKeyboardHandler(configuration.Profile.KeyBehaviors, send, _runtime));
     }
 
     protected override void ExitThreadCore()
