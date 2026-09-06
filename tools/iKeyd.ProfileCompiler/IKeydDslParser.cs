@@ -211,8 +211,8 @@ internal static class IKeydDslParser
                         pendingBehavior = new PendingBehaviorBuilder(
                             keymap,
                             key,
-                            invocation.Value.Name,
-                            invocation.Value.Arguments);
+                            invocation.Name,
+                            invocation.Arguments);
                         block = BlockKind.BehaviorOptions;
                         continue;
                     }
