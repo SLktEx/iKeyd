@@ -1,0 +1,39 @@
+name: Validate final issue57 coverage routing
+
+on:
+  push:
+    branches: [issue-46-hotkeyskg-full-compat]
+    paths:
+      - .github/workflows/issue57-finalize-coverage.yml
+
+permissions:
+  contents: write
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: issue-46-hotkeyskg-full-compat
+      - name: Apply final tooling assertion
+        run: python -B tools/issue57_finalize_coverage_test.py
+      - name: Validate coverage metadata tooling
+        run: python -B -m unittest discover -s tests/tooling -p 'test_*.py'
+      - name: Ensure no stale issue57 handoff remains
+        shell: bash
+        run: |
+          set -e
+          ! grep -R --line-number --fixed-strings 'deferred:#57' tests/compatibility tests/tooling
+          ! grep -R --line-number --fixed-strings 'pending:#57' tests/compatibility tests/tooling
+      - name: Commit validated coverage update
+        shell: bash
+        run: |
+          set -e
+          rm .github/workflows/issue57-finalize-coverage.yml
+          rm tools/issue57_finalize_coverage_test.py
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'test: finalize issue57 coverage routing'
+          git push origin HEAD:issue-46-hotkeyskg-full-compat
