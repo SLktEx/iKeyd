@@ -26,6 +26,23 @@ public sealed class KeymapTableTests
     }
 
     [Fact]
+    public void Jis_keys_are_indexed_by_compact_generated_tables()
+    {
+        var singles = new KeymapSlot<string>[Keymap<string>.CompactSingleSlotCount];
+        singles[Keymap<string>.GetCompactSingleIndex(KeyCode.Ro)] = new KeymapSlot<string>("ro");
+
+        var chords = new KeymapSlot<string>[Keymap<string>.CompactChordSlotCount];
+        chords[Keymap<string>.GetCompactChordIndex(KeyCode.Muhenkan, KeyCode.Ro)] = new KeymapSlot<string>("escape");
+
+        var keymap = Keymap<string>.FromCompiledTables(singles, chords);
+
+        Assert.True(keymap.TryGetSingle(new KeyId(KeyCode.Ro), out var single));
+        Assert.Equal("ro", single);
+        Assert.True(keymap.TryGetChord(new KeyId(KeyCode.Ro), new KeyId(KeyCode.Muhenkan), out var chord));
+        Assert.Equal("escape", chord);
+    }
+
+    [Fact]
     public void Generic_constructor_preserves_legacy_duplicate_semantics()
     {
         var keymap = new Keymap<string>(
