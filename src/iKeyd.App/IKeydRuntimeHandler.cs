@@ -294,34 +294,29 @@ internal sealed class IKeydRuntimeHandler : IKeyboardEventHandler, IMacroActionD
         switch (state)
         {
             case "H":
-                _send.SendChord(WindowsKeyMap.Control, virtualKey);
-                return true;
+                return SendLegacyDefaultKey(key, "^");
             case "S":
-                _send.SendChord(WindowsKeyMap.Shift, virtualKey);
-                return true;
+                return SendLegacyDefaultKey(key, "+");
             case "HS":
-                _send.SendChord(WindowsKeyMap.Control, WindowsKeyMap.Shift, virtualKey);
-                return true;
+                return SendLegacyDefaultKey(key, "^+");
             case "K":
-                _send.SendChord(WindowsKeyMap.LeftWin, virtualKey);
+                if (!SendLegacyDefaultKey(key, "#"))
+                    return false;
                 _layers = _layers with { Layers = _layers.Layers.Release(LayerKey.K), Consumed = true };
                 return true;
             case "A":
-                _send.SendChord(WindowsKeyMap.Alt, virtualKey);
+                if (!SendLegacyDefaultKey(key, "!"))
+                    return false;
                 _layers = _layers with { Layers = _layers.Layers.Release(LayerKey.A), Consumed = true };
                 return true;
             case "KH":
-                _send.SendChord(WindowsKeyMap.LeftWin, WindowsKeyMap.Control, virtualKey);
-                return true;
+                return SendLegacyDefaultKey(key, "#^");
             case "KS":
-                _send.SendChord(WindowsKeyMap.LeftWin, WindowsKeyMap.Shift, virtualKey);
-                return true;
+                return SendLegacyDefaultKey(key, "#+");
             case "AH":
-                _send.SendChord(WindowsKeyMap.Alt, WindowsKeyMap.Control, virtualKey);
-                return true;
+                return SendLegacyDefaultKey(key, "!^");
             case "AS":
-                _send.SendChord(WindowsKeyMap.Alt, WindowsKeyMap.Shift, virtualKey);
-                return true;
+                return SendLegacyDefaultKey(key, "!+");
             case "SH":
             case "KSH":
             case "ASH":
@@ -331,6 +326,43 @@ internal sealed class IKeydRuntimeHandler : IKeyboardEventHandler, IMacroActionD
             default:
                 return DispatchFunctionKey(key, state);
         }
+    }
+
+    private bool SendLegacyDefaultKey(KeyId key, string prefix)
+    {
+        var output = ResolveLegacyDefaultKey(key);
+        if (output is null)
+            return false;
+        _send.Send(prefix + output);
+        return true;
+    }
+
+    private static string? ResolveLegacyDefaultKey(KeyId key)
+    {
+        var name = key.Value.ToUpperInvariant();
+        if (name.Length == 1)
+        {
+            var character = name[0];
+            if (character is >= 'A' and <= 'Z')
+                return char.ToLowerInvariant(character).ToString();
+            if (character is >= '0' and <= '9')
+                return name;
+        }
+
+        if (name.Length is >= 2 and <= 3 && name[0] == 'F' &&
+            int.TryParse(name[1..], out var function) && function is >= 1 and <= 12)
+            return $"{{F{function}}}";
+
+        return name switch
+        {
+            "AT" => "@",
+            "SCOLON" => ";",
+            "COLON" => ":",
+            "COMMA" => ",",
+            "DOT" => ".",
+            "SLASH" => "/",
+            _ => null
+        };
     }
 
     private bool DispatchShiftHomeKey(KeyId key, string state)
