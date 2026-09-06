@@ -1,3 +1,4 @@
+using iKeyd.Core.Automation;
 using iKeyd.Core.Behaviors;
 using iKeyd.Core.Chords;
 using iKeyd.Core.Keymaps;
@@ -6,8 +7,14 @@ namespace iKeyd.Core.Configuration;
 
 public sealed record AutomationProfile
 {
+    private static readonly HashSet<string> StandardBehaviorNames = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "LT", "MT", "MO", "MOD", "UNICODE", "TEXT", "EXEC", "SHELL", "QUERY", "WHEN"
+    };
+
     private readonly IReadOnlyDictionary<string, AutomationKeymapProfile> _keymaps;
     private readonly IReadOnlyDictionary<string, UserBehaviorDefinitionProfile> _behaviorDefinitions;
+    private readonly IReadOnlyList<string> _systemQueries;
 
     public AutomationProfile(
         int chordWindowMs,
@@ -43,13 +50,25 @@ public sealed record AutomationProfile
             ArgumentNullException.ThrowIfNull(definition);
             if (!definitions.TryAdd(definition.Name, definition))
                 throw new ArgumentException($"Duplicate behavior definition '{definition.Name}'.", nameof(behaviorDefinitions));
-            if (definition.Name.Equals("LT", StringComparison.OrdinalIgnoreCase) ||
-                definition.Name.Equals("MT", StringComparison.OrdinalIgnoreCase))
+            if (StandardBehaviorNames.Contains(definition.Name))
             {
-                throw new ArgumentException($"Behavior definition '{definition.Name}' conflicts with a standard behavior.", nameof(behaviorDefinitions));
+                throw new ArgumentException(
+                    $"Behavior definition '{definition.Name}' conflicts with a standard behavior.",
+                    nameof(behaviorDefinitions));
             }
         }
         _behaviorDefinitions = definitions;
+
+        var queries = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var keymap in byName.Values)
+        {
+            foreach (var mapping in keymap.BehaviorMappings)
+            {
+                foreach (var query in BehaviorDefinitionFactory.GetRequiredSystemQueries(mapping.Invocation))
+                    queries.Add(query);
+            }
+        }
+        _systemQueries = queries.OrderBy(value => value, StringComparer.OrdinalIgnoreCase).ToArray();
     }
 
     public int ChordWindowMs { get; }
@@ -58,6 +77,7 @@ public sealed record AutomationProfile
     public ClipboardHistoryProfile Clipboard { get; }
     public IReadOnlyDictionary<string, AutomationKeymapProfile> Keymaps => _keymaps;
     public IReadOnlyDictionary<string, UserBehaviorDefinitionProfile> BehaviorDefinitions => _behaviorDefinitions;
+    public IReadOnlyList<string> SystemQueries => _systemQueries;
 
     public AutomationKeymapProfile GetKeymap(string name)
     {
@@ -107,15 +127,23 @@ public sealed record AutomationKeymapProfile
     public Keymap<string> BuildKeymap() => new(SingleMappings, ChordMappings);
 
     public IReadOnlyDictionary<KeyId, BehaviorDefinition> BuildBehaviorBindings()
-        => BuildBehaviorBindings(new Dictionary<string, UserBehaviorDefinitionProfile>(StringComparer.OrdinalIgnoreCase));
+        => BuildBehaviorBindings(
+            new Dictionary<string, UserBehaviorDefinitionProfile>(StringComparer.OrdinalIgnoreCase),
+            EmptySystemQuerySnapshot.Instance);
 
     public IReadOnlyDictionary<KeyId, BehaviorDefinition> BuildBehaviorBindings(
         IReadOnlyDictionary<string, UserBehaviorDefinitionProfile> userDefinitions)
+        => BuildBehaviorBindings(userDefinitions, EmptySystemQuerySnapshot.Instance);
+
+    public IReadOnlyDictionary<KeyId, BehaviorDefinition> BuildBehaviorBindings(
+        IReadOnlyDictionary<string, UserBehaviorDefinitionProfile> userDefinitions,
+        ISystemQuerySnapshot systemQueries)
     {
         ArgumentNullException.ThrowIfNull(userDefinitions);
+        ArgumentNullException.ThrowIfNull(systemQueries);
         var result = new Dictionary<KeyId, BehaviorDefinition>();
         foreach (var mapping in BehaviorMappings)
-            result.Add(mapping.Key, BehaviorDefinitionFactory.Create(mapping.Invocation, userDefinitions));
+            result.Add(mapping.Key, BehaviorDefinitionFactory.Create(mapping.Invocation, userDefinitions, systemQueries));
         return result;
     }
 }
