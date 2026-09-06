@@ -41,7 +41,10 @@ class RealWindowsVerificationTests(unittest.TestCase):
                 "ikeyd": {"sha256": "a" * 64},
             },
             "environment": {"japaneseImeConfigured": True},
-            "automated": {"legacyDifferential": {"status": "pass"}},
+            "automated": {
+                "legacyDifferential": {"status": "pass"},
+                "backendCompatibility": {"status": "pass"},
+            },
             "checks": checks,
             "summary": {
                 "expectedRealWindowsInventoryCount": self.plan["expectedRealWindowsInventoryCount"],
@@ -77,6 +80,15 @@ class RealWindowsVerificationTests(unittest.TestCase):
         incomplete["summary"]["complete"] = False
         errors = module.validate_report(self.plan, incomplete, require_complete=True)
         self.assertTrue(any("checks are not complete" in error for error in errors))
+
+    def test_complete_report_requires_real_win32_backend_e2e(self):
+        report = self.complete_report()
+        report["automated"]["backendCompatibility"]["status"] = "fail"
+        report["summary"]["complete"] = False
+
+        errors = module.validate_report(self.plan, report, require_complete=True)
+
+        self.assertTrue(any("backend E2E" in error for error in errors))
 
     def test_report_rejects_inventory_drift_and_wrong_legacy_binary(self):
         report = self.complete_report()

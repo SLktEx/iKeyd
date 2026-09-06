@@ -124,8 +124,11 @@ def validate_report(plan: dict[str, Any], report: dict[str, Any], require_comple
         incomplete = [cid for cid, item in actual_checks.items() if item.get("status") != "pass"]
         if incomplete:
             errors.append("checks are not complete: " + ", ".join(sorted(incomplete)))
-        if report.get("automated", {}).get("legacyDifferential", {}).get("status") != "pass":
+        automated = report.get("automated", {})
+        if automated.get("legacyDifferential", {}).get("status") != "pass":
             errors.append("automated legacy differential did not pass")
+        if automated.get("backendCompatibility", {}).get("status") != "pass":
+            errors.append("real-Win32 backend E2E did not pass")
         if not report.get("environment", {}).get("japaneseImeConfigured"):
             errors.append("Japanese IME was not recorded as configured")
         if not binaries.get("ikeyd", {}).get("sha256"):
