@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -75,6 +76,50 @@ class SendSyntaxInventoryTests(unittest.TestCase):
             ["!{Space}ep     ; command prompt paste"],
             report["expressions"][0]["rawExpressions"],
         )
+
+    def test_bounded_dynamic_variables_expand_from_the_pinned_source_structure(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            source = Path(temporary) / "hotkeySKG.ahk"
+            source.write_text(
+                "\n".join([
+                    "defaultKey_Q=q",
+                    "singleStrokeS_Q=ni",
+                    "resultOfKCmbS1=fa",
+                    "SHKey_Q=#1",
+                    "func_J(){",
+                    'withFuncKey("{LEFT}","+{LEFT}","^{LEFT}","/* */{LEFT 3}")',
+                    "}",
+                ]),
+                encoding="utf-8",
+            )
+            matrix = {
+                "features": [
+                    self.feature("key", "Send,%key%", "%key%"),
+                    self.feature("mkey", "Send,^%mkey%", "^%mkey%"),
+                    self.feature("mskey", "Send,%mskey%", "%mskey%"),
+                    self.feature("string", "Send,%string%", "%string%"),
+                    self.feature("macro", "Send,%tempstr%", "%tempstr%"),
+                ]
+            }
+
+            report = module.build_inventory(matrix, source)
+            reach = report["dynamicReachability"]
+            assert reach is not None
+
+            self.assertEqual(5, reach["summary"]["dynamicExpressionCount"])
+            self.assertEqual(4, reach["summary"]["boundedDynamicExpressionCount"])
+            self.assertEqual(1, reach["summary"]["unboundedDynamicExpressionCount"])
+            self.assertEqual("user-authored macro remainder", reach["variables"]["tempstr"]["source"])
+            self.assertIn("/* */{LEFT 3}", reach["variables"]["mskey"]["values"])
+
+            by_expression = {item["expression"]: item for item in reach["expressions"]}
+            self.assertEqual(["q"], [item["expression"] for item in by_expression["%key%"]["reachableExpressions"]])
+            self.assertIn("^{LEFT}", [item["expression"] for item in by_expression["^%mkey%"]["reachableExpressions"]])
+            self.assertIn("repeat-token", next(
+                item for item in by_expression["%mskey%"]["reachableExpressions"]
+                if item["expression"] == "/* */{LEFT 3}"
+            )["families"])
+            self.assertFalse(by_expression["%tempstr%"]["bounded"])
 
     def test_duplicate_expressions_are_grouped_but_keep_inventory_traceability(self):
         matrix = {
