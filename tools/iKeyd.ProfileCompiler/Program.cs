@@ -282,6 +282,11 @@ internal static class ProfileCompiler
             KeyBehaviorActionKind.Text => $"KeyBehaviorAction.Text({Literal(action.Value)})",
             KeyBehaviorActionKind.Layer => $"KeyBehaviorAction.Layer({Literal(action.Value)})",
             KeyBehaviorActionKind.Modifier => $"KeyBehaviorAction.Modifier(KeyBehaviorModifier.{action.GetModifier()})",
+            KeyBehaviorActionKind.MouseMove or
+            KeyBehaviorActionKind.MouseClick or
+            KeyBehaviorActionKind.Scroll or
+            KeyBehaviorActionKind.Media or
+            KeyBehaviorActionKind.Window => $"new KeyBehaviorAction(KeyBehaviorActionKind.{action.Kind}, {Literal(action.Value)})",
             _ => throw new InvalidDataException($"Unsupported behavior action kind '{action.Kind}'.")
         };
 
