@@ -1,8 +1,20 @@
+using iKeyd.Core.State;
+
 namespace iKeyd.Core.Automation;
 
 public interface ISystemQuerySnapshot
 {
     bool TryGetValue(string key, out string value);
+}
+
+/// <summary>
+/// A bounded condition evaluated from already-available runtime snapshots. The
+/// condition itself may not perform host/platform I/O.
+/// </summary>
+public interface IBehaviorCondition
+{
+    bool Evaluate(ISystemQuerySnapshot systemQueries, IRuntimeStateSnapshot runtimeState);
+    void CollectSystemQueries(ISet<string> queries);
 }
 
 /// <summary>
@@ -56,7 +68,7 @@ public enum SystemQueryConditionOperator
     NotEquals
 }
 
-public sealed record SystemQueryCondition
+public sealed record SystemQueryCondition : IBehaviorCondition
 {
     public SystemQueryCondition(string query, SystemQueryConditionOperator @operator, string expected)
     {
@@ -70,12 +82,22 @@ public sealed record SystemQueryCondition
     public string Expected { get; }
 
     public bool Evaluate(ISystemQuerySnapshot snapshot)
+        => Evaluate(snapshot, EmptyRuntimeStateStore.Instance);
+
+    public bool Evaluate(ISystemQuerySnapshot systemQueries, IRuntimeStateSnapshot runtimeState)
     {
-        ArgumentNullException.ThrowIfNull(snapshot);
-        if (!snapshot.TryGetValue(Query, out var actual))
+        ArgumentNullException.ThrowIfNull(systemQueries);
+        ArgumentNullException.ThrowIfNull(runtimeState);
+        if (!systemQueries.TryGetValue(Query, out var actual))
             return false;
 
         var equals = string.Equals(actual, Expected, StringComparison.OrdinalIgnoreCase);
         return Operator == SystemQueryConditionOperator.Equals ? equals : !equals;
+    }
+
+    public void CollectSystemQueries(ISet<string> queries)
+    {
+        ArgumentNullException.ThrowIfNull(queries);
+        queries.Add(Query);
     }
 }
