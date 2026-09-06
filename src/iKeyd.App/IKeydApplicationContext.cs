@@ -13,6 +13,7 @@ internal sealed class IKeydApplicationContext : ApplicationContext
     private readonly WindowsKeyboardBackend _keyboard;
     private readonly IKeydRuntimeHandler _runtime;
     private readonly BehaviorWindowsInputRouter _keyboardHandler;
+    private readonly LegacyContextualHotkeyHandler _contextualHotkeys;
     private readonly LegacySuspendToggleHandler _suspendHandler;
     private readonly WindowsClipboardService _clipboardService;
     private readonly WindowsClipboardHistoryPersistence _clipboardPersistence;
@@ -63,7 +64,14 @@ internal sealed class IKeydApplicationContext : ApplicationContext
             send,
             _keyboard,
             _runtime);
-        _suspendHandler = new LegacySuspendToggleHandler(_keyboard.State, _keyboardHandler);
+        _contextualHotkeys = new LegacyContextualHotkeyHandler(
+            _keyboard.State,
+            desktop,
+            _keyboard,
+            send,
+            WindowsWindowCommand.PostCommand,
+            _keyboardHandler);
+        _suspendHandler = new LegacySuspendToggleHandler(_keyboard.State, _contextualHotkeys);
 
         _macroExecutor = new MacroExecutor(send, _runtime);
         _legacyMacroSlots = new LegacyMacroSlotController(
