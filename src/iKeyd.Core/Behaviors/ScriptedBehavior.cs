@@ -1,3 +1,4 @@
+using System.Globalization;
 using iKeyd.Core.Chords;
 using iKeyd.Core.Configuration;
 using iKeyd.Core.State;
@@ -138,13 +139,15 @@ internal sealed class ScriptedBehaviorDefinition : BehaviorDefinition
             switch (statement.Op.ToLowerInvariant())
             {
                 case "set_bool":
-                    if (string.IsNullOrWhiteSpace(statement.Target) ||
-                        !_definition.Locals.Any(local => string.Equals(local.Name, statement.Target, StringComparison.OrdinalIgnoreCase)))
-                    {
-                        throw new InvalidDataException($"set_bool targets unknown local '{statement.Target}'.");
-                    }
+                    _ = RequireLocal(statement.Target, statement.Op, UserBehaviorLocalType.Bool);
                     if (!bool.TryParse(statement.Value, out _))
                         throw new InvalidDataException("set_bool value must be true or false.");
+                    break;
+
+                case "set_int":
+                case "add_int":
+                    _ = RequireLocal(statement.Target, statement.Op, UserBehaviorLocalType.Int);
+                    _ = ParseBoundedInt(statement.Value, $"{statement.Op} value");
                     break;
 
                 case "state_set":
@@ -180,11 +183,15 @@ internal sealed class ScriptedBehaviorDefinition : BehaviorDefinition
                     break;
 
                 case "if_bool":
-                    if (string.IsNullOrWhiteSpace(statement.Condition) ||
-                        !_definition.Locals.Any(local => string.Equals(local.Name, statement.Condition, StringComparison.OrdinalIgnoreCase)))
-                    {
-                        throw new InvalidDataException($"if_bool references unknown local '{statement.Condition}'.");
-                    }
+                    _ = RequireLocal(statement.Condition, statement.Op, UserBehaviorLocalType.Bool);
+                    ValidateStatements(statement.Then);
+                    ValidateStatements(statement.Else);
+                    break;
+
+                case "if_int_equals":
+                case "if_int_not_equals":
+                    _ = RequireLocal(statement.Target, statement.Op, UserBehaviorLocalType.Int);
+                    _ = ParseBoundedInt(statement.Value, $"{statement.Op} expected value");
                     ValidateStatements(statement.Then);
                     ValidateStatements(statement.Else);
                     break;
@@ -214,6 +221,26 @@ internal sealed class ScriptedBehaviorDefinition : BehaviorDefinition
         }
     }
 
+    private UserBehaviorLocalProfile RequireLocal(
+        string? name,
+        string op,
+        UserBehaviorLocalType expectedType)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+            throw new InvalidDataException($"{op} requires a local name.");
+
+        var local = _definition.Locals.FirstOrDefault(candidate =>
+            string.Equals(candidate.Name, name, StringComparison.OrdinalIgnoreCase));
+        if (local is null)
+            throw new InvalidDataException($"{op} references unknown local '{name}'.");
+        if (local.Type != expectedType)
+        {
+            throw new InvalidDataException(
+                $"{op} requires a {expectedType.ToString().ToLowerInvariant()} local but '{local.Name}' is {local.Type.ToString().ToLowerInvariant()}.");
+        }
+        return local;
+    }
+
     private RuntimeStateFieldProfile RequireStateField(string? name, string op)
     {
         if (string.IsNullOrWhiteSpace(name))
@@ -226,6 +253,17 @@ internal sealed class ScriptedBehaviorDefinition : BehaviorDefinition
         {
             throw new InvalidDataException(exception.Message, exception);
         }
+    }
+
+    private static int ParseBoundedInt(string? raw, string description)
+    {
+        if (!int.TryParse(raw, NumberStyles.Integer, CultureInfo.InvariantCulture, out var value) ||
+            !UserBehaviorLocalProfile.IsValidInt(value))
+        {
+            throw new InvalidDataException(
+                $"{description} must be an integer between {UserBehaviorLocalProfile.MinIntValue} and {UserBehaviorLocalProfile.MaxIntValue}.");
+        }
+        return value;
     }
 
     private static void ValidateOperand(string? operand, string op)
@@ -256,7 +294,8 @@ internal sealed class ScriptedBehaviorInstance : BehaviorInstance
     private readonly UserBehaviorDefinitionProfile _definition;
     private readonly IReadOnlyDictionary<string, string> _arguments;
     private readonly IRuntimeStateStore _runtimeState;
-    private readonly Dictionary<string, bool> _locals;
+    private readonly Dictionary<string, bool> _boolLocals;
+    private readonly Dictionary<string, int> _intLocals;
     private readonly Dictionary<string, int> _ownedLayers = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, int> _ownedModifiers = new(StringComparer.OrdinalIgnoreCase);
     private readonly ScriptedTapHoldOptions _tapHoldOptions;
@@ -281,10 +320,18 @@ internal sealed class ScriptedBehaviorInstance : BehaviorInstance
         _tapHoldResolution = tapHoldOptions.Enabled
             ? TapHoldResolution.Pending
             : TapHoldResolution.Disabled;
-        _locals = definition.Locals.ToDictionary(
-            local => local.Name,
-            local => local.InitialValue,
-            StringComparer.OrdinalIgnoreCase);
+        _boolLocals = definition.Locals
+            .Where(local => local.Type == UserBehaviorLocalType.Bool)
+            .ToDictionary(
+                local => local.Name,
+                local => local.InitialBoolValue,
+                StringComparer.OrdinalIgnoreCase);
+        _intLocals = definition.Locals
+            .Where(local => local.Type == UserBehaviorLocalType.Int)
+            .ToDictionary(
+                local => local.Name,
+                local => local.InitialIntValue,
+                StringComparer.OrdinalIgnoreCase);
     }
 
     internal override void OnPress(long timestampMs, List<BehaviorAction> actions)
@@ -367,8 +414,21 @@ internal sealed class ScriptedBehaviorInstance : BehaviorInstance
             switch (statement.Op.ToLowerInvariant())
             {
                 case "set_bool":
-                    _locals[statement.Target!] = bool.Parse(statement.Value!);
+                    _boolLocals[statement.Target!] = bool.Parse(statement.Value!);
                     break;
+
+                case "set_int":
+                    _intLocals[statement.Target!] = int.Parse(statement.Value!, CultureInfo.InvariantCulture);
+                    break;
+
+                case "add_int":
+                {
+                    var delta = int.Parse(statement.Value!, CultureInfo.InvariantCulture);
+                    _intLocals[statement.Target!] = UserBehaviorLocalProfile.SaturatingAdd(
+                        _intLocals[statement.Target!],
+                        delta);
+                    break;
+                }
 
                 case "state_set":
                     _runtimeState.SetScalar(statement.Target!, statement.Value!);
@@ -416,10 +476,22 @@ internal sealed class ScriptedBehaviorInstance : BehaviorInstance
 
                 case "if_bool":
                     ExecuteStatements(
-                        _locals[statement.Condition!] ? statement.Then : statement.Else,
+                        _boolLocals[statement.Condition!] ? statement.Then : statement.Else,
                         eventArguments,
                         actions);
                     break;
+
+                case "if_int_equals":
+                case "if_int_not_equals":
+                {
+                    var expected = int.Parse(statement.Value!, CultureInfo.InvariantCulture);
+                    var equals = _intLocals[statement.Target!] == expected;
+                    var matches = statement.Op.Equals("if_int_equals", StringComparison.OrdinalIgnoreCase)
+                        ? equals
+                        : !equals;
+                    ExecuteStatements(matches ? statement.Then : statement.Else, eventArguments, actions);
+                    break;
+                }
 
                 case "if_state_equals":
                 case "if_state_not_equals":
