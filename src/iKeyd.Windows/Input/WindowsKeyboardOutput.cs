@@ -20,6 +20,12 @@ public sealed class WindowsKeyboardOutput : IKeyboardOutput
 
     public void SendKey(KeyboardKey key, KeyEventKind kind)
     {
+        if (UsesCombinedVirtualScanPath(key))
+        {
+            SendCombinedVirtualScanKey(key, kind);
+            return;
+        }
+
         Span<NativeInput> inputs = stackalloc NativeInput[1];
         inputs[0] = BuildKeyInput(key, kind);
         Send(inputs);
@@ -27,6 +33,13 @@ public sealed class WindowsKeyboardOutput : IKeyboardOutput
 
     public void SendKeyPress(KeyboardKey key)
     {
+        if (UsesCombinedVirtualScanPath(key))
+        {
+            SendCombinedVirtualScanKey(key, KeyEventKind.Down);
+            SendCombinedVirtualScanKey(key, KeyEventKind.Up);
+            return;
+        }
+
         Span<NativeInput> inputs = stackalloc NativeInput[2];
         inputs[0] = BuildKeyInput(key, KeyEventKind.Down);
         inputs[1] = BuildKeyInput(key, KeyEventKind.Up);
@@ -64,6 +77,10 @@ public sealed class WindowsKeyboardOutput : IKeyboardOutput
     public bool IsToggleOn(ushort virtualKey)
         => (NativeMethods.GetKeyState(virtualKey) & 0x0001) != 0;
 
+    internal static bool UsesCombinedVirtualScanPath(KeyboardKey key)
+        => key.VirtualKey is > 0 and <= byte.MaxValue &&
+           key.ScanCode is > 0 and <= byte.MaxValue;
+
     internal static NativeInput BuildKeyInput(KeyboardKey key, KeyEventKind kind)
     {
         var flags = kind == KeyEventKind.Up ? KeyEventKeyUp : 0u;
@@ -98,6 +115,18 @@ public sealed class WindowsKeyboardOutput : IKeyboardOutput
             inputs[index++] = BuildUnicodeInput(codeUnit, KeyEventKind.Down);
             inputs[index++] = BuildUnicodeInput(codeUnit, KeyEventKind.Up);
         }
+    }
+
+    private static void SendCombinedVirtualScanKey(KeyboardKey key, KeyEventKind kind)
+    {
+        // AutoHotkey's {vkXXscYYY} notation explicitly represents a key event with
+        // both values. KEYEVENTF_SCANCODE makes SendInput ignore wVk, so the normal
+        // SendInput representation cannot preserve that pair. keybd_event accepts
+        // both bVk and bScan and is retained here only for this legacy-compat path.
+        var flags = key.IsExtended ? KeyEventExtended : 0u;
+        if (kind == KeyEventKind.Up)
+            flags |= KeyEventKeyUp;
+        NativeMethods.keybd_event((byte)key.VirtualKey, (byte)key.ScanCode, flags, InjectionMarker);
     }
 
     private static NativeInput KeyboardInput(ushort virtualKey, ushort scanCode, uint flags)
@@ -187,6 +216,9 @@ public sealed class WindowsKeyboardOutput : IKeyboardOutput
     {
         [DllImport("user32.dll", SetLastError = true)]
         public static extern unsafe uint SendInput(uint inputCount, NativeInput* inputs, int inputSize);
+
+        [DllImport("user32.dll")]
+        public static extern void keybd_event(byte virtualKey, byte scanCode, uint flags, nuint extraInfo);
 
         [DllImport("user32.dll")]
         public static extern short GetKeyState(int virtualKey);
