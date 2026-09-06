@@ -2,6 +2,7 @@ using System.Buffers;
 using System.Text;
 using iKeyd.Core.Automation;
 using iKeyd.Core.Chords;
+using iKeyd.Core.State;
 
 namespace iKeyd.Core.Behaviors;
 
@@ -21,7 +22,9 @@ public enum BehaviorActionKind
     ModifierUp,
     Exec,
     Shell,
-    Query
+    Query,
+    StateSet,
+    StateToggle
 }
 
 /// <summary>
@@ -123,6 +126,24 @@ public readonly record struct BehaviorAction
             BehaviorActionKind.Query,
             default,
             SystemQueryKeys.Normalize(key),
+            null,
+            null,
+            BehaviorRepeatPolicy.Never);
+
+    public static BehaviorAction StateSet(string fieldName, string value)
+        => new(
+            BehaviorActionKind.StateSet,
+            default,
+            RuntimeStateProfile.NormalizeName(fieldName),
+            value ?? throw new ArgumentNullException(nameof(value)),
+            null,
+            BehaviorRepeatPolicy.Never);
+
+    public static BehaviorAction StateToggle(string fieldName)
+        => new(
+            BehaviorActionKind.StateToggle,
+            default,
+            RuntimeStateProfile.NormalizeName(fieldName),
             null,
             null,
             BehaviorRepeatPolicy.Never);
