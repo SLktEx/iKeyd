@@ -180,7 +180,7 @@ internal static class WindowsKeyMap
             return true;
         }
 
-        if (KeyId.TryParseCompact(normalized.ToString(), out var code) &&
+        if (KeyId.TryParseCompact(normalized, out var code) &&
             OutputMap.TryGetValue(code, out key))
         {
             return true;
