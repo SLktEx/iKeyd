@@ -123,6 +123,59 @@ keymap BASE {
             profile["behaviors"]["BASE"],
         )
 
+    def test_behavior_option_block_compiles_as_generic_invocation_options(self):
+        text = """
+profile demo {
+    chord_window = 40ms
+}
+keymap S {
+    A = LT(NUM, Z) {
+        tapping_term = 170ms
+        hold_on_other_key_press = false
+    }
+    B = MT(Ctrl, X)
+}
+keymap K {
+}
+keymap NUM {
+    C = "num-c"
+}
+""".strip()
+
+        profile = module.compile_dsl(text, Path("profile.ikeyd"))
+
+        self.assertEqual(
+            {
+                "name": "LT",
+                "arguments": ["NUM", "Z"],
+                "options": {
+                    "tapping_term": "170ms",
+                    "hold_on_other_key_press": "false",
+                },
+            },
+            profile["behaviors"]["S"]["A"],
+        )
+        self.assertEqual(
+            {"name": "MT", "arguments": ["Ctrl", "X"]},
+            profile["behaviors"]["S"]["B"],
+        )
+
+    def test_duplicate_behavior_option_is_rejected(self):
+        text = """
+profile demo {
+    chord_window = 40ms
+}
+keymap S {
+    A = LT(NUM, Z) {
+        tapping_term = 170ms
+        tapping_term = 180ms
+    }
+}
+""".strip()
+
+        with self.assertRaisesRegex(module.DslError, r"duplicate behavior option 'tapping_term'"):
+            module.compile_dsl(text, Path("profile.ikeyd"))
+
     def test_behavior_invocation_rejects_non_identifier_arguments_for_now(self):
         text = """
 profile demo {

@@ -67,6 +67,26 @@ public sealed class BehaviorWindowsInputRouterTests
     }
 
     [Fact]
+    public void MT_interrupt_presses_modifier_while_interrupting_key_remains_transparent()
+    {
+        var keyboard = new RecordingKeyboardOutput();
+        var fallback = new RecordingHandler();
+        using var router = CreateMtRouter(keyboard, fallback);
+
+        Assert.Equal(KeyboardDisposition.Suppress, router.OnKeyboardEvent(Physical('A', KeyEventKind.Down, 0)));
+        Assert.Equal(KeyboardDisposition.PassThrough, router.OnKeyboardEvent(Physical('B', KeyEventKind.Down, 50)));
+        Assert.Equal(KeyboardDisposition.PassThrough, router.OnKeyboardEvent(Physical('B', KeyEventKind.Up, 60)));
+        Assert.Equal(KeyboardDisposition.Suppress, router.OnKeyboardEvent(Physical('A', KeyEventKind.Up, 70)));
+
+        Assert.Equal(
+            [new RecordedKey(WindowsKeyMap.Keyboard(WindowsKeyMap.Control), KeyEventKind.Down),
+             new RecordedKey(WindowsKeyMap.Keyboard(WindowsKeyMap.Control), KeyEventKind.Up)],
+            keyboard.Keys);
+        Assert.Equal(2, fallback.Events.Count);
+        Assert.All(fallback.Events, item => Assert.Equal((ushort)'B', item.Key.VirtualKey));
+    }
+
+    [Fact]
     public void Injected_events_bypass_behavior_routing()
     {
         var keyboard = new RecordingKeyboardOutput();
@@ -108,6 +128,30 @@ public sealed class BehaviorWindowsInputRouterTests
             ]);
         var send = new LegacySendOutput(keyboard);
         return new BehaviorWindowsInputRouter(profile, () => "S", send, keyboard, fallback);
+    }
+
+    private static BehaviorWindowsInputRouter CreateMtRouter(
+        RecordingKeyboardOutput keyboard,
+        RecordingHandler fallback)
+    {
+        var profile = new AutomationProfile(
+            40,
+            [
+                new AutomationKeymapProfile(
+                    "S",
+                    [],
+                    [],
+                    [new BehaviorMappingProfile(
+                        "A",
+                        new BehaviorInvocationProfile("MT", ["Ctrl", "X"]))]),
+                new AutomationKeymapProfile("K", [], [])
+            ]);
+        return new BehaviorWindowsInputRouter(
+            profile,
+            () => "S",
+            new LegacySendOutput(keyboard),
+            keyboard,
+            fallback);
     }
 
     private static KeyboardEvent Physical(ushort virtualKey, KeyEventKind kind, long timestampMs)

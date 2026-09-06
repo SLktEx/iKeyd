@@ -10,7 +10,10 @@ namespace iKeyd.Core.Configuration;
 /// </summary>
 public sealed record BehaviorInvocationProfile
 {
-    public BehaviorInvocationProfile(string name, IEnumerable<string> arguments)
+    public BehaviorInvocationProfile(
+        string name,
+        IEnumerable<string> arguments,
+        IEnumerable<KeyValuePair<string, string>>? options = null)
     {
         if (string.IsNullOrWhiteSpace(name))
             throw new ArgumentException("Behavior name must not be empty.", nameof(name));
@@ -23,10 +26,25 @@ public sealed record BehaviorInvocationProfile
                 throw new ArgumentException("Behavior arguments must not be empty.", nameof(arguments));
             return argument.Trim();
         }).ToArray();
+
+        var normalizedOptions = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var option in options ?? [])
+        {
+            if (string.IsNullOrWhiteSpace(option.Key))
+                throw new ArgumentException("Behavior option names must not be empty.", nameof(options));
+            if (string.IsNullOrWhiteSpace(option.Value))
+                throw new ArgumentException($"Behavior option '{option.Key}' must not be empty.", nameof(options));
+
+            if (!normalizedOptions.TryAdd(option.Key.Trim(), option.Value.Trim()))
+                throw new ArgumentException($"Duplicate behavior option '{option.Key}'.", nameof(options));
+        }
+
+        Options = normalizedOptions;
     }
 
     public string Name { get; }
     public IReadOnlyList<string> Arguments { get; }
+    public IReadOnlyDictionary<string, string> Options { get; }
 
     public BehaviorDefinition BuildDefinition()
         => BehaviorDefinitionFactory.Create(this);

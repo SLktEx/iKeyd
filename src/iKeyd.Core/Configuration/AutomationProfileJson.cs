@@ -109,9 +109,23 @@ public static class AutomationProfileJson
                         arguments.Add(argument.GetString()!);
                     }
 
+                    var options = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                    if (invocation.TryGetProperty("options", out var optionsElement))
+                    {
+                        if (optionsElement.ValueKind != JsonValueKind.Object)
+                            throw new InvalidDataException($"behaviors.{mode}.{item.Name}.options must be an object.");
+
+                        foreach (var option in optionsElement.EnumerateObject())
+                        {
+                            options.Add(
+                                option.Name,
+                                ReadBehaviorOptionValue(option.Value, $"behaviors.{mode}.{item.Name}.options.{option.Name}"));
+                        }
+                    }
+
                     behaviors.Add(new BehaviorMappingProfile(
                         new KeyId(item.Name),
-                        new BehaviorInvocationProfile(behaviorName, arguments)));
+                        new BehaviorInvocationProfile(behaviorName, arguments, options)));
                 }
             }
 
@@ -225,6 +239,14 @@ public static class AutomationProfileJson
                     foreach (var argument in mapping.Invocation.Arguments)
                         writer.WriteStringValue(argument);
                     writer.WriteEndArray();
+                    if (mapping.Invocation.Options.Count != 0)
+                    {
+                        writer.WritePropertyName("options");
+                        writer.WriteStartObject();
+                        foreach (var option in mapping.Invocation.Options.OrderBy(pair => pair.Key, StringComparer.OrdinalIgnoreCase))
+                            writer.WriteString(option.Key, option.Value);
+                        writer.WriteEndObject();
+                    }
                     writer.WriteEndObject();
                 }
                 writer.WriteEndObject();
@@ -249,6 +271,16 @@ public static class AutomationProfileJson
         writer.WriteEndObject();
         writer.Flush();
     }
+
+    private static string ReadBehaviorOptionValue(JsonElement value, string location)
+        => value.ValueKind switch
+        {
+            JsonValueKind.String => value.GetString() ?? string.Empty,
+            JsonValueKind.Number => value.GetRawText(),
+            JsonValueKind.True => "true",
+            JsonValueKind.False => "false",
+            _ => throw new InvalidDataException($"{location} must be a string, number, or boolean.")
+        };
 
     private static bool TryGetPropertyIgnoreCase(JsonElement element, string name, out JsonElement value)
     {

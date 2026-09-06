@@ -76,6 +76,37 @@ public sealed class AutomationProfileTests
     }
 
     [Fact]
+    public void Profile_parser_accepts_scalar_behavior_options()
+    {
+        const string json = """
+        {
+          "singleStroke": { "S": {}, "K": {} },
+          "chords": { "S": [], "K": [] },
+          "behaviors": {
+            "S": {
+              "A": {
+                "name": "LT",
+                "arguments": ["NUM", "Z"],
+                "options": {
+                  "tapping_term": "170ms",
+                  "hold_on_other_key_press": false
+                }
+              }
+            }
+          }
+        }
+        """;
+
+        var invocation = AutomationProfileJson.Parse(json)
+            .GetKeymap("S")
+            .BehaviorMappings[0]
+            .Invocation;
+
+        Assert.Equal("170ms", invocation.Options["tapping_term"]);
+        Assert.Equal("false", invocation.Options["hold_on_other_key_press"]);
+    }
+
+    [Fact]
     public void Profile_round_trip_preserves_effective_mappings_chord_order_and_behaviors()
     {
         var profile = new AutomationProfile(
@@ -94,7 +125,14 @@ public sealed class AutomationProfileTests
                     [
                         new BehaviorMappingProfile(
                             "A",
-                            new BehaviorInvocationProfile("LT", ["NUM", "Z"]))
+                            new BehaviorInvocationProfile(
+                                "LT",
+                                ["NUM", "Z"],
+                                new Dictionary<string, string>
+                                {
+                                    ["tapping_term"] = "170ms",
+                                    ["hold_on_other_key_press"] = "false"
+                                }))
                     ])
             ],
             hotkeys: [new HotkeyBinding("F1", "Send, help")]);
@@ -111,6 +149,8 @@ public sealed class AutomationProfileTests
         Assert.Single(parsedKeymap.BehaviorMappings);
         Assert.Equal("LT", parsedKeymap.BehaviorMappings[0].Invocation.Name);
         Assert.Equal(["NUM", "Z"], parsedKeymap.BehaviorMappings[0].Invocation.Arguments);
+        Assert.Equal("170ms", parsedKeymap.BehaviorMappings[0].Invocation.Options["tapping_term"]);
+        Assert.Equal("false", parsedKeymap.BehaviorMappings[0].Invocation.Options["hold_on_other_key_press"]);
         Assert.Equal("Send, help", parsed.Hotkeys[0].Action);
     }
 
