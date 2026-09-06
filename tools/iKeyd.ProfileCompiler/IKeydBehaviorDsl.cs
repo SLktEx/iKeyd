@@ -62,7 +62,6 @@ internal static class IKeydBehaviorDsl
                         ValidateBehaviorDraft(path, lineNumber, behaviorTrigger!, behaviorDraft!, layers);
                         behaviors.Add(behaviorTrigger!, behaviorDraft);
                     }
-
                     extractedKind = null;
                     extractedName = null;
                     behaviorTrigger = null;
@@ -90,10 +89,8 @@ internal static class IKeydBehaviorDsl
 
             if (ordinaryDepth > 0)
             {
-                if (line.EndsWith("{", StringComparison.Ordinal))
-                    ordinaryDepth++;
-                if (line == "}")
-                    ordinaryDepth--;
+                if (line.EndsWith("{", StringComparison.Ordinal)) ordinaryDepth++;
+                if (line == "}") ordinaryDepth--;
                 continue;
             }
 
@@ -139,27 +136,21 @@ internal static class IKeydBehaviorDsl
                 ValidateBehaviorDraft(path, lineNumber, trigger, behavior, layers, validateLayerReference: false);
                 behaviors.Add(trigger, behavior);
                 clean[index] = string.Empty;
-                continue;
             }
         }
 
         if (extractedKind is not null)
             throw Error(path, lines.Length, $"unclosed {extractedKind} block");
-
         foreach (var property in behaviors)
             ValidateBehaviorDraft(path, 1, property.Key, (JsonObject)property.Value!, layers);
-
         return new IKeydBehaviorDslExtension(string.Join('\n', clean), layers, behaviors);
     }
 
     public static string Merge(string baseJson, IKeydBehaviorDslExtension extension)
     {
-        var root = JsonNode.Parse(baseJson) as JsonObject
-            ?? throw new InvalidDataException("DSL compiler produced a non-object profile.");
-        if (extension.Layers.Count > 0)
-            root["layers"] = extension.Layers.DeepClone();
-        if (extension.Behaviors.Count > 0)
-            root["behaviors"] = extension.Behaviors.DeepClone();
+        var root = JsonNode.Parse(baseJson) as JsonObject ?? throw new InvalidDataException("DSL compiler produced a non-object profile.");
+        if (extension.Layers.Count > 0) root["layers"] = extension.Layers.DeepClone();
+        if (extension.Behaviors.Count > 0) root["behaviors"] = extension.Behaviors.DeepClone();
         return root.ToJsonString();
     }
 
@@ -167,50 +158,33 @@ internal static class IKeydBehaviorDsl
     {
         var layouts = new Dictionary<string, List<List<string>>>(StringComparer.OrdinalIgnoreCase);
         string? current = null;
-
         for (var index = 0; index < lines.Length; index++)
         {
             var lineNumber = index + 1;
             var line = StripComment(lines[index]).Trim();
-            if (line.Length == 0)
-                continue;
-
+            if (line.Length == 0) continue;
             if (current is not null)
             {
-                if (line == "}")
-                {
-                    current = null;
-                    continue;
-                }
+                if (line == "}") { current = null; continue; }
                 var row = Regex.Match(line, @"^row\s+(.+)$", RegexOptions.CultureInvariant);
-                if (row.Success)
-                    layouts[current].Add(ParseLayoutRow(path, lineNumber, row.Groups[1].Value));
+                if (row.Success) layouts[current].Add(ParseLayoutRow(path, lineNumber, row.Groups[1].Value));
                 continue;
             }
-
             var keyboard = Regex.Match(line, $@"^keyboard\s+({Ident})\s*;?$", RegexOptions.CultureInvariant);
             if (keyboard.Success && string.Equals(keyboard.Groups[1].Value, "JIS109", StringComparison.OrdinalIgnoreCase))
             {
                 layouts["JIS109"] = Jis109Layout.Select(row => row.ToList()).ToList();
                 continue;
             }
-
             var layout = Regex.Match(line, $@"^layout\s+({Ident})\s*\{{$", RegexOptions.CultureInvariant);
-            if (layout.Success)
-            {
-                current = layout.Groups[1].Value;
-                layouts.TryAdd(current, []);
-            }
+            if (layout.Success) { current = layout.Groups[1].Value; layouts.TryAdd(current, []); }
         }
-
         return layouts;
     }
 
     private static List<string> ParseLayoutRow(string path, int lineNumber, string value)
     {
-        var keys = Regex.Split(value.Trim().TrimEnd(';'), @"[\s,]+")
-            .Where(item => item.Length > 0)
-            .ToList();
+        var keys = Regex.Split(value.Trim().TrimEnd(';'), @"[\s,]+").Where(item => item.Length > 0).ToList();
         if (keys.Count == 0 || keys.Any(key => !Regex.IsMatch(key, $@"^{Ident}$", RegexOptions.CultureInvariant)))
             throw Error(path, lineNumber, "expected one or more key identifiers after 'row'");
         return keys;
@@ -228,7 +202,6 @@ internal static class IKeydBehaviorDsl
             result["hold"] = Action("layer", layerTap.Groups[1].Value);
             return result;
         }
-
         var modTap = Regex.Match(expression, $@"^mod_tap\(\s*({Ident})\s*,\s*({Ident})\s*\)$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
         if (modTap.Success)
         {
@@ -238,7 +211,6 @@ internal static class IKeydBehaviorDsl
             result["hold"] = Action("modifier", NormalizeModifier(path, lineNumber, modTap.Groups[1].Value));
             return result;
         }
-
         var hold = ParseAction(path, lineNumber, expression, allowHoldActions: true);
         var kind = hold["kind"]!.GetValue<string>();
         if (kind is not ("layer" or "modifier"))
@@ -248,33 +220,24 @@ internal static class IKeydBehaviorDsl
         return behavior;
     }
 
-    private static JsonObject NewBehaviorDraft() => new()
-    {
-        ["timeoutMs"] = 180,
-        ["interrupt"] = "hold"
-    };
+    private static JsonObject NewBehaviorDraft() => new() { ["timeoutMs"] = 180, ["interrupt"] = "hold" };
 
     private static void ParseBehaviorSetting(string path, int lineNumber, string line, JsonObject draft)
     {
         var assignment = Regex.Match(line, $@"^({Ident})\s*=\s*(.+)$", RegexOptions.CultureInvariant);
-        if (!assignment.Success)
-            throw Error(path, lineNumber, $"unknown behavior setting: {line}");
-
+        if (!assignment.Success) throw Error(path, lineNumber, $"unknown behavior setting: {line}");
         var name = assignment.Groups[1].Value.ToLowerInvariant();
         var value = assignment.Groups[2].Value.Trim().TrimEnd(';').Trim();
         switch (name)
         {
             case "tap":
-                if (draft.ContainsKey("tap"))
-                    throw Error(path, lineNumber, "duplicate behavior tap setting");
+                if (draft.ContainsKey("tap")) throw Error(path, lineNumber, "duplicate behavior tap setting");
                 draft["tap"] = ParseAction(path, lineNumber, value, allowHoldActions: false);
                 break;
             case "hold":
-                if (draft.ContainsKey("hold"))
-                    throw Error(path, lineNumber, "duplicate behavior hold setting");
+                if (draft.ContainsKey("hold")) throw Error(path, lineNumber, "duplicate behavior hold setting");
                 var hold = ParseAction(path, lineNumber, value, allowHoldActions: true);
-                if (hold["kind"]!.GetValue<string>() is not ("layer" or "modifier"))
-                    throw Error(path, lineNumber, "hold must be layer(...) or modifier(...)");
+                if (hold["kind"]!.GetValue<string>() is not ("layer" or "modifier")) throw Error(path, lineNumber, "hold must be layer(...) or modifier(...)");
                 draft["hold"] = hold;
                 break;
             case "timeout":
@@ -285,8 +248,7 @@ internal static class IKeydBehaviorDsl
                 break;
             case "interrupt":
                 var policy = value.ToLowerInvariant();
-                if (policy is not ("hold" or "tap"))
-                    throw Error(path, lineNumber, "interrupt must be 'hold' or 'tap'");
+                if (policy is not ("hold" or "tap")) throw Error(path, lineNumber, "interrupt must be 'hold' or 'tap'");
                 draft["interrupt"] = policy;
                 break;
             default:
@@ -298,29 +260,17 @@ internal static class IKeydBehaviorDsl
     {
         expression = expression.Trim().TrimEnd(';').Trim();
         var call = Regex.Match(expression, $@"^({Ident})\((.*)\)$", RegexOptions.CultureInvariant);
-        if (!call.Success)
-            throw Error(path, lineNumber, $"invalid behavior action '{expression}'");
-
+        if (!call.Success) throw Error(path, lineNumber, $"invalid behavior action '{expression}'");
         var kind = call.Groups[1].Value.ToLowerInvariant();
         var argument = call.Groups[2].Value.Trim();
         switch (kind)
         {
             case "key":
-                if (!Regex.IsMatch(argument, $@"^{Ident}$", RegexOptions.CultureInvariant))
-                    throw Error(path, lineNumber, "key(...) expects one key name");
+                if (!Regex.IsMatch(argument, $@"^{Ident}$", RegexOptions.CultureInvariant)) throw Error(path, lineNumber, "key(...) expects one key name");
                 ValidateOutputKey(path, lineNumber, argument);
                 return Action("key", CanonicalKey(argument));
             case "text":
-                try
-                {
-                    var text = JsonSerializer.Deserialize<string>(argument)
-                        ?? throw Error(path, lineNumber, "text(...) requires a quoted string");
-                    return Action("text", text);
-                }
-                catch (JsonException exception)
-                {
-                    throw Error(path, lineNumber, $"text(...) requires a quoted string: {exception.Message}");
-                }
+                return Action("text", ParseQuotedString(path, lineNumber, argument, "text"));
             case "mouse_move":
                 return ParseMouseMove(path, lineNumber, argument);
             case "mouse_click":
@@ -328,31 +278,40 @@ internal static class IKeydBehaviorDsl
             case "scroll":
                 return Action("scroll", NormalizeChoice(path, lineNumber, "scroll direction", argument, "Up", "Down"));
             case "media":
-                return Action("media", NormalizeChoice(path, lineNumber, "media command", argument,
-                    "VolumeUp", "VolumeMute", "VolumeDown", "NextTrack", "PlayPause", "PreviousTrack"));
+                return Action("media", NormalizeChoice(path, lineNumber, "media command", argument, "VolumeUp", "VolumeMute", "VolumeDown", "NextTrack", "PlayPause", "PreviousTrack"));
             case "window":
-                return Action("window", NormalizeChoice(path, lineNumber, "window command", argument,
-                    "Minimize", "ToggleMaximize", "LeftHalf", "RightHalf", "TopHalf", "BottomHalf",
-                    "ToggleTopMost", "OpacityUp", "OpacityDown", "ToggleCaption", "ActivateBottomSameClass"));
+                return Action("window", NormalizeChoice(path, lineNumber, "window command", argument, "Minimize", "ToggleMaximize", "LeftHalf", "RightHalf", "TopHalf", "BottomHalf", "ToggleTopMost", "OpacityUp", "OpacityDown", "ToggleCaption", "ActivateBottomSameClass"));
+            case "clipboard":
+                return Action("clipboard", NormalizeChoice(path, lineNumber, "clipboard command", argument, "History"));
+            case "macro":
+                return Action("macro", ParseQuotedString(path, lineNumber, argument, "macro"));
             case "layer" when allowHoldActions:
-                if (!Regex.IsMatch(argument, $@"^{Ident}$", RegexOptions.CultureInvariant))
-                    throw Error(path, lineNumber, "layer(...) expects one layer name");
+                if (!Regex.IsMatch(argument, $@"^{Ident}$", RegexOptions.CultureInvariant)) throw Error(path, lineNumber, "layer(...) expects one layer name");
                 return Action("layer", argument);
             case "modifier" when allowHoldActions:
                 return Action("modifier", NormalizeModifier(path, lineNumber, argument));
             default:
-                throw Error(path, lineNumber, allowHoldActions
-                    ? "action must be key(...), text(...), mouse_move(...), mouse_click(...), scroll(...), media(...), window(...), layer(...) or modifier(...)"
-                    : "action must be key(...), text(...), mouse_move(...), mouse_click(...), scroll(...), media(...) or window(...)");
+                var output = "key(...), text(...), mouse_move(...), mouse_click(...), scroll(...), media(...), window(...), clipboard(...) or macro(...)";
+                throw Error(path, lineNumber, allowHoldActions ? $"action must be {output}, layer(...) or modifier(...)" : $"action must be {output}");
+        }
+    }
+
+    private static string ParseQuotedString(string path, int lineNumber, string argument, string action)
+    {
+        try
+        {
+            return JsonSerializer.Deserialize<string>(argument) ?? throw Error(path, lineNumber, $"{action}(...) requires a quoted string");
+        }
+        catch (JsonException exception)
+        {
+            throw Error(path, lineNumber, $"{action}(...) requires a quoted string: {exception.Message}");
         }
     }
 
     private static JsonObject ParseMouseMove(string path, int lineNumber, string argument)
     {
         var parts = argument.Split(',', StringSplitOptions.TrimEntries);
-        if (parts.Length != 2 ||
-            !int.TryParse(parts[0], NumberStyles.Integer, CultureInfo.InvariantCulture, out var deltaX) ||
-            !int.TryParse(parts[1], NumberStyles.Integer, CultureInfo.InvariantCulture, out var deltaY))
+        if (parts.Length != 2 || !int.TryParse(parts[0], NumberStyles.Integer, CultureInfo.InvariantCulture, out var deltaX) || !int.TryParse(parts[1], NumberStyles.Integer, CultureInfo.InvariantCulture, out var deltaY))
             throw Error(path, lineNumber, "mouse_move(...) expects two integer deltas, for example mouse_move(-30, 0)");
         return Action("mouse_move", $"{deltaX.ToString(CultureInfo.InvariantCulture)},{deltaY.ToString(CultureInfo.InvariantCulture)}");
     }
@@ -361,85 +320,52 @@ internal static class IKeydBehaviorDsl
     {
         var trimmed = value.Trim();
         foreach (var choice in choices)
-            if (string.Equals(trimmed, choice, StringComparison.OrdinalIgnoreCase))
-                return choice;
+            if (string.Equals(trimmed, choice, StringComparison.OrdinalIgnoreCase)) return choice;
         throw Error(path, lineNumber, $"unknown {description} '{trimmed}'; expected one of: {string.Join(", ", choices)}");
     }
 
-    private static JsonObject Action(string kind, string value) => new()
-    {
-        ["kind"] = kind,
-        ["value"] = value
-    };
+    private static JsonObject Action(string kind, string value) => new() { ["kind"] = kind, ["value"] = value };
 
-    private static void ValidateBehaviorDraft(
-        string path,
-        int lineNumber,
-        string trigger,
-        JsonObject draft,
-        JsonObject layers,
-        bool validateLayerReference = true)
+    private static void ValidateBehaviorDraft(string path, int lineNumber, string trigger, JsonObject draft, JsonObject layers, bool validateLayerReference = true)
     {
-        if (draft["hold"] is not JsonObject hold)
-            throw Error(path, lineNumber, $"behavior '{trigger}' requires hold = layer(...) or modifier(...)");
-        if (draft["tap"] is JsonObject tap && tap["kind"]!.GetValue<string>() is "layer" or "modifier")
-            throw Error(path, lineNumber, $"behavior '{trigger}' tap action cannot be layer or modifier");
-
+        if (draft["hold"] is not JsonObject hold) throw Error(path, lineNumber, $"behavior '{trigger}' requires hold = layer(...) or modifier(...)");
+        if (draft["tap"] is JsonObject tap && tap["kind"]!.GetValue<string>() is "layer" or "modifier") throw Error(path, lineNumber, $"behavior '{trigger}' tap action cannot be layer or modifier");
         if (validateLayerReference && hold["kind"]!.GetValue<string>() == "layer")
         {
             var layerName = hold["value"]!.GetValue<string>();
-            if (!ContainsPropertyIgnoreCase(layers, layerName))
-                throw Error(path, lineNumber, $"behavior '{trigger}' references unknown layer '{layerName}'");
+            if (!ContainsPropertyIgnoreCase(layers, layerName)) throw Error(path, lineNumber, $"behavior '{trigger}' references unknown layer '{layerName}'");
         }
     }
 
-    private static string ResolveAndValidateKey(
-        string path,
-        int lineNumber,
-        string keyRef,
-        Dictionary<string, List<List<string>>> layouts)
+    private static string ResolveAndValidateKey(string path, int lineNumber, string keyRef, Dictionary<string, List<List<string>>> layouts)
     {
         var key = ResolveKeyRef(path, lineNumber, keyRef, layouts);
-        if (!KeyId.TryParseCompact(key, out var code))
-            throw Error(path, lineNumber, $"behavior key '{key}' is not a supported physical key");
+        if (!KeyId.TryParseCompact(key, out var code)) throw Error(path, lineNumber, $"behavior key '{key}' is not a supported physical key");
         return new KeyId(code).Value;
     }
 
-    private static string ResolveKeyRef(
-        string path,
-        int lineNumber,
-        string value,
-        Dictionary<string, List<List<string>>> layouts)
+    private static string ResolveKeyRef(string path, int lineNumber, string value, Dictionary<string, List<List<string>>> layouts)
     {
         value = value.Trim();
-        if (Regex.IsMatch(value, $@"^{Ident}$", RegexOptions.CultureInvariant))
-            return value;
-
+        if (Regex.IsMatch(value, $@"^{Ident}$", RegexOptions.CultureInvariant)) return value;
         var named = Regex.Match(value, $@"^({Ident})\.({Ident})$", RegexOptions.CultureInvariant);
         if (named.Success)
         {
             var layoutName = ResolveLayoutName(named.Groups[1].Value, layouts);
-            if (layoutName is null || !layouts.TryGetValue(layoutName, out var layout))
-                throw Error(path, lineNumber, $"unknown layout '{named.Groups[1].Value}' in key reference '{value}'");
+            if (layoutName is null || !layouts.TryGetValue(layoutName, out var layout)) throw Error(path, lineNumber, $"unknown layout '{named.Groups[1].Value}' in key reference '{value}'");
             var requested = named.Groups[2].Value;
             foreach (var key in layout.SelectMany(row => row))
-                if (string.Equals(key, requested, StringComparison.OrdinalIgnoreCase))
-                    return key;
+                if (string.Equals(key, requested, StringComparison.OrdinalIgnoreCase)) return key;
             throw Error(path, lineNumber, $"layout '{named.Groups[1].Value}' has no key named '{requested}'");
         }
-
         var coordinate = Regex.Match(value, $@"^({Ident})\[\s*(\d+)\s*,\s*(\d+)\s*\]$", RegexOptions.CultureInvariant);
-        if (!coordinate.Success)
-            throw Error(path, lineNumber, $"invalid key reference '{value}'");
+        if (!coordinate.Success) throw Error(path, lineNumber, $"invalid key reference '{value}'");
         var resolvedName = ResolveLayoutName(coordinate.Groups[1].Value, layouts);
-        if (resolvedName is null || !layouts.TryGetValue(resolvedName, out var resolved))
-            throw Error(path, lineNumber, $"unknown layout '{coordinate.Groups[1].Value}' in key reference '{value}'");
+        if (resolvedName is null || !layouts.TryGetValue(resolvedName, out var resolved)) throw Error(path, lineNumber, $"unknown layout '{coordinate.Groups[1].Value}' in key reference '{value}'");
         var row = int.Parse(coordinate.Groups[2].Value, CultureInfo.InvariantCulture);
         var column = int.Parse(coordinate.Groups[3].Value, CultureInfo.InvariantCulture);
-        if (row < 1 || row > resolved.Count)
-            throw Error(path, lineNumber, $"row {row} is out of range for layout '{coordinate.Groups[1].Value}'");
-        if (column < 1 || column > resolved[row - 1].Count)
-            throw Error(path, lineNumber, $"column {column} is out of range for layout '{coordinate.Groups[1].Value}' row {row}");
+        if (row < 1 || row > resolved.Count) throw Error(path, lineNumber, $"row {row} is out of range for layout '{coordinate.Groups[1].Value}'");
+        if (column < 1 || column > resolved[row - 1].Count) throw Error(path, lineNumber, $"column {column} is out of range for layout '{coordinate.Groups[1].Value}' row {row}");
         return resolved[row - 1][column - 1];
     }
 
@@ -447,16 +373,12 @@ internal static class IKeydBehaviorDsl
     {
         if (!string.Equals(requested, "POS", StringComparison.OrdinalIgnoreCase))
             return layouts.Keys.FirstOrDefault(name => string.Equals(name, requested, StringComparison.OrdinalIgnoreCase));
-        return layouts.ContainsKey("POS") ? "POS"
-            : layouts.ContainsKey("JIS109") ? "JIS109"
-            : layouts.ContainsKey("BASE") ? "BASE"
-            : null;
+        return layouts.ContainsKey("POS") ? "POS" : layouts.ContainsKey("JIS109") ? "JIS109" : layouts.ContainsKey("BASE") ? "BASE" : null;
     }
 
     private static void ValidateOutputKey(string path, int lineNumber, string key)
     {
-        if (!KeyId.TryParseCompact(key, out _))
-            throw Error(path, lineNumber, $"unknown output key '{key}'");
+        if (!KeyId.TryParseCompact(key, out _)) throw Error(path, lineNumber, $"unknown output key '{key}'");
     }
 
     private static string CanonicalKey(string key)
@@ -465,15 +387,14 @@ internal static class IKeydBehaviorDsl
         return new KeyId(code).Value;
     }
 
-    private static string NormalizeModifier(string path, int lineNumber, string value)
-        => value.Trim().ToLowerInvariant() switch
-        {
-            "ctrl" or "control" => "Control",
-            "shift" => "Shift",
-            "alt" => "Alt",
-            "gui" or "win" or "super" => "Gui",
-            _ => throw Error(path, lineNumber, $"unknown modifier '{value.Trim()}'")
-        };
+    private static string NormalizeModifier(string path, int lineNumber, string value) => value.Trim().ToLowerInvariant() switch
+    {
+        "ctrl" or "control" => "Control",
+        "shift" => "Shift",
+        "alt" => "Alt",
+        "gui" or "win" or "super" => "Gui",
+        _ => throw Error(path, lineNumber, $"unknown modifier '{value.Trim()}'")
+    };
 
     private static bool IsOrdinaryTopLevelBlock(string line)
         => Regex.IsMatch(line, $@"^(profile\s+{Ident}|layout\s+{Ident}|keymap\s+{Ident}(?:\s+using\s+{Ident})?|quirks)\s*\{{$", RegexOptions.CultureInvariant);
