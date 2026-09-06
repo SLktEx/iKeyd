@@ -84,9 +84,6 @@ internal sealed class LegacySendOutput : IMacroOutput
 
             if (legacySendText[index] == '{')
             {
-                // AHK represents a literal closing brace as `{}}`. The first `}` is
-                // the token payload, not the terminator, so the generic first-brace
-                // search cannot parse this form correctly.
                 if (index + 2 < legacySendText.Length &&
                     legacySendText[index + 1] == '}' &&
                     legacySendText[index + 2] == '}')
@@ -124,7 +121,7 @@ internal sealed class LegacySendOutput : IMacroOutput
         => _keyboard.SendKeyPress(WindowsKeyMap.Keyboard(virtualKey));
 
     public void SendChord(IReadOnlyList<ushort> modifiers, ushort virtualKey)
-        => SendKeyWithModifiers(WindowsKeyMap.Keyboard(virtualKey), modifiers);
+        => SendKeyWithModifiers(WindowsKeyMap.Keyboard(virtualKey), modifiers, releaseInDeclarationOrder: false);
 
     public void SendChord(ushort modifier, ushort virtualKey)
     {
@@ -156,7 +153,10 @@ internal sealed class LegacySendOutput : IMacroOutput
         }
     }
 
-    private void SendKeyWithModifiers(KeyboardKey key, IReadOnlyList<ushort> modifiers)
+    private void SendKeyWithModifiers(
+        KeyboardKey key,
+        IReadOnlyList<ushort> modifiers,
+        bool releaseInDeclarationOrder = true)
     {
         foreach (var modifier in modifiers)
             _keyboard.SendKey(WindowsKeyMap.Keyboard(modifier), KeyEventKind.Down);
@@ -167,8 +167,16 @@ internal sealed class LegacySendOutput : IMacroOutput
         }
         finally
         {
-            for (var index = modifiers.Count - 1; index >= 0; index--)
-                _keyboard.SendKey(WindowsKeyMap.Keyboard(modifiers[index]), KeyEventKind.Up);
+            if (releaseInDeclarationOrder)
+            {
+                foreach (var modifier in modifiers)
+                    _keyboard.SendKey(WindowsKeyMap.Keyboard(modifier), KeyEventKind.Up);
+            }
+            else
+            {
+                for (var index = modifiers.Count - 1; index >= 0; index--)
+                    _keyboard.SendKey(WindowsKeyMap.Keyboard(modifiers[index]), KeyEventKind.Up);
+            }
         }
     }
 
@@ -183,8 +191,8 @@ internal sealed class LegacySendOutput : IMacroOutput
         }
         finally
         {
-            for (var index = modifiers.Count - 1; index >= 0; index--)
-                _keyboard.SendKey(WindowsKeyMap.Keyboard(modifiers[index]), KeyEventKind.Up);
+            foreach (var modifier in modifiers)
+                _keyboard.SendKey(WindowsKeyMap.Keyboard(modifier), KeyEventKind.Up);
         }
     }
 
@@ -238,7 +246,7 @@ internal sealed class LegacySendOutput : IMacroOutput
             throw UnsupportedSyntax($"{{{token.ToString()}}}", "Click token requires a desktop backend");
 
         var payload = token[6..].Trim();
-        var controlModifier = modifiers.Count == 1 && modifiers[0] == WindowsKeyMap.Control;
+        var controlModifier = modifiers.Count == 1 && IsControlModifier(modifiers[0]);
         if (payload.Equals("WU", StringComparison.OrdinalIgnoreCase) || payload.Equals("WD", StringComparison.OrdinalIgnoreCase))
         {
             if (modifiers.Count != 0 && !controlModifier)
@@ -292,7 +300,7 @@ internal sealed class LegacySendOutput : IMacroOutput
         if (!TryResolveJisCharacter(character, out var key, out var shiftRequired))
             return false;
 
-        if (!shiftRequired || explicitModifiers.Contains(WindowsKeyMap.Shift))
+        if (!shiftRequired || explicitModifiers.Any(IsShiftModifier))
         {
             SendKeyWithModifiers(key, explicitModifiers);
             return true;
@@ -300,7 +308,7 @@ internal sealed class LegacySendOutput : IMacroOutput
 
         var modifiers = new List<ushort>(explicitModifiers.Count + 1);
         modifiers.AddRange(explicitModifiers);
-        modifiers.Add(WindowsKeyMap.Shift);
+        modifiers.Add(WindowsKeyMap.LeftShift);
         SendKeyWithModifiers(key, modifiers);
         return true;
     }
@@ -394,12 +402,18 @@ internal sealed class LegacySendOutput : IMacroOutput
     {
         virtualKey = character switch
         {
-            '^' => WindowsKeyMap.Control,
-            '!' => WindowsKeyMap.Alt,
-            '+' => WindowsKeyMap.Shift,
+            '^' => WindowsKeyMap.LeftControl,
+            '!' => WindowsKeyMap.LeftAlt,
+            '+' => WindowsKeyMap.LeftShift,
             '#' => WindowsKeyMap.LeftWin,
             _ => 0
         };
         return virtualKey != 0;
     }
+
+    private static bool IsControlModifier(ushort virtualKey)
+        => virtualKey is WindowsKeyMap.Control or WindowsKeyMap.LeftControl or WindowsKeyMap.RightControl;
+
+    private static bool IsShiftModifier(ushort virtualKey)
+        => virtualKey is WindowsKeyMap.Shift or WindowsKeyMap.LeftShift or WindowsKeyMap.RightShift;
 }
