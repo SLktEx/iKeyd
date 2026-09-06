@@ -15,7 +15,7 @@ spec.loader.exec_module(module)
 
 
 class IKeydBehaviorDslTests(unittest.TestCase):
-    def test_fixture_compiles_layer_tap_mod_tap_block_and_desktop_actions(self):
+    def test_fixture_compiles_layer_tap_mod_tap_block_and_pc_actions(self):
         path = ROOT / "tests" / "tooling" / "fixtures" / "behaviors.ikeyd"
         profile = module.compile_dsl(path.read_text(encoding="utf-8"), path)
 
@@ -25,30 +25,20 @@ class IKeydBehaviorDslTests(unittest.TestCase):
         self.assertEqual({"kind": "scroll", "value": "Up"}, profile["layers"]["NAV"]["O"])
         self.assertEqual({"kind": "media", "value": "PlayPause"}, profile["layers"]["NAV"]["P"])
         self.assertEqual({"kind": "window", "value": "LeftHalf"}, profile["layers"]["NAV"]["At"])
+        self.assertEqual({"kind": "clipboard", "value": "History"}, profile["layers"]["NAV"]["SColon"])
+        self.assertEqual({"kind": "macro", "value": "hello"}, profile["layers"]["NAV"]["Colon"])
         self.assertEqual(
-            {
-                "timeoutMs": 180,
-                "interrupt": "hold",
-                "tap": {"kind": "key", "value": "Space"},
-                "hold": {"kind": "layer", "value": "NAV"},
-            },
+            {"timeoutMs": 180, "interrupt": "hold", "tap": {"kind": "key", "value": "Space"}, "hold": {"kind": "layer", "value": "NAV"}},
             profile["behaviors"]["Space"],
         )
-        self.assertEqual(
-            {"kind": "modifier", "value": "Control"},
-            profile["behaviors"]["A"]["hold"],
-        )
+        self.assertEqual({"kind": "modifier", "value": "Control"}, profile["behaviors"]["A"]["hold"])
         self.assertNotIn("tap", profile["behaviors"]["Muhenkan"])
         self.assertEqual(200, profile["behaviors"]["Henkan"]["timeoutMs"])
         self.assertEqual("tap", profile["behaviors"]["Henkan"]["interrupt"])
-        self.assertEqual(
-            {"kind": "window", "value": "ToggleMaximize"},
-            profile["behaviors"]["Henkan"]["tap"],
-        )
+        self.assertEqual({"kind": "window", "value": "ToggleMaximize"}, profile["behaviors"]["Henkan"]["tap"])
 
     def test_pos_reference_uses_selected_jis109_keyboard(self):
-        profile = module.compile_dsl(
-            """
+        profile = module.compile_dsl("""
 profile demo {
     chord_window = 40ms
 }
@@ -63,9 +53,7 @@ keymap S {
 keymap K {
     Q = q
 }
-""".strip(),
-            Path("profile.ikeyd"),
-        )
+""".strip(), Path("profile.ikeyd"))
         self.assertIn("Ro", profile["layers"]["NAV"])
         self.assertIn("Muhenkan", profile["behaviors"])
 
@@ -165,6 +153,22 @@ keymap K {
 }
 """.strip()
         with self.assertRaisesRegex(module.DslError, r"mouse_move\(\.\.\.\) expects two integer deltas"):
+            module.compile_dsl(text, Path("profile.ikeyd"))
+
+    def test_macro_requires_quoted_string(self):
+        text = """
+profile demo {
+    chord_window = 40ms
+}
+keyboard JIS109
+layer HOST {
+    H = macro(not-quoted)
+}
+behavior POS.Space = layer(HOST)
+keymap S { Q = q }
+keymap K { Q = q }
+""".strip()
+        with self.assertRaisesRegex(module.DslError, r"macro\(\.\.\.\) requires a quoted string"):
             module.compile_dsl(text, Path("profile.ikeyd"))
 
 
