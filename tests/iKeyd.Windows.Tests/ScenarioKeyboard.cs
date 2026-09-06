@@ -59,8 +59,9 @@ internal static class ScenarioKeyboard
 
     /// <summary>
     /// Physical scan codes that matter to the legacy AHK hotkey declarations.
-    /// hotkeySKG binds Kana as sc070 and the thumb keys as vk1Csc079/vk1Dsc07B,
-    /// so VK-only synthetic input does not faithfully exercise those branches.
+    /// hotkeySKG binds Kana as sc070, thumb keys as vk1Csc079/vk1Dsc07B,
+    /// Colon as sc028 and Comma as sc033. Supplying the physical scan code keeps
+    /// hosted differential input faithful to those declarations.
     /// </summary>
     public static byte ResolveScanCode(string key)
         => key.Trim().ToUpperInvariant() switch
@@ -68,6 +69,8 @@ internal static class ScenarioKeyboard
             "KANA" => 0x70,
             "CONVERT" or "HENKAN" => 0x79,
             "NONCONVERT" or "MUHENKAN" => 0x7B,
+            "COLON" => 0x28,
+            "COMMA" => 0x33,
             _ => 0
         };
 
