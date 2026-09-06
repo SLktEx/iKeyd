@@ -16,13 +16,18 @@ internal sealed class LegacySuspendToggleHandler : IKeyboardEventHandler
     private readonly object _gate = new();
     private readonly KeyboardState _keyboardState;
     private readonly IKeyboardEventHandler _inner;
+    private readonly Action<bool>? _suspensionChanged;
     private bool _suspended;
     private bool _suppressEscapeUp;
 
-    public LegacySuspendToggleHandler(KeyboardState keyboardState, IKeyboardEventHandler inner)
+    public LegacySuspendToggleHandler(
+        KeyboardState keyboardState,
+        IKeyboardEventHandler inner,
+        Action<bool>? suspensionChanged = null)
     {
         _keyboardState = keyboardState ?? throw new ArgumentNullException(nameof(keyboardState));
         _inner = inner ?? throw new ArgumentNullException(nameof(inner));
+        _suspensionChanged = suspensionChanged;
     }
 
     internal bool IsSuspended
@@ -53,6 +58,7 @@ internal sealed class LegacySuspendToggleHandler : IKeyboardEventHandler
                 {
                     _suspended = !_suspended;
                     _suppressEscapeUp = true;
+                    _suspensionChanged?.Invoke(_suspended);
                     return KeyboardDisposition.Suppress;
                 }
             }
