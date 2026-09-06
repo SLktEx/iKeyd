@@ -14,6 +14,8 @@ layer NAV {
     POS.O = scroll(Up)
     POS.P = media(PlayPause)
     POS.At = window(LeftHalf)
+    POS.SColon = clipboard(History)
+    POS.Colon = macro("hello")
 }
 
 behavior POS.Space = layer_tap(NAV, Space)
