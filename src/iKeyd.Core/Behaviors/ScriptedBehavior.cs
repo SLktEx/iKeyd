@@ -1,5 +1,6 @@
 using iKeyd.Core.Chords;
 using iKeyd.Core.Configuration;
+using iKeyd.Core.State;
 
 namespace iKeyd.Core.Behaviors;
 
@@ -7,13 +8,26 @@ internal sealed class ScriptedBehaviorDefinition : BehaviorDefinition
 {
     private readonly UserBehaviorDefinitionProfile _definition;
     private readonly IReadOnlyDictionary<string, string> _arguments;
+    private readonly RuntimeStateProfile _stateProfile;
+    private readonly IRuntimeStateStore _runtimeState;
 
     public ScriptedBehaviorDefinition(
         UserBehaviorDefinitionProfile definition,
         BehaviorInvocationProfile invocation)
+        : this(definition, invocation, RuntimeStateProfile.Empty, EmptyRuntimeStateStore.Instance)
+    {
+    }
+
+    public ScriptedBehaviorDefinition(
+        UserBehaviorDefinitionProfile definition,
+        BehaviorInvocationProfile invocation,
+        RuntimeStateProfile stateProfile,
+        IRuntimeStateStore runtimeState)
     {
         ArgumentNullException.ThrowIfNull(definition);
         ArgumentNullException.ThrowIfNull(invocation);
+        ArgumentNullException.ThrowIfNull(stateProfile);
+        ArgumentNullException.ThrowIfNull(runtimeState);
         if (invocation.Arguments.Count != definition.Parameters.Count)
         {
             throw new InvalidDataException(
@@ -23,6 +37,8 @@ internal sealed class ScriptedBehaviorDefinition : BehaviorDefinition
             throw new InvalidDataException($"User behavior '{definition.Name}' does not support invocation options yet.");
 
         _definition = definition;
+        _stateProfile = stateProfile;
+        _runtimeState = runtimeState;
         var arguments = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         for (var index = 0; index < definition.Parameters.Count; index++)
             arguments.Add(definition.Parameters[index], invocation.Arguments[index]);
@@ -32,7 +48,7 @@ internal sealed class ScriptedBehaviorDefinition : BehaviorDefinition
     }
 
     internal override BehaviorInstance CreateInstance(KeyId sourceKey, long timestampMs)
-        => new ScriptedBehaviorInstance(sourceKey, _definition, _arguments);
+        => new ScriptedBehaviorInstance(sourceKey, _definition, _arguments, _runtimeState);
 
     private void ValidateDefinition()
     {
@@ -74,6 +90,30 @@ internal sealed class ScriptedBehaviorDefinition : BehaviorDefinition
                         throw new InvalidDataException("set_bool value must be true or false.");
                     break;
 
+                case "state_set":
+                {
+                    var field = RequireStateField(statement.Target, statement.Op);
+                    if (statement.Value is null)
+                        throw new InvalidDataException("state_set requires a value.");
+                    try
+                    {
+                        _ = field.NormalizeScalar(statement.Value);
+                    }
+                    catch (ArgumentException exception)
+                    {
+                        throw new InvalidDataException(exception.Message, exception);
+                    }
+                    break;
+                }
+
+                case "state_toggle":
+                {
+                    var field = RequireStateField(statement.Target, statement.Op);
+                    if (field.Type != RuntimeStateType.Bool)
+                        throw new InvalidDataException($"Runtime state field '{field.Name}' is not bool and cannot be toggled.");
+                    break;
+                }
+
                 case "send":
                 case "layer_on":
                 case "layer_off":
@@ -92,9 +132,42 @@ internal sealed class ScriptedBehaviorDefinition : BehaviorDefinition
                     ValidateStatements(statement.Else);
                     break;
 
+                case "if_state_equals":
+                case "if_state_not_equals":
+                {
+                    var field = RequireStateField(statement.Target, statement.Op);
+                    if (statement.Value is null)
+                        throw new InvalidDataException($"{statement.Op} requires an expected value.");
+                    try
+                    {
+                        _ = field.NormalizeScalar(statement.Value);
+                    }
+                    catch (ArgumentException exception)
+                    {
+                        throw new InvalidDataException(exception.Message, exception);
+                    }
+                    ValidateStatements(statement.Then);
+                    ValidateStatements(statement.Else);
+                    break;
+                }
+
                 default:
                     throw new InvalidDataException($"Unsupported user behavior operation '{statement.Op}'.");
             }
+        }
+    }
+
+    private RuntimeStateFieldProfile RequireStateField(string? name, string op)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+            throw new InvalidDataException($"{op} requires a state field.");
+        try
+        {
+            return _stateProfile.GetField(name);
+        }
+        catch (KeyNotFoundException exception)
+        {
+            throw new InvalidDataException(exception.Message, exception);
         }
     }
 
@@ -109,6 +182,7 @@ internal sealed class ScriptedBehaviorInstance : BehaviorInstance
 {
     private readonly UserBehaviorDefinitionProfile _definition;
     private readonly IReadOnlyDictionary<string, string> _arguments;
+    private readonly IRuntimeStateStore _runtimeState;
     private readonly Dictionary<string, bool> _locals;
     private readonly Dictionary<string, int> _ownedLayers = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, int> _ownedModifiers = new(StringComparer.OrdinalIgnoreCase);
@@ -117,11 +191,13 @@ internal sealed class ScriptedBehaviorInstance : BehaviorInstance
     public ScriptedBehaviorInstance(
         KeyId sourceKey,
         UserBehaviorDefinitionProfile definition,
-        IReadOnlyDictionary<string, string> arguments)
+        IReadOnlyDictionary<string, string> arguments,
+        IRuntimeStateStore runtimeState)
         : base(sourceKey)
     {
         _definition = definition;
         _arguments = arguments;
+        _runtimeState = runtimeState ?? throw new ArgumentNullException(nameof(runtimeState));
         _locals = definition.Locals.ToDictionary(
             local => local.Name,
             local => local.InitialValue,
@@ -182,6 +258,14 @@ internal sealed class ScriptedBehaviorInstance : BehaviorInstance
                     _locals[statement.Target!] = bool.Parse(statement.Value!);
                     break;
 
+                case "state_set":
+                    _runtimeState.SetScalar(statement.Target!, statement.Value!);
+                    break;
+
+                case "state_toggle":
+                    _runtimeState.Toggle(statement.Target!);
+                    break;
+
                 case "send":
                     actions.Add(BehaviorAction.SendKey(new KeyId(ResolveOperand(statement.Value!, eventArguments))));
                     break;
@@ -224,6 +308,18 @@ internal sealed class ScriptedBehaviorInstance : BehaviorInstance
                         eventArguments,
                         actions);
                     break;
+
+                case "if_state_equals":
+                case "if_state_not_equals":
+                {
+                    var found = _runtimeState.TryGetScalar(statement.Target!, out var actual);
+                    var equals = found && string.Equals(actual, statement.Value, StringComparison.OrdinalIgnoreCase);
+                    var matches = statement.Op.Equals("if_state_equals", StringComparison.OrdinalIgnoreCase)
+                        ? equals
+                        : found && !equals;
+                    ExecuteStatements(matches ? statement.Then : statement.Else, eventArguments, actions);
+                    break;
+                }
 
                 default:
                     throw new InvalidOperationException($"Unsupported user behavior operation '{statement.Op}'.");

@@ -1,6 +1,7 @@
 using iKeyd.Core.Automation;
 using iKeyd.Core.Chords;
 using iKeyd.Core.Configuration;
+using iKeyd.Core.State;
 
 namespace iKeyd.Core.Behaviors;
 
@@ -21,21 +22,43 @@ public static class BehaviorDefinitionFactory
         => Create(
             invocation,
             new Dictionary<string, UserBehaviorDefinitionProfile>(StringComparer.OrdinalIgnoreCase),
-            EmptySystemQuerySnapshot.Instance);
+            EmptySystemQuerySnapshot.Instance,
+            RuntimeStateProfile.Empty,
+            EmptyRuntimeStateStore.Instance);
 
     public static BehaviorDefinition Create(
         BehaviorInvocationProfile invocation,
         IReadOnlyDictionary<string, UserBehaviorDefinitionProfile> userDefinitions)
-        => Create(invocation, userDefinitions, EmptySystemQuerySnapshot.Instance);
+        => Create(
+            invocation,
+            userDefinitions,
+            EmptySystemQuerySnapshot.Instance,
+            RuntimeStateProfile.Empty,
+            EmptyRuntimeStateStore.Instance);
 
     public static BehaviorDefinition Create(
         BehaviorInvocationProfile invocation,
         IReadOnlyDictionary<string, UserBehaviorDefinitionProfile> userDefinitions,
         ISystemQuerySnapshot systemQueries)
+        => Create(
+            invocation,
+            userDefinitions,
+            systemQueries,
+            RuntimeStateProfile.Empty,
+            EmptyRuntimeStateStore.Instance);
+
+    public static BehaviorDefinition Create(
+        BehaviorInvocationProfile invocation,
+        IReadOnlyDictionary<string, UserBehaviorDefinitionProfile> userDefinitions,
+        ISystemQuerySnapshot systemQueries,
+        RuntimeStateProfile stateProfile,
+        IRuntimeStateStore runtimeState)
     {
         ArgumentNullException.ThrowIfNull(invocation);
         ArgumentNullException.ThrowIfNull(userDefinitions);
         ArgumentNullException.ThrowIfNull(systemQueries);
+        ArgumentNullException.ThrowIfNull(stateProfile);
+        ArgumentNullException.ThrowIfNull(runtimeState);
 
         if (string.Equals(invocation.Name, "LT", StringComparison.OrdinalIgnoreCase))
             return CreateLayerTap(invocation);
@@ -55,17 +78,27 @@ public static class BehaviorDefinitionFactory
             return CreateShell(invocation);
         if (string.Equals(invocation.Name, "QUERY", StringComparison.OrdinalIgnoreCase))
             return CreateQuery(invocation);
+        if (string.Equals(invocation.Name, "SET", StringComparison.OrdinalIgnoreCase))
+            return CreateStateSet(invocation, stateProfile);
+        if (string.Equals(invocation.Name, "TOGGLE", StringComparison.OrdinalIgnoreCase))
+            return CreateStateToggle(invocation, stateProfile);
         if (string.Equals(invocation.Name, "WHEN", StringComparison.OrdinalIgnoreCase))
-            return CreateWhen(invocation, systemQueries);
+            return CreateWhen(invocation, systemQueries, stateProfile, runtimeState);
         if (userDefinitions.TryGetValue(invocation.Name, out var userDefinition))
-            return new ScriptedBehaviorDefinition(userDefinition, invocation);
+            return new ScriptedBehaviorDefinition(userDefinition, invocation, stateProfile, runtimeState);
 
         throw new NotSupportedException($"Unknown behavior '{invocation.Name}'.");
     }
 
     public static IReadOnlyList<string> GetRequiredSystemQueries(BehaviorInvocationProfile invocation)
+        => GetRequiredSystemQueries(invocation, RuntimeStateProfile.Empty);
+
+    public static IReadOnlyList<string> GetRequiredSystemQueries(
+        BehaviorInvocationProfile invocation,
+        RuntimeStateProfile stateProfile)
     {
         ArgumentNullException.ThrowIfNull(invocation);
+        ArgumentNullException.ThrowIfNull(stateProfile);
         var queries = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         if (string.Equals(invocation.Name, "QUERY", StringComparison.OrdinalIgnoreCase))
@@ -75,9 +108,17 @@ public static class BehaviorDefinitionFactory
         else if (string.Equals(invocation.Name, "WHEN", StringComparison.OrdinalIgnoreCase))
         {
             var used = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            var branch = ReadConditionalBranch(invocation, string.Empty, used);
+            var branch = ReadConditionalBranch(invocation, string.Empty, used, stateProfile);
             ValidateNoUnusedWhenOptions(invocation, used);
             branch.CollectSystemQueries(queries);
+        }
+        else if (string.Equals(invocation.Name, "SET", StringComparison.OrdinalIgnoreCase))
+        {
+            _ = ReadStateSet(invocation, stateProfile);
+        }
+        else if (string.Equals(invocation.Name, "TOGGLE", StringComparison.OrdinalIgnoreCase))
+        {
+            _ = ReadToggleField(invocation, stateProfile);
         }
 
         return queries.OrderBy(value => value, StringComparer.OrdinalIgnoreCase).ToArray();
@@ -189,29 +230,124 @@ public static class BehaviorDefinitionFactory
         return SystemQueryKeys.Normalize(RequireOption(invocation, "key"));
     }
 
+    private static BehaviorDefinition CreateStateSet(
+        BehaviorInvocationProfile invocation,
+        RuntimeStateProfile stateProfile)
+    {
+        var (field, value) = ReadStateSet(invocation, stateProfile);
+        return StandardBehaviors.Press(BehaviorAction.StateSet(field.Name, value));
+    }
+
+    private static (RuntimeStateFieldProfile Field, string Value) ReadStateSet(
+        BehaviorInvocationProfile invocation,
+        RuntimeStateProfile stateProfile)
+    {
+        string fieldName;
+        string rawValue;
+        if (invocation.Arguments.Count == 2 && invocation.Options.Count == 0)
+        {
+            fieldName = invocation.Arguments[0];
+            rawValue = invocation.Arguments[1];
+        }
+        else
+        {
+            RequireCount(invocation, 0, "SET() { state = mode; value = \"coding\" }");
+            ValidateKnownOptions(invocation, ["state", "value"]);
+            fieldName = RequireOption(invocation, "state");
+            rawValue = RequireOption(invocation, "value");
+        }
+
+        var field = stateProfile.GetField(fieldName);
+        try
+        {
+            return (field, field.NormalizeScalar(rawValue));
+        }
+        catch (ArgumentException exception)
+        {
+            throw new InvalidDataException(exception.Message, exception);
+        }
+    }
+
+    private static BehaviorDefinition CreateStateToggle(
+        BehaviorInvocationProfile invocation,
+        RuntimeStateProfile stateProfile)
+    {
+        var field = ReadToggleField(invocation, stateProfile);
+        return StandardBehaviors.Press(BehaviorAction.StateToggle(field.Name));
+    }
+
+    private static RuntimeStateFieldProfile ReadToggleField(
+        BehaviorInvocationProfile invocation,
+        RuntimeStateProfile stateProfile)
+    {
+        string fieldName;
+        if (invocation.Arguments.Count == 1 && invocation.Options.Count == 0)
+        {
+            fieldName = invocation.Arguments[0];
+        }
+        else
+        {
+            RequireCount(invocation, 0, "TOGGLE() { state = nav_locked }");
+            ValidateKnownOptions(invocation, ["state"]);
+            fieldName = RequireOption(invocation, "state");
+        }
+
+        var field = stateProfile.GetField(fieldName);
+        if (field.Type != RuntimeStateType.Bool)
+            throw new InvalidDataException($"Runtime state field '{field.Name}' is not bool and cannot be toggled.");
+        return field;
+    }
+
     private static BehaviorDefinition CreateWhen(
         BehaviorInvocationProfile invocation,
-        ISystemQuerySnapshot systemQueries)
+        ISystemQuerySnapshot systemQueries,
+        RuntimeStateProfile stateProfile,
+        IRuntimeStateSnapshot runtimeState)
     {
-        RequireCount(invocation, 0, "WHEN() { query = ... }");
+        RequireCount(invocation, 0, "WHEN() { query|state = ... }");
         var used = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var branch = ReadConditionalBranch(invocation, string.Empty, used);
+        var branch = ReadConditionalBranch(invocation, string.Empty, used, stateProfile);
         ValidateNoUnusedWhenOptions(invocation, used);
-        return new ConditionalBehaviorDefinition(branch, systemQueries);
+        return new ConditionalBehaviorDefinition(branch, systemQueries, runtimeState);
     }
 
     private static BehaviorOutputBranch ReadConditionalBranch(
         BehaviorInvocationProfile invocation,
         string prefix,
-        ISet<string> used)
+        ISet<string> used,
+        RuntimeStateProfile stateProfile)
     {
-        var query = SystemQueryKeys.Normalize(ReadUsedOption(invocation, prefix + "query", used));
         var @operator = ParseConditionOperator(ReadUsedOption(invocation, prefix + "operator", used));
         var expected = ReadUsedOption(invocation, prefix + "expected", used);
-        var condition = new SystemQueryCondition(query, @operator, expected);
+        var queryKey = prefix + "query";
+        var stateKey = prefix + "state";
+        var hasQuery = invocation.Options.TryGetValue(queryKey, out var query);
+        var hasState = invocation.Options.TryGetValue(stateKey, out var state);
+        if (hasQuery == hasState)
+            throw new InvalidDataException($"WHEN requires exactly one of '{queryKey}' or '{stateKey}'.");
 
-        var thenBranch = ReadOutputBranch(invocation, prefix + "then_", used, required: true)!;
-        var elseBranch = ReadOutputBranch(invocation, prefix + "else_", used, required: false);
+        IBehaviorCondition condition;
+        if (hasQuery)
+        {
+            used.Add(queryKey);
+            condition = new SystemQueryCondition(SystemQueryKeys.Normalize(query!), @operator, expected);
+        }
+        else
+        {
+            used.Add(stateKey);
+            var field = stateProfile.GetField(state!);
+            try
+            {
+                condition = new RuntimeStateCondition(field, @operator, expected);
+            }
+            catch (ArgumentException exception)
+            {
+                throw new InvalidDataException(exception.Message, exception);
+            }
+        }
+
+        var thenBranch = ReadOutputBranch(invocation, prefix + "then_", used, required: true, stateProfile)!;
+        var elseBranch = ReadOutputBranch(invocation, prefix + "else_", used, required: false, stateProfile);
         return BehaviorOutputBranch.When(condition, thenBranch, elseBranch);
     }
 
@@ -219,7 +355,8 @@ public static class BehaviorDefinitionFactory
         BehaviorInvocationProfile invocation,
         string prefix,
         ISet<string> used,
-        bool required)
+        bool required,
+        RuntimeStateProfile stateProfile)
     {
         var kindKey = prefix + "kind";
         if (!invocation.Options.TryGetValue(kindKey, out var rawKind))
@@ -232,21 +369,55 @@ public static class BehaviorDefinitionFactory
 
         var kind = rawKind.Trim().ToUpperInvariant();
         if (kind == "WHEN")
-            return ReadConditionalBranch(invocation, prefix, used);
+            return ReadConditionalBranch(invocation, prefix, used, stateProfile);
 
-        var value = ReadUsedOption(invocation, prefix + "value", used);
-        BehaviorAction action = kind switch
+        BehaviorAction action;
+        if (kind == "TOGGLE")
         {
-            "KEY" => BehaviorAction.SendKey(new KeyId(value)),
-            "UNICODE" => BehaviorAction.SendUnicode(value),
-            "TEXT" => BehaviorAction.SendText(value),
-            "SHELL" => BehaviorAction.Shell(value),
-            "QUERY" => BehaviorAction.Query(value),
-            "EXEC" => BehaviorAction.Exec(value, ReadIndexedOptions(invocation, prefix + "arg", used)),
-            _ => throw new InvalidDataException(
-                $"Unsupported WHEN branch kind '{rawKind}'. Use key, unicode, text, exec, shell, query, or when.")
-        };
+            var field = ReadUsedStateField(invocation, prefix + "state", used, stateProfile);
+            if (field.Type != RuntimeStateType.Bool)
+                throw new InvalidDataException($"Runtime state field '{field.Name}' is not bool and cannot be toggled.");
+            action = BehaviorAction.StateToggle(field.Name);
+        }
+        else if (kind == "SET")
+        {
+            var field = ReadUsedStateField(invocation, prefix + "state", used, stateProfile);
+            var value = ReadUsedOption(invocation, prefix + "value", used);
+            try
+            {
+                action = BehaviorAction.StateSet(field.Name, field.NormalizeScalar(value));
+            }
+            catch (ArgumentException exception)
+            {
+                throw new InvalidDataException(exception.Message, exception);
+            }
+        }
+        else
+        {
+            var value = ReadUsedOption(invocation, prefix + "value", used);
+            action = kind switch
+            {
+                "KEY" => BehaviorAction.SendKey(new KeyId(value)),
+                "UNICODE" => BehaviorAction.SendUnicode(value),
+                "TEXT" => BehaviorAction.SendText(value),
+                "SHELL" => BehaviorAction.Shell(value),
+                "QUERY" => BehaviorAction.Query(value),
+                "EXEC" => BehaviorAction.Exec(value, ReadIndexedOptions(invocation, prefix + "arg", used)),
+                _ => throw new InvalidDataException(
+                    $"Unsupported WHEN branch kind '{rawKind}'. Use key, unicode, text, exec, shell, query, set, toggle, or when.")
+            };
+        }
         return BehaviorOutputBranch.Action(action);
+    }
+
+    private static RuntimeStateFieldProfile ReadUsedStateField(
+        BehaviorInvocationProfile invocation,
+        string name,
+        ISet<string> used,
+        RuntimeStateProfile stateProfile)
+    {
+        var raw = ReadUsedOption(invocation, name, used);
+        return stateProfile.GetField(raw);
     }
 
     private static SystemQueryConditionOperator ParseConditionOperator(string value)

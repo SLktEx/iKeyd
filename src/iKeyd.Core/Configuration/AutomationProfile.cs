@@ -2,6 +2,7 @@ using iKeyd.Core.Automation;
 using iKeyd.Core.Behaviors;
 using iKeyd.Core.Chords;
 using iKeyd.Core.Keymaps;
+using iKeyd.Core.State;
 
 namespace iKeyd.Core.Configuration;
 
@@ -9,7 +10,7 @@ public sealed record AutomationProfile
 {
     private static readonly HashSet<string> StandardBehaviorNames = new(StringComparer.OrdinalIgnoreCase)
     {
-        "LT", "MT", "MO", "MOD", "UNICODE", "TEXT", "EXEC", "SHELL", "QUERY", "WHEN"
+        "LT", "MT", "MO", "MOD", "UNICODE", "TEXT", "EXEC", "SHELL", "QUERY", "WHEN", "SET", "TOGGLE"
     };
 
     private readonly IReadOnlyDictionary<string, AutomationKeymapProfile> _keymaps;
@@ -21,7 +22,8 @@ public sealed record AutomationProfile
         string startupMode = "S",
         IEnumerable<HotkeyBinding>? hotkeys = null,
         IEnumerable<UserBehaviorDefinitionProfile>? behaviorDefinitions = null,
-        ClipboardHistoryProfile? clipboard = null)
+        ClipboardHistoryProfile? clipboard = null,
+        RuntimeStateProfile? state = null)
     {
         if (chordWindowMs < 0)
             throw new ArgumentOutOfRangeException(nameof(chordWindowMs));
@@ -33,6 +35,7 @@ public sealed record AutomationProfile
         StartupMode = startupMode;
         Hotkeys = (hotkeys ?? []).ToArray();
         Clipboard = clipboard ?? ClipboardHistoryProfile.Default;
+        State = state ?? RuntimeStateProfile.Empty;
 
         var byName = new Dictionary<string, AutomationKeymapProfile>(StringComparer.OrdinalIgnoreCase);
         foreach (var keymap in keymaps)
@@ -63,6 +66,7 @@ public sealed record AutomationProfile
     public string StartupMode { get; }
     public IReadOnlyList<HotkeyBinding> Hotkeys { get; }
     public ClipboardHistoryProfile Clipboard { get; }
+    public RuntimeStateProfile State { get; }
     public IReadOnlyDictionary<string, AutomationKeymapProfile> Keymaps => _keymaps;
     public IReadOnlyDictionary<string, UserBehaviorDefinitionProfile> BehaviorDefinitions => _behaviorDefinitions;
 
@@ -80,7 +84,7 @@ public sealed record AutomationProfile
             {
                 foreach (var mapping in keymap.BehaviorMappings)
                 {
-                    foreach (var query in BehaviorDefinitionFactory.GetRequiredSystemQueries(mapping.Invocation))
+                    foreach (var query in BehaviorDefinitionFactory.GetRequiredSystemQueries(mapping.Invocation, State))
                         queries.Add(query);
                 }
             }
@@ -138,21 +142,49 @@ public sealed record AutomationKeymapProfile
     public IReadOnlyDictionary<KeyId, BehaviorDefinition> BuildBehaviorBindings()
         => BuildBehaviorBindings(
             new Dictionary<string, UserBehaviorDefinitionProfile>(StringComparer.OrdinalIgnoreCase),
-            EmptySystemQuerySnapshot.Instance);
+            EmptySystemQuerySnapshot.Instance,
+            RuntimeStateProfile.Empty,
+            EmptyRuntimeStateStore.Instance);
 
     public IReadOnlyDictionary<KeyId, BehaviorDefinition> BuildBehaviorBindings(
         IReadOnlyDictionary<string, UserBehaviorDefinitionProfile> userDefinitions)
-        => BuildBehaviorBindings(userDefinitions, EmptySystemQuerySnapshot.Instance);
+        => BuildBehaviorBindings(
+            userDefinitions,
+            EmptySystemQuerySnapshot.Instance,
+            RuntimeStateProfile.Empty,
+            EmptyRuntimeStateStore.Instance);
 
     public IReadOnlyDictionary<KeyId, BehaviorDefinition> BuildBehaviorBindings(
         IReadOnlyDictionary<string, UserBehaviorDefinitionProfile> userDefinitions,
         ISystemQuerySnapshot systemQueries)
+        => BuildBehaviorBindings(
+            userDefinitions,
+            systemQueries,
+            RuntimeStateProfile.Empty,
+            EmptyRuntimeStateStore.Instance);
+
+    public IReadOnlyDictionary<KeyId, BehaviorDefinition> BuildBehaviorBindings(
+        IReadOnlyDictionary<string, UserBehaviorDefinitionProfile> userDefinitions,
+        ISystemQuerySnapshot systemQueries,
+        RuntimeStateProfile stateProfile,
+        IRuntimeStateStore runtimeState)
     {
         ArgumentNullException.ThrowIfNull(userDefinitions);
         ArgumentNullException.ThrowIfNull(systemQueries);
+        ArgumentNullException.ThrowIfNull(stateProfile);
+        ArgumentNullException.ThrowIfNull(runtimeState);
         var result = new Dictionary<KeyId, BehaviorDefinition>();
         foreach (var mapping in BehaviorMappings)
-            result.Add(mapping.Key, BehaviorDefinitionFactory.Create(mapping.Invocation, userDefinitions, systemQueries));
+        {
+            result.Add(
+                mapping.Key,
+                BehaviorDefinitionFactory.Create(
+                    mapping.Invocation,
+                    userDefinitions,
+                    systemQueries,
+                    stateProfile,
+                    runtimeState));
+        }
         return result;
     }
 }
