@@ -1,0 +1,19 @@
+{
+  "id": "runtime-m-f-native-vksc",
+  "description": "M+F compares the native low-level virtual-key and scan-code identity of legacy {vkF3sc029}.",
+  "initialState": { "mode": "S", "ime": "off", "modifiers": [] },
+  "input": [
+    { "atMs": 0, "kind": "keyDown", "key": "NONCONVERT" },
+    { "atMs": 30, "kind": "keyDown", "key": "F" },
+    { "atMs": 50, "kind": "keyUp", "key": "F" },
+    { "atMs": 80, "kind": "keyUp", "key": "NONCONVERT" }
+  ],
+  "expected": {
+    "text": "",
+    "events": [
+      { "kind": "keyDown", "key": "VKF3SC029" },
+      { "kind": "keyUp", "key": "VKF3SC029" }
+    ]
+  },
+  "tags": ["hosted-legacy", "hosted-legacy-runtime", "hosted-legacy-native-output", "send-vksc", "long-tail"]
+}
