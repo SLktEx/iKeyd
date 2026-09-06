@@ -54,8 +54,8 @@ public sealed class VirtualPointerMotionEngine
 
     public void SetDirection(int x, int y)
     {
-        var targetX = Math.Clamp(x, -1, 1);
-        var targetY = Math.Clamp(y, -1, 1);
+        var targetX = (double)Math.Clamp(x, -1, 1);
+        var targetY = (double)Math.Clamp(y, -1, 1);
         Normalize(ref targetX, ref targetY);
         _targetX = targetX;
         _targetY = targetY;
@@ -134,21 +134,6 @@ public sealed class VirtualPointerMotionEngine
         var magnitude = Math.Clamp(Math.Abs(value), 0, 1);
         var curved = magnitude * magnitude * (3 - 2 * magnitude);
         return Math.CopySign(curved, value);
-    }
-
-    private static void Normalize(ref int x, ref int y)
-    {
-        if (x == 0 || y == 0)
-            return;
-
-        // Integer direction vectors can only exceed unit length diagonally. Keep
-        // the public target representation digital and normalize after conversion.
-        // The double overload below performs the actual normalization.
-        var dx = (double)x;
-        var dy = (double)y;
-        Normalize(ref dx, ref dy);
-        _ = dx;
-        _ = dy;
     }
 
     private static void Normalize(ref double x, ref double y)
