@@ -7,6 +7,7 @@ public sealed class HostedAutoHotkeySourceDifferentialTests
 {
     private const string HostedLegacyTag = "hosted-legacy";
     private const string SendEventTag = "send-event-diff";
+    private const string SourceOracle = "ahk-source";
     private static string ScenarioDirectory => Path.Combine(AppContext.BaseDirectory, "Scenarios");
 
     [Fact]
@@ -20,7 +21,7 @@ public sealed class HostedAutoHotkeySourceDifferentialTests
         if (!sourceRunner.IsAvailable)
             return;
 
-        var scenarios = LoadTagged(HostedLegacyTag);
+        var scenarios = LoadTaggedForOracle(HostedLegacyTag, SourceOracle);
         Assert.NotEmpty(scenarios);
 
         var failures = new List<string>();
@@ -59,7 +60,7 @@ public sealed class HostedAutoHotkeySourceDifferentialTests
         if (!sourceRunner.IsAvailable)
             return;
 
-        var scenarios = LoadTagged(SendEventTag);
+        var scenarios = LoadTaggedForOracle(SendEventTag, SourceOracle);
         Assert.NotEmpty(scenarios);
 
         var failures = new List<string>();
@@ -99,11 +100,36 @@ public sealed class HostedAutoHotkeySourceDifferentialTests
         Assert.Contains("hotkeySKG.ahk", new HostedAutoHotkeySourceRunner().Name, StringComparison.Ordinal);
     }
 
-    private static CompatibilityScenario[] LoadTagged(string tag)
+    [Fact]
+    public void Explicit_oracle_targets_can_scope_timing_stress_to_compiled_EXE()
+    {
+        var compiledOnly = Scenario("compiled-only", ["compiled-exe"]);
+        var legacyDefault = Scenario("legacy-default", []);
+
+        Assert.False(TargetsOracle(compiledOnly, SourceOracle));
+        Assert.True(TargetsOracle(legacyDefault, SourceOracle));
+    }
+
+    private static CompatibilityScenario Scenario(string id, List<string> oracleTargets)
+        => new()
+        {
+            Id = id,
+            InitialState = new ScenarioInitialState(),
+            Input = [],
+            Expected = new ScenarioExpected(),
+            OracleTargets = oracleTargets
+        };
+
+    private static CompatibilityScenario[] LoadTaggedForOracle(string tag, string oracle)
         => CompatibilityScenarioCatalog.LoadDirectory(ScenarioDirectory)
             .Where(item => item.Tags.Any(value => string.Equals(value, tag, StringComparison.OrdinalIgnoreCase)))
+            .Where(item => TargetsOracle(item, oracle))
             .OrderBy(item => item.Id, StringComparer.OrdinalIgnoreCase)
             .ToArray();
+
+    internal static bool TargetsOracle(CompatibilityScenario scenario, string oracle)
+        => scenario.OracleTargets.Count == 0 ||
+           scenario.OracleTargets.Any(value => string.Equals(value, oracle, StringComparison.OrdinalIgnoreCase));
 
     private static void AssertFailures(IReadOnlyCollection<string> failures)
         => Assert.True(

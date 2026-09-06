@@ -29,5 +29,6 @@
     { "atMs": 33, "kind": "keyUp", "key": "W" }
   ],
   "expected": { "text": "faarowago", "events": [] },
-  "tags": ["legacy", "chord", "high-speed", "realtime-safe", "windows", "hosted-legacy"]
+  "tags": ["legacy", "chord", "high-speed", "realtime-safe", "windows", "hosted-legacy"],
+  "oracleTargets": ["compiled-exe"]
 }

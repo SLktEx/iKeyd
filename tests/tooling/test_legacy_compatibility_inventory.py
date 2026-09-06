@@ -159,6 +159,7 @@ class InventoryTests(unittest.TestCase):
         clipboard_label = next(f for f in features if f.kind == "label" and f.text.lower().startswith("onclipboardchange"))
         global_hotkey = next(f for f in features if f.kind == "hotkey" and f.details.get("trigger") == "q")
         console_hotkey = next(f for f in features if f.kind == "hotkey" and f.details.get("trigger") == "^v")
+        console_context = next(f for f in features if f.kind == "context" and "ConsoleWindowClass" in f.text)
         suspend = next(f for f in features if f.kind == "lifecycle-operation")
 
         self.assertEqual("implemented", macro.coverage["implementation"])
@@ -173,8 +174,11 @@ class InventoryTests(unittest.TestCase):
         self.assertEqual("real-windows:#59", clipboard_label.coverage["scenario"])
         self.assertEqual("implemented", global_hotkey.coverage["implementation"])
         self.assertEqual("regression", global_hotkey.coverage["scenario"])
-        self.assertEqual("deferred:#57", console_hotkey.coverage["implementation"])
-        self.assertEqual("deferred:#57", console_hotkey.coverage["scenario"])
+        self.assertEqual("implemented", console_hotkey.coverage["implementation"])
+        self.assertEqual("regression", console_hotkey.coverage["scenario"])
+        self.assertEqual("real-windows:#59", console_context.coverage["scenario"])
+        self.assertNotIn("#57", json.dumps(console_hotkey.coverage))
+        self.assertNotIn("#57", json.dumps(console_context.coverage))
         self.assertEqual("implemented", suspend.coverage["implementation"])
         self.assertEqual("regression", suspend.coverage["scenario"])
 
@@ -186,6 +190,7 @@ class InventoryTests(unittest.TestCase):
         self.assertEqual("real-windows-verification-required", clipboard_label.classification)
         self.assertEqual("partially-verified", global_hotkey.classification)
         self.assertEqual("real-windows-verification-required", console_hotkey.classification)
+        self.assertEqual("real-windows-verification-required", console_context.classification)
         self.assertEqual("partially-verified", suspend.classification)
 
     def test_required_real_windows_is_distinct_from_unverified(self):
