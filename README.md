@@ -2,7 +2,9 @@
   <img src="docs/assets/brand/ikeyd-icon.png" alt="iKeyd official icon" width="180">
 </p>
 
-<h1 align="center">iKeyd</h1>
+<h1 align="center">
+  <img src="docs/assets/brand/ikeyd-logo.png" alt="iKeyd" width="420">
+</h1>
 
 <p align="center">
   <strong>I Key'd — I keyed it my way.</strong><br>

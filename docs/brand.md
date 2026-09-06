@@ -10,17 +10,27 @@ Public naming line:
 
 The product idea is simple: make the keyboard behave *your* way.
 
-## Official mark
+## Official assets
 
-The cyan `K` mark is the official iKeyd application icon and the primary brand mark.
+The following PNG files are the current, official iKeyd artwork. Use the files as-is: do not redraw, recolor, distort, crop, or add effects or text.
+
+### Application icon
 
 <p align="center">
   <img src="assets/brand/ikeyd-icon.png" alt="iKeyd official icon" width="180">
 </p>
 
-Use the mark as-is. Do not redraw, recolor, distort, add text inside it, or replace its dark rounded-square background. Small-size variants may be sharpened for legibility, but the silhouette and colors should stay recognizably identical.
+`ikeyd-icon.png` is the canonical application and brand icon.
 
 The Windows executable and tray icon use `src/iKeyd.App/Assets/ikeyd.ico`, generated from the same artwork.
+
+### Logo / wordmark
+
+<p align="center">
+  <img src="assets/brand/ikeyd-logo.png" alt="iKeyd official logo and wordmark" width="420">
+</p>
+
+`ikeyd-logo.png` is the canonical combined logo and wordmark.
 
 ## Visual direction
 
@@ -45,7 +55,7 @@ The supporting art should harmonize with the official icon without trying to red
 | Primary text | `#E5E7EB` |
 | Secondary text | `#6B7280` |
 
-The palette is intentionally small. Blue/cyan is for focus, active keys, links, and small brand marks. The official icon keeps its original cyan-to-blue treatment and should not be flattened to the UI accent color.
+The palette is intentionally small. Blue/cyan is for focus, active keys, links, and small brand marks. The official icon and logo must retain the colors in the supplied PNG files.
 
 ## Typography
 
@@ -86,11 +96,12 @@ The README uses a small family of matching illustrations instead of one isolated
 Brand assets live in `docs/assets/brand/`.
 
 - `ikeyd-icon.png` — canonical official application / brand mark.
+- `ikeyd-logo.png` — canonical official logo / wordmark.
 - `readme-hero.png` — README hero artwork.
 - `readme-features.png` — README feature overview.
 - `readme-dsl.png` — README DSL/compiler flow.
-- `ogp.svg` — social/OGP composition in the same visual system.
-- `src/iKeyd.App/Assets/ikeyd.ico` — Windows executable and tray icon source.
-Future website, release, and OGP images should reuse this same visual system and make the official mark the primary identifier rather than inventing a separate logo for each surface.
+- `src/iKeyd.App/Assets/ikeyd.ico` — Windows executable and tray icon, generated from `ikeyd-icon.png`.
+
+Future website, release, and OGP images should reuse these official assets and make the official mark the primary identifier rather than inventing a separate logo for each surface.
 
 
