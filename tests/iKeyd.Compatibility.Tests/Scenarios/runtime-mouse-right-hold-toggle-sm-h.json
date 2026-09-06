@@ -1,0 +1,21 @@
+{
+  "id": "runtime-mouse-right-hold-toggle-sm-h",
+  "description": "Space then M plus H toggles the legacy right mouse button hold state down then up.",
+  "initialState": { "mode": "S", "ime": "off", "layers": ["S", "M"] },
+  "input": [
+    { "atMs": 10, "kind": "keyDown", "key": "H" },
+    { "atMs": 11, "kind": "keyUp", "key": "H" },
+    { "atMs": 30, "kind": "keyDown", "key": "H" },
+    { "atMs": 31, "kind": "keyUp", "key": "H" }
+  ],
+  "expected": {
+    "actions": [
+      { "kind": "mouse", "value": "button:right:down" },
+      { "kind": "mouse", "value": "button:right:up" }
+    ]
+  },
+  "tags": ["legacy", "runtime-long-tail", "mouse", "input-state", "deterministic"],
+  "inventoryIds": ["legacy-mouse-operation-485297b3c3", "legacy-mouse-operation-9f3f14c1e1"],
+  "requiredEnvironment": ["deterministic-windows-runtime"],
+  "oracleTargets": ["ikeyd-runtime"]
+}
