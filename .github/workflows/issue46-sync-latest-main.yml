@@ -40,9 +40,6 @@ jobs:
               exit 1
             fi
             if printf '%s\n' "$conflicts" | grep -Fxq 'src/iKeyd.App/IKeydRuntimeHandler.cs'; then
-              # Branch runtime contains the same SM coverage plus the observed legacy
-              # right-button release-only typo, window groups, process hotkeys and
-              # macro/clipboard reachability. Keep that superset.
               git checkout --ours -- src/iKeyd.App/IKeydRuntimeHandler.cs
               git add src/iKeyd.App/IKeydRuntimeHandler.cs
             fi
@@ -70,4 +67,4 @@ jobs:
           git add -A
           git commit -m "Merge latest main into hotkeySKG compatibility"
           git push origin HEAD:issue-46-hotkeyskg-full-compat
-# rerun: preserve observed legacy right-button quirk and runtime superset
+# rerun: semantic markers allow Git's successful auto-merges
