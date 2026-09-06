@@ -15,8 +15,8 @@
       { "kind": "keyDown", "key": "SHIFT" },
       { "kind": "keyDown", "key": "SCOLON" },
       { "kind": "keyUp", "key": "SCOLON" },
-      { "kind": "keyUp", "key": "SHIFT" },
-      { "kind": "keyUp", "key": "CTRL" }
+      { "kind": "keyUp", "key": "CTRL" },
+      { "kind": "keyUp", "key": "SHIFT" }
     ]
   },
   "tags": ["hosted-legacy", "hosted-legacy-runtime", "jis-symbol", "default-key-semantics", "long-tail"]
