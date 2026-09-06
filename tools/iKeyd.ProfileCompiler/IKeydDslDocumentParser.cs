@@ -66,7 +66,13 @@ internal static class IKeydDslDocumentParser
     }
 
     private static bool RequiresCompileTimeValidation(string name)
-        => name.Equals("UNICODE", StringComparison.OrdinalIgnoreCase) ||
+        => name.Equals("LT", StringComparison.OrdinalIgnoreCase) ||
+           name.Equals("MT", StringComparison.OrdinalIgnoreCase) ||
+           name.Equals("MO", StringComparison.OrdinalIgnoreCase) ||
+           name.Equals("MOD", StringComparison.OrdinalIgnoreCase) ||
+           name.Equals("TG", StringComparison.OrdinalIgnoreCase) ||
+           name.Equals("TO", StringComparison.OrdinalIgnoreCase) ||
+           name.Equals("UNICODE", StringComparison.OrdinalIgnoreCase) ||
            name.Equals("TEXT", StringComparison.OrdinalIgnoreCase) ||
            name.Equals("EXEC", StringComparison.OrdinalIgnoreCase) ||
            name.Equals("SHELL", StringComparison.OrdinalIgnoreCase) ||
