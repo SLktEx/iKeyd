@@ -63,6 +63,32 @@ def parse_string_list(path: Path, lineno: int, value: str) -> list[str]:
     return parsed
 
 
+def parse_behavior_invocation(path: Path, lineno: int, value: str) -> dict[str, object] | None:
+    value = value.strip().rstrip(";").strip()
+    match = re.fullmatch(rf"({IDENT})\s*\((.*)\)", value)
+    if not match:
+        return None
+
+    behavior_name = match.group(1)
+    raw_arguments = match.group(2).strip()
+    arguments: list[str] = []
+    if raw_arguments:
+        for argument in raw_arguments.split(","):
+            token = argument.strip()
+            if not re.fullmatch(IDENT, token):
+                raise DslError(
+                    path,
+                    lineno,
+                    f"behavior arguments must be identifiers in the current syntax: '{token}'",
+                )
+            arguments.append(token)
+
+    return OrderedDict([
+        ("name", behavior_name),
+        ("arguments", arguments),
+    ])
+
+
 def parse_layout_row(path: Path, lineno: int, value: str) -> list[str]:
     value = value.strip().rstrip(";").strip()
     keys = [item for item in re.split(r"[\s,]+", value) if item]
@@ -150,6 +176,7 @@ def compile_dsl(text: str, path: Path) -> dict[str, object]:
     layouts: OrderedDict[str, list[list[str]]] = OrderedDict()
     single: OrderedDict[str, OrderedDict[str, str]] = OrderedDict()
     chords: OrderedDict[str, list[list[str]]] = OrderedDict()
+    behaviors: OrderedDict[str, OrderedDict[str, dict[str, object]]] = OrderedDict()
     duplicate_flags: list[dict[str, object]] = []
 
     block: tuple[str, str | None] | None = None
@@ -191,6 +218,7 @@ def compile_dsl(text: str, path: Path) -> dict[str, object]:
                     raise DslError(path, lineno, f"duplicate keymap '{mode}'")
                 single[mode] = OrderedDict()
                 chords[mode] = []
+                behaviors[mode] = OrderedDict()
                 block = ("keymap", mode)
                 continue
 
@@ -259,9 +287,15 @@ def compile_dsl(text: str, path: Path) -> dict[str, object]:
             match = re.fullmatch(rf"({KEY_REF})\s*=\s*(.+)", line)
             if match:
                 key = resolve_key_ref(path, lineno, match.group(1), layouts)
-                if key in single[name]:
-                    raise DslError(path, lineno, f"duplicate single-stroke mapping '{name}.{key}'")
-                single[name][key] = parse_json_string(path, lineno, match.group(2))
+                if key in single[name] or key in behaviors[name]:
+                    raise DslError(path, lineno, f"duplicate key mapping '{name}.{key}'")
+
+                value = match.group(2)
+                invocation = parse_behavior_invocation(path, lineno, value)
+                if invocation is not None:
+                    behaviors[name][key] = invocation
+                else:
+                    single[name][key] = parse_json_string(path, lineno, value)
                 continue
 
             raise DslError(path, lineno, f"unknown keymap statement: {line}")
@@ -285,15 +319,18 @@ def compile_dsl(text: str, path: Path) -> dict[str, object]:
     if not single:
         raise DslError(path, 1, "at least one keymap is required")
 
-    return OrderedDict([
+    result = OrderedDict([
         ("source", source),
         ("singleStroke", single),
         ("chords", chords),
-        ("knownQuirks", OrderedDict([
-            ("duplicateChordPatterns", duplicate_chord_metadata(chords)),
-            ("duplicateFlagDefinitions", duplicate_flags),
-        ])),
     ])
+    if any(behaviors_by_mode for behaviors_by_mode in behaviors.values()):
+        result["behaviors"] = behaviors
+    result["knownQuirks"] = OrderedDict([
+        ("duplicateChordPatterns", duplicate_chord_metadata(chords)),
+        ("duplicateFlagDefinitions", duplicate_flags),
+    ])
+    return result
 
 
 def main(argv: list[str] | None = None) -> int:
