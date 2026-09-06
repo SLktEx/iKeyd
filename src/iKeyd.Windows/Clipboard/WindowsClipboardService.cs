@@ -1,9 +1,10 @@
+using System.Drawing.Imaging;
 using System.Runtime.InteropServices;
 using iKeyd.Core.Clipboard;
 
 namespace iKeyd.Windows.Clipboard;
 
-public sealed class WindowsClipboardService : IClipboardService
+public sealed class WindowsClipboardService : IClipboardService, IClipboardPayloadService
 {
     private readonly ManualResetEventSlim _ready = new(false);
     private readonly Thread _thread;
@@ -34,6 +35,29 @@ public sealed class WindowsClipboardService : IClipboardService
                 ? System.Windows.Forms.Clipboard.GetText(TextDataFormat.UnicodeText)
                 : null));
 
+    public ClipboardPayload? ReadPayload()
+        => InvokeOnClipboardThread(() => RetryClipboard(() =>
+        {
+            if (System.Windows.Forms.Clipboard.ContainsImage())
+            {
+                using var image = System.Windows.Forms.Clipboard.GetImage();
+                if (image is not null)
+                {
+                    using var stream = new MemoryStream();
+                    image.Save(stream, ImageFormat.Png);
+                    return ClipboardPayload.FromImage(stream.ToArray(), "image/png");
+                }
+            }
+
+            if (System.Windows.Forms.Clipboard.ContainsText(TextDataFormat.UnicodeText))
+            {
+                var text = System.Windows.Forms.Clipboard.GetText(TextDataFormat.UnicodeText);
+                return string.IsNullOrEmpty(text) ? null : ClipboardPayload.FromText(text);
+            }
+
+            return null;
+        }));
+
     public void WriteText(string text)
     {
         ArgumentNullException.ThrowIfNull(text);
@@ -45,6 +69,41 @@ public sealed class WindowsClipboardService : IClipboardService
                     System.Windows.Forms.Clipboard.Clear();
                 else
                     System.Windows.Forms.Clipboard.SetText(text, TextDataFormat.UnicodeText);
+                return true;
+            });
+            return true;
+        });
+    }
+
+    public void WritePayload(ClipboardPayload payload)
+    {
+        ArgumentNullException.ThrowIfNull(payload);
+        InvokeOnClipboardThread(() =>
+        {
+            RetryClipboard(() =>
+            {
+                switch (payload.Kind)
+                {
+                    case ClipboardPayloadKind.Text:
+                        var text = payload.GetText();
+                        if (text.Length == 0)
+                            System.Windows.Forms.Clipboard.Clear();
+                        else
+                            System.Windows.Forms.Clipboard.SetText(text, TextDataFormat.UnicodeText);
+                        break;
+
+                    case ClipboardPayloadKind.Image:
+                        using (var stream = new MemoryStream(payload.Data, writable: false))
+                        using (var source = Image.FromStream(stream))
+                        using (var bitmap = new Bitmap(source))
+                            System.Windows.Forms.Clipboard.SetImage(bitmap);
+                        break;
+
+                    default:
+                        throw new NotSupportedException(
+                            $"Clipboard payload kind '{payload.Kind}' cannot be restored on Windows yet.");
+                }
+
                 return true;
             });
             return true;
