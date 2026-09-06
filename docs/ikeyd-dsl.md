@@ -198,7 +198,7 @@ mouse {
     }
 
     speed {
-        normal = 2200
+        normal = 1000
         precision = 800
         fine = 240
         fast = 4400
@@ -217,7 +217,7 @@ Settings:
 - `response.press = <duration>` — virtual-stick rise time constant. Default: `45ms`.
 - `response.release = <duration>` — return-to-center time constant after release. Default: `2ms`; at the default 8 ms cadence this is effectively stopped by the next tick.
 - `response.curve = linear|smoothstep` — radial response curve applied to stick magnitude. Default: `smoothstep`; radial application keeps diagonal and cardinal transient speed consistent.
-- `speed.normal`, `speed.precision`, `speed.fine`, `speed.fast` — pointer velocity bands in pixels per second. A bare number or a value such as `800px/s` is accepted. Defaults: `2200`, `800`, `240`, and `4400`.
+- `speed.normal`, `speed.precision`, `speed.fine`, `speed.fast` — pointer velocity bands in pixels per second. A bare number or a value such as `800px/s` is accepted. Defaults: `1000`, `800`, `240`, and `4400`.
 - `socd = neutral` — opposite directions cancel (`J+L => X=0`, `I+K => Y=0`). `neutral` is the only policy currently supported.
 - `tap_nudge = <pixels>` — deterministic immediate movement for a tap shorter than one motion tick. Default: `1px`; `0px` disables it.
 - `max_catchup = <duration>` — maximum delayed time integrated after scheduler stalls, preventing one large catch-up jump under load. Default: `32ms`.
