@@ -56,19 +56,31 @@ public readonly record struct ActiveKeyBehaviorHold(KeyId Trigger, KeyBehaviorAc
 /// No timer is required: timeout is advanced by the timestamp of the next input
 /// event, which is sufficient because a hold has no observable keyboard effect
 /// until another event occurs.
+///
+/// The event path is allocation-free after construction. Active holds use a
+/// fixed-capacity array instead of LINQ/List growth so home-row-mod rolls do not
+/// introduce GC pressure under sustained typing.
 /// </summary>
 public sealed class ConfiguredKeyBehaviorRuntime
 {
+    private const int MaxActiveHolds = 16;
+
     private readonly KeyBehaviorProfile _profile;
-    private readonly List<ActiveKeyBehaviorHold> _active = new(4);
+    private readonly ActiveKeyBehaviorHold[] _active = new ActiveKeyBehaviorHold[MaxActiveHolds];
+    private int _activeCount;
     private PendingBehavior? _pending;
 
     public ConfiguredKeyBehaviorRuntime(KeyBehaviorProfile profile)
         => _profile = profile ?? throw new ArgumentNullException(nameof(profile));
 
-    public int ActiveHoldCount => _active.Count;
+    public int ActiveHoldCount => _activeCount;
 
-    public ActiveKeyBehaviorHold GetActiveHoldAt(int index) => _active[index];
+    public ActiveKeyBehaviorHold GetActiveHoldAt(int index)
+    {
+        if ((uint)index >= (uint)_activeCount)
+            throw new ArgumentOutOfRangeException(nameof(index));
+        return _active[index];
+    }
 
     public KeyBehaviorEventResult OnKeyDown(KeyId key, long timestampMs)
     {
@@ -130,7 +142,7 @@ public sealed class ConfiguredKeyBehaviorRuntime
     public void Reset()
     {
         _pending = null;
-        _active.Clear();
+        _activeCount = 0;
     }
 
     private void AdvancePending(long timestampMs, ref TransitionBuilder transitions)
@@ -160,22 +172,32 @@ public sealed class ConfiguredKeyBehaviorRuntime
 
     private void StartHold(KeyBehaviorBinding binding, ref TransitionBuilder transitions)
     {
-        if (_active.Any(item => item.Trigger == binding.Trigger))
-            return;
+        for (var index = 0; index < _activeCount; index++)
+        {
+            if (_active[index].Trigger == binding.Trigger)
+                return;
+        }
 
-        _active.Add(new ActiveKeyBehaviorHold(binding.Trigger, binding.Hold));
+        if (_activeCount >= _active.Length)
+            throw new InvalidOperationException($"More than {MaxActiveHolds} configured behavior holds are active at once.");
+
+        _active[_activeCount++] = new ActiveKeyBehaviorHold(binding.Trigger, binding.Hold);
         transitions.Add(new KeyBehaviorTransition(KeyBehaviorTransitionKind.HoldStarted, binding.Hold));
     }
 
     private bool EndHold(KeyId trigger, ref TransitionBuilder transitions)
     {
-        for (var index = _active.Count - 1; index >= 0; index--)
+        for (var index = _activeCount - 1; index >= 0; index--)
         {
             if (_active[index].Trigger != trigger)
                 continue;
 
             var hold = _active[index];
-            _active.RemoveAt(index);
+            for (var move = index; move < _activeCount - 1; move++)
+                _active[move] = _active[move + 1];
+            _activeCount--;
+            _active[_activeCount] = default;
+
             transitions.Add(new KeyBehaviorTransition(KeyBehaviorTransitionKind.HoldEnded, hold.Action));
             return true;
         }
