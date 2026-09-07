@@ -209,10 +209,10 @@ public sealed class RealInputRegressionTests
 
     [Theory]
     [InlineData(false, false, false, 1000.0)]
-    [InlineData(true, false, false, 800.0)]
+    [InlineData(true, false, false, 900.0)]
     [InlineData(false, true, false, 240.0)]
     [InlineData(false, false, true, 4400.0)]
-    [InlineData(true, true, true, 800.0)]
+    [InlineData(true, true, true, 900.0)]
     public void Keyboard_mouse_uses_explicit_velocity_bands_instead_of_hold_time_acceleration(
         bool precision,
         bool fine,
