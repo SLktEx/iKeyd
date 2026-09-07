@@ -30,5 +30,8 @@
     <None Include="../../config/hotkeySKG.behavior.json" Link="Fixtures/hotkeySKG.behavior.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
+    <None Include="../iKeyd.LegacySpec.Tests/Fixtures/hotkeySKG.runtime.json" Link="Fixtures/hotkeySKG.runtime.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
   </ItemGroup>
 </Project>
