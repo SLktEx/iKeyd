@@ -18,6 +18,14 @@ public sealed record ModTapOptions
     public bool HoldOnOtherKeyPress { get; init; } = true;
 }
 
+public sealed record TapDanceOptions
+{
+    public const int DefaultTappingTermMs = LayerTapOptions.DefaultTappingTermMs;
+    public const int MaxTapCount = 8;
+
+    public int TappingTermMs { get; init; } = DefaultTappingTermMs;
+}
+
 /// <summary>
 /// Standard behavior library. These helpers create ordinary behavior definitions;
 /// the runtime has no helper-name-specific dispatch path.
@@ -69,6 +77,16 @@ public static class StandardBehaviors
     /// </summary>
     public static BehaviorDefinition OSM(string modifier)
         => new OneShotModifierBehaviorDefinition(modifier);
+
+    /// <summary>
+    /// Bounded tap dance. The first key is emitted for one tap, the second for two
+    /// taps, and so on. The sequence may remain alive after release only until its
+    /// finite inter-tap deadline.
+    /// </summary>
+    public static BehaviorDefinition TD(
+        IEnumerable<KeyId> tapKeys,
+        TapDanceOptions? options = null)
+        => new TapDanceBehaviorDefinition(tapKeys, options ?? new TapDanceOptions());
 
     public static BehaviorDefinition Unicode(string scalar)
         => Press(BehaviorAction.SendUnicode(scalar));
@@ -253,6 +271,110 @@ internal sealed class ModTapBehaviorInstance : TapHoldBehaviorInstance
 
     protected override BehaviorAction HoldDownAction => BehaviorAction.ModifierDown(_modifier);
     protected override BehaviorAction HoldUpAction => BehaviorAction.ModifierUp(_modifier);
+}
+
+internal sealed class TapDanceBehaviorDefinition : BehaviorDefinition
+{
+    private readonly KeyId[] _tapKeys;
+    private readonly TapDanceOptions _options;
+
+    public TapDanceBehaviorDefinition(IEnumerable<KeyId> tapKeys, TapDanceOptions options)
+    {
+        ArgumentNullException.ThrowIfNull(tapKeys);
+        ArgumentNullException.ThrowIfNull(options);
+
+        _tapKeys = tapKeys.ToArray();
+        if (_tapKeys.Length < 2 || _tapKeys.Length > TapDanceOptions.MaxTapCount)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(tapKeys),
+                $"Tap dance requires between 2 and {TapDanceOptions.MaxTapCount} outputs.");
+        }
+        if (options.TappingTermMs < 0)
+            throw new ArgumentOutOfRangeException(nameof(options), "Tapping term must be non-negative.");
+
+        _options = options;
+    }
+
+    internal override BehaviorInstance CreateInstance(KeyId sourceKey, long timestampMs)
+        => new TapDanceBehaviorInstance(sourceKey, _tapKeys, _options.TappingTermMs);
+}
+
+internal sealed class TapDanceBehaviorInstance(
+    KeyId sourceKey,
+    IReadOnlyList<KeyId> tapKeys,
+    int tappingTermMs) : BehaviorInstance(sourceKey)
+{
+    private int _tapCount;
+    private bool _pressed;
+    private bool _resolved;
+    private long? _deadlineMs;
+
+    internal override bool KeepAliveAfterRelease
+        => !_pressed && !_resolved && _tapCount > 0 && _deadlineMs is not null;
+
+    internal override long? NextDeadlineMs
+        => KeepAliveAfterRelease ? _deadlineMs : null;
+
+    internal override void OnPress(long timestampMs, List<BehaviorAction> actions)
+    {
+        if (_resolved)
+            return;
+
+        _pressed = true;
+        _deadlineMs = null;
+        _tapCount++;
+    }
+
+    internal override void AdvanceTo(long timestampMs, List<BehaviorAction> actions)
+    {
+        if (!KeepAliveAfterRelease || _deadlineMs is not long deadline || timestampMs < deadline)
+            return;
+
+        Resolve(actions);
+    }
+
+    internal override void OnInterrupt(KeyId otherKey, long timestampMs, List<BehaviorAction> actions)
+    {
+        if (!_resolved && _tapCount > 0)
+            Resolve(actions);
+    }
+
+    internal override void OnRelease(long timestampMs, List<BehaviorAction> actions)
+    {
+        if (!_pressed)
+            return;
+
+        _pressed = false;
+        if (_resolved)
+            return;
+
+        if (_tapCount >= tapKeys.Count || tappingTermMs == 0)
+        {
+            Resolve(actions);
+            return;
+        }
+
+        _deadlineMs = timestampMs + tappingTermMs;
+    }
+
+    internal override void Cancel(List<BehaviorAction> actions)
+    {
+        _pressed = false;
+        _resolved = true;
+        _deadlineMs = null;
+    }
+
+    private void Resolve(List<BehaviorAction> actions)
+    {
+        if (_resolved || _tapCount <= 0)
+            return;
+
+        var outputIndex = Math.Clamp(_tapCount, 1, tapKeys.Count) - 1;
+        actions.Add(BehaviorAction.SendKey(tapKeys[outputIndex]));
+        _resolved = true;
+        _deadlineMs = null;
+    }
 }
 
 internal sealed class MomentaryLayerBehaviorDefinition : BehaviorDefinition

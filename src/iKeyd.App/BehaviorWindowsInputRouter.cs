@@ -194,6 +194,24 @@ internal sealed class BehaviorWindowsInputRouter : IKeyboardEventHandler, IInput
                 return KeyboardDisposition.Suppress;
             }
 
+            // A bounded post-release sequence belongs to the runtime/keymap that
+            // created it, even when that keymap came from a momentary or one-shot
+            // layer which is no longer active. Resume it before resolving today's
+            // layer stack so the second/third tap cannot silently switch semantics.
+            foreach (var pendingRuntime in _behaviorRuntimes.Values)
+            {
+                if (!pendingRuntime.IsPending(keyId))
+                    continue;
+
+                var resumed = pendingRuntime.BeginKeyDown(keyId, keyboardEvent.TimestampMs);
+                ApplyActions(resumed.Actions);
+                if (resumed.Suppress)
+                {
+                    _activeBehaviorKeys.Add(keyId);
+                    return KeyboardDisposition.Suppress;
+                }
+            }
+
             if (TryHandleLayeredKeyDown(keyboardEvent, keyId))
                 return KeyboardDisposition.Suppress;
 
@@ -345,7 +363,7 @@ internal sealed class BehaviorWindowsInputRouter : IKeyboardEventHandler, IInput
             }
             catch
             {
-                // Timer callbacks run outside the low-level hook's fail-open guard.
+                // Deadline callbacks may be supplied by different platform adapters.
                 // Recover locally so an action failure cannot terminate the process
                 // or leave a layer/modifier owned by a half-applied transition.
                 try
