@@ -1,5 +1,7 @@
 # Layer gesture timing sweep
 
+This v1 compatibility audit targets the `main-v1` stabilization branch.
+
 The timing differential treats the first `Space` down as t=10ms, then varies three gaps:
 
 - `pressGapMs`: `Space down -> NonConvert down`
