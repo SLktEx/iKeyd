@@ -99,6 +99,7 @@ public sealed class WindowsClipboardPicker : IClipboardPicker, IClipboardPayload
             IntegralHeight = false,
             HorizontalScrollbar = true
         };
+        private readonly ClipboardPickerActivationState _activationState = new();
 
         public ClipboardPickerForm(IReadOnlyList<string> previews)
         {
@@ -137,19 +138,54 @@ public sealed class WindowsClipboardPicker : IClipboardPicker, IClipboardPayload
             };
             Shown += (_, _) =>
             {
+                _activationState.MarkShown();
                 _list.SelectedIndex = 0;
+
+                // The picker is invoked from a global low-level keyboard hook while
+                // another application normally owns the foreground window. Keep it
+                // above that application until Windows grants activation; otherwise
+                // the old focus-loss handler can make the dialog disappear before it
+                // is ever visible to the user.
+                TopMost = true;
+                BringToFront();
+                Activate();
                 _list.Focus();
+
+                // Activated can run before Shown for a modal form. If that happened,
+                // arm focus-loss closing now that the form is definitely visible.
+                if (ReferenceEquals(ActiveForm, this))
+                    ArmFocusLossClose();
             };
+            Activated += (_, _) => ArmFocusLossClose();
             Deactivate += (_, _) =>
             {
-                if (DialogResult == DialogResult.None)
-                    DialogResult = DialogResult.Cancel;
+                // Ignore the initial foreground hand-off. Once the picker has really
+                // been shown and activated, preserve the historical focus-loss-close
+                // behavior used by the tray path.
+                if (!_activationState.CanCloseOnDeactivate || DialogResult != DialogResult.None)
+                    return;
+
+                DialogResult = DialogResult.Cancel;
                 Close();
             };
         }
 
         public int SelectedIndex
             => _list.SelectedItem is PickerItem item ? item.Index : -1;
+
+        private void ArmFocusLossClose()
+        {
+            if (!_activationState.MarkActivated())
+                return;
+
+            // TopMost is only an activation bootstrap/fallback. Do not leave the
+            // picker permanently above unrelated applications after it owns focus.
+            BeginInvoke((Action)(() =>
+            {
+                if (!IsDisposed && !Disposing)
+                    TopMost = false;
+            }));
+        }
 
         private void AcceptSelection()
         {
@@ -163,5 +199,24 @@ public sealed class WindowsClipboardPicker : IClipboardPicker, IClipboardPayload
         {
             public override string ToString() => Preview;
         }
+    }
+}
+
+internal sealed class ClipboardPickerActivationState
+{
+    private bool _shown;
+    private bool _activatedAfterShow;
+
+    public bool CanCloseOnDeactivate => _shown && _activatedAfterShow;
+
+    public void MarkShown() => _shown = true;
+
+    public bool MarkActivated()
+    {
+        if (!_shown || _activatedAfterShow)
+            return false;
+
+        _activatedAfterShow = true;
+        return true;
     }
 }
