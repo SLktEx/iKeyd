@@ -3,7 +3,7 @@ name: Legacy differential
 on:
   workflow_dispatch:
   push:
-    branches: [main]
+    branches: [main, main-v0.7]
     paths:
       - tests/legacy-binary/hotkeySKG.exe.gpg
       - tests/legacy-binary/hotkeySKG.ahk.gpg.asc
@@ -24,6 +24,7 @@ on:
       - tests/iKeyd.Windows.Tests/HostedLegacyDifferentialTests.cs
       - tests/iKeyd.Windows.Tests/HostedAutoHotkeySourceRunner.cs
       - tests/iKeyd.Windows.Tests/HostedAutoHotkeySourceDifferentialTests.cs
+      - tests/iKeyd.Windows.Tests/LegacyShLayerParityTests.cs
 
 permissions:
   contents: read
