@@ -5,6 +5,7 @@ using iKeyd.Core.Configuration;
 using iKeyd.Core.Input;
 using iKeyd.Core.Keymaps;
 using iKeyd.Core.State;
+using iKeyd.Windows.Input;
 
 namespace iKeyd.App;
 
@@ -59,7 +60,10 @@ internal sealed class BehaviorWindowsInputRouter : IKeyboardEventHandler, IInput
         _runtimeState = runtimeState ?? (profile.State.Count == 0
             ? EmptyRuntimeStateStore.Instance
             : new RuntimeStateStore(profile.State));
-        _behaviorDeadlineScheduler = behaviorDeadlineScheduler ?? new ThreadPoolBehaviorDeadlineScheduler();
+        _behaviorDeadlineScheduler = behaviorDeadlineScheduler ??
+            (keyboard is WindowsKeyboardBackend windowsKeyboard
+                ? new WindowsHookBehaviorDeadlineScheduler(windowsKeyboard)
+                : new NoOpBehaviorDeadlineScheduler());
 
         _keymaps = new Dictionary<string, Keymap<string>>(StringComparer.OrdinalIgnoreCase);
         _behaviorRuntimes = new Dictionary<string, BehaviorRuntime>(StringComparer.OrdinalIgnoreCase);
@@ -130,9 +134,16 @@ internal sealed class BehaviorWindowsInputRouter : IKeyboardEventHandler, IInput
             {
                 if (_disposed)
                     return;
-                ResetLocalState();
-                _disposed = true;
-                disposeScheduler = true;
+
+                try
+                {
+                    ResetLocalState();
+                }
+                finally
+                {
+                    _disposed = true;
+                    disposeScheduler = true;
+                }
             }
         }
         finally
