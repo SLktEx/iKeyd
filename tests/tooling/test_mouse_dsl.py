@@ -77,7 +77,7 @@ keymap S {
         self.assertEqual(8, mouse["updateMs"])
         self.assertEqual({"pressMs": 45, "releaseMs": 2, "curve": "smoothstep"}, mouse["response"])
         self.assertEqual(1234, mouse["speed"]["normal"])
-        self.assertEqual(800, mouse["speed"]["precision"])
+        self.assertEqual(900, mouse["speed"]["precision"])
         self.assertEqual(1, mouse["tapNudgePixels"])
 
     def test_profile_without_mouse_keeps_legacy_json_shape(self):
