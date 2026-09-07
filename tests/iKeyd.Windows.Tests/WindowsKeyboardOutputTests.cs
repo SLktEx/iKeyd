@@ -1,4 +1,6 @@
 using System.Runtime.InteropServices;
+using iKeyd.App;
+using iKeyd.Core.Chords;
 using iKeyd.Core.Input;
 using iKeyd.Windows.Input;
 using Xunit;
@@ -22,6 +24,59 @@ public sealed class WindowsKeyboardOutputTests
         Assert.Equal((ushort)0x1E, input.Data.Keyboard.ScanCode);
         Assert.Equal(WindowsKeyboardOutput.InjectionMarker, input.Data.Keyboard.ExtraInfo);
         Assert.NotEqual(0u, input.Data.Keyboard.Flags & 0x0008u);
+    }
+
+    [Theory]
+    [InlineData((ushort)'1', (ushort)0x02)]
+    [InlineData((ushort)'9', (ushort)0x0A)]
+    [InlineData((ushort)'0', (ushort)0x0B)]
+    [InlineData((ushort)0x70, (ushort)0x3B)]
+    [InlineData((ushort)0x79, (ushort)0x44)]
+    [InlineData((ushort)0x7A, (ushort)0x57)]
+    [InlineData((ushort)0x7B, (ushort)0x58)]
+    public void Number_and_function_identity_replay_uses_physical_scan_code(ushort virtualKey, ushort expectedScanCode)
+    {
+        var normalized = WindowsKeyboardOutput.NormalizeIdentityReplayKey(new KeyboardKey(virtualKey, 0));
+        var input = WindowsKeyboardOutput.BuildKeyInput(normalized, KeyEventKind.Down);
+
+        Assert.Equal(new KeyboardKey(0, expectedScanCode), normalized);
+        Assert.Equal((ushort)0, input.Data.Keyboard.VirtualKey);
+        Assert.Equal(expectedScanCode, input.Data.Keyboard.ScanCode);
+        Assert.NotEqual(0u, input.Data.Keyboard.Flags & 0x0008u);
+        Assert.Equal(WindowsKeyboardOutput.InjectionMarker, input.Data.Keyboard.ExtraInfo);
+    }
+
+    [Fact]
+    public void Number_and_function_identity_replay_matches_the_JIS109_registry()
+    {
+        var checkedBindings = 0;
+        foreach (var binding in WindowsKeyMap.Jis109PhysicalBindings)
+        {
+            var isNumberRow = binding.Code is >= KeyCode.Digit0 and <= KeyCode.Digit9;
+            var isFunctionRow = binding.Code is >= KeyCode.F1 and <= KeyCode.F12;
+            if (!isNumberRow && !isFunctionRow)
+                continue;
+
+            var normalized = WindowsKeyboardOutput.NormalizeIdentityReplayKey(
+                new KeyboardKey(binding.WindowsKey.VirtualKey, 0, binding.WindowsKey.IsExtended));
+
+            Assert.Equal((ushort)0, normalized.VirtualKey);
+            Assert.Equal(binding.WindowsKey.ScanCode, normalized.ScanCode);
+            Assert.Equal(binding.WindowsKey.IsExtended, normalized.IsExtended);
+            checkedBindings++;
+        }
+
+        Assert.Equal(22, checkedBindings);
+    }
+
+    [Fact]
+    public void Identity_replay_normalization_does_not_change_new_shita_letter_output_or_explicit_scan_input()
+    {
+        var letter = new KeyboardKey((ushort)'F', 0);
+        var explicitPhysical = new KeyboardKey((ushort)'1', 0x02);
+
+        Assert.Equal(letter, WindowsKeyboardOutput.NormalizeIdentityReplayKey(letter));
+        Assert.Equal(explicitPhysical, WindowsKeyboardOutput.NormalizeIdentityReplayKey(explicitPhysical));
     }
 
     [Fact]
