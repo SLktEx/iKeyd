@@ -52,7 +52,9 @@ public sealed class Jis109WindowsHookRuntimeE2ETests
 
             Assert.True(observer.WaitForCount(2, TimeSpan.FromSeconds(5)), "Digit1 did not reach the native hook/runtime path.");
             Assert.All(observer.Snapshot().Take(2), item => Assert.Equal(KeyboardDisposition.Suppress, item.Disposition));
-            Assert.True(output.WaitForKeyCount(2, TimeSpan.FromSeconds(2)), "Digit1 did not emit after the native hook timestamp timeout.");
+            Assert.True(
+                output.WaitForKeyCount(2, TimeSpan.FromSeconds(2)),
+                "Digit1 did not emit after the native hook timestamp timeout.\n" + runtime.ExportInputDiagnostics());
 
             var f1 = BindingFor(KeyCode.F1);
             Inject(f1, KeyEventKind.Down);
@@ -60,7 +62,9 @@ public sealed class Jis109WindowsHookRuntimeE2ETests
 
             Assert.True(observer.WaitForCount(4, TimeSpan.FromSeconds(5)), "F1 did not reach the native hook/runtime path.");
             Assert.All(observer.Snapshot().Skip(2).Take(2), item => Assert.Equal(KeyboardDisposition.Suppress, item.Disposition));
-            Assert.True(output.WaitForKeyCount(4, TimeSpan.FromSeconds(2)), "F1 did not emit after the native hook timestamp timeout.");
+            Assert.True(
+                output.WaitForKeyCount(4, TimeSpan.FromSeconds(2)),
+                "F1 did not emit after the native hook timestamp timeout.\n" + runtime.ExportInputDiagnostics());
 
             Assert.True(WindowsKeyMap.TryResolveOutputKey(new KeyId(KeyCode.Digit1), out var digitOutput));
             Assert.True(WindowsKeyMap.TryResolveOutputKey(new KeyId(KeyCode.F1), out var f1Output));
