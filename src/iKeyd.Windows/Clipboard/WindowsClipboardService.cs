@@ -19,7 +19,22 @@ public sealed class WindowsClipboardService : IClipboardService, IClipboardPaylo
             ["GIF"] = "image/gif",
             ["image/gif"] = "image/gif",
             ["TIFF"] = "image/tiff",
-            ["image/tiff"] = "image/tiff"
+            ["image/tiff"] = "image/tiff",
+            ["BMP"] = "image/bmp",
+            ["image/bmp"] = "image/bmp",
+            ["image/x-ms-bmp"] = "image/bmp"
+        };
+
+    private static readonly IReadOnlyDictionary<string, string[]> RestoreImageFormats =
+        new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["image/png"] = ["PNG", "image/png"],
+            ["image/jpeg"] = ["JFIF", "image/jpeg"],
+            ["image/jpg"] = ["JFIF", "image/jpeg"],
+            ["image/gif"] = ["GIF", "image/gif"],
+            ["image/tiff"] = ["TIFF", "image/tiff"],
+            ["image/bmp"] = ["BMP", "image/bmp", "image/x-ms-bmp"],
+            ["image/x-ms-bmp"] = ["BMP", "image/bmp", "image/x-ms-bmp"]
         };
 
     private readonly ManualResetEventSlim _ready = new(false);
@@ -65,7 +80,7 @@ public sealed class WindowsClipboardService : IClipboardService, IClipboardPaylo
                 {
                     // Some applications expose only a decoded bitmap/DIB. Keep the
                     // existing PNG conversion as the compatibility fallback, while
-                    // preserving native JPEG/PNG/GIF/TIFF bytes when they are exposed.
+                    // preserving native JPEG/PNG/GIF/TIFF/BMP bytes when they are exposed.
                     using var stream = new MemoryStream();
                     image.Save(stream, ImageFormat.Png);
                     return ClipboardPayload.FromImage(stream.ToArray(), "image/png");
@@ -111,6 +126,53 @@ public sealed class WindowsClipboardService : IClipboardService, IClipboardPaylo
         return null;
     }
 
+    internal static Bitmap DecodeImageForRestore(ClipboardPayload payload)
+    {
+        ArgumentNullException.ThrowIfNull(payload);
+        if (payload.Kind != ClipboardPayloadKind.Image)
+            throw new ArgumentException("Clipboard payload is not an image.", nameof(payload));
+        if (!RestoreImageFormats.ContainsKey(payload.ContentType))
+            throw new NotSupportedException($"Clipboard image content type '{payload.ContentType}' cannot be restored on Windows yet.");
+
+        try
+        {
+            using var stream = new MemoryStream(payload.Data, writable: false);
+            using var source = Image.FromStream(stream, useEmbeddedColorManagement: false, validateImageData: true);
+            return new Bitmap(source);
+        }
+        catch (ArgumentException exception)
+        {
+            throw new InvalidDataException(
+                $"Clipboard image payload '{payload.ContentType}' is malformed and cannot be restored.",
+                exception);
+        }
+        catch (OutOfMemoryException exception)
+        {
+            // GDI+ reports several malformed/unsupported image decodes as
+            // OutOfMemoryException. Translate that into a controlled data error so
+            // callers can keep the input service alive and the current clipboard intact.
+            throw new InvalidDataException(
+                $"Clipboard image payload '{payload.ContentType}' is malformed or unsupported by the Windows image decoder.",
+                exception);
+        }
+    }
+
+    internal static DataObject CreateImageRestoreDataObject(ClipboardPayload payload, Bitmap bitmap)
+    {
+        ArgumentNullException.ThrowIfNull(payload);
+        ArgumentNullException.ThrowIfNull(bitmap);
+        if (payload.Kind != ClipboardPayloadKind.Image)
+            throw new ArgumentException("Clipboard payload is not an image.", nameof(payload));
+        if (!RestoreImageFormats.TryGetValue(payload.ContentType, out var formats))
+            throw new NotSupportedException($"Clipboard image content type '{payload.ContentType}' cannot be restored on Windows yet.");
+
+        var dataObject = new DataObject();
+        dataObject.SetData(DataFormats.Bitmap, autoConvert: true, bitmap);
+        foreach (var format in formats)
+            dataObject.SetData(format, autoConvert: false, payload.Data.ToArray());
+        return dataObject;
+    }
+
     public void WriteText(string text)
     {
         ArgumentNullException.ThrowIfNull(text);
@@ -146,10 +208,14 @@ public sealed class WindowsClipboardService : IClipboardService, IClipboardPaylo
                         break;
 
                     case ClipboardPayloadKind.Image:
-                        using (var stream = new MemoryStream(payload.Data, writable: false))
-                        using (var source = Image.FromStream(stream))
-                        using (var bitmap = new Bitmap(source))
-                            System.Windows.Forms.Clipboard.SetImage(bitmap);
+                        // Build the full restore object before replacing the system
+                        // clipboard. A malformed/unsupported history entry therefore
+                        // fails without corrupting the user's current clipboard.
+                        using (var bitmap = DecodeImageForRestore(payload))
+                        {
+                            var dataObject = CreateImageRestoreDataObject(payload, bitmap);
+                            System.Windows.Forms.Clipboard.SetDataObject(dataObject, copy: true);
+                        }
                         break;
 
                     default:
