@@ -24,6 +24,12 @@ public abstract class BehaviorInstance
 
     public KeyId SourceKey { get; }
 
+    /// <summary>
+    /// Earliest absolute monotonic timestamp at which this instance needs an
+    /// explicit time advance. Null means the instance has no pending deadline.
+    /// </summary>
+    internal virtual long? NextDeadlineMs => null;
+
     internal virtual void OnPress(long timestampMs, List<BehaviorAction> actions)
     {
     }
@@ -77,6 +83,27 @@ public sealed class BehaviorRuntime
     }
 
     public int ActiveCount => _active.Count;
+
+    /// <summary>
+    /// Earliest pending deadline across all active behavior instances. Backends
+    /// may schedule one bounded wake-up for this value rather than polling or
+    /// introducing a scripting scheduler.
+    /// </summary>
+    public long? NextDeadlineMs
+    {
+        get
+        {
+            long? next = null;
+            foreach (var instance in _active.Values)
+            {
+                if (instance.NextDeadlineMs is not long deadline)
+                    continue;
+                if (next is null || deadline < next.Value)
+                    next = deadline;
+            }
+            return next;
+        }
+    }
 
     public bool IsBound(KeyId key) => _bindings.ContainsKey(key);
     public bool IsActive(KeyId key) => _active.ContainsKey(key);
