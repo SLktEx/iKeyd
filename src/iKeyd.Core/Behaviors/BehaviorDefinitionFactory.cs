@@ -74,6 +74,8 @@ public static class BehaviorDefinitionFactory
             return CreateSetLayer(invocation);
         if (string.Equals(invocation.Name, "OSL", StringComparison.OrdinalIgnoreCase))
             return CreateOneShotLayer(invocation);
+        if (string.Equals(invocation.Name, "OSM", StringComparison.OrdinalIgnoreCase))
+            return CreateOneShotModifier(invocation);
         if (string.Equals(invocation.Name, "UNICODE", StringComparison.OrdinalIgnoreCase))
             return CreateUnicode(invocation);
         if (string.Equals(invocation.Name, "TEXT", StringComparison.OrdinalIgnoreCase))
@@ -201,6 +203,13 @@ public static class BehaviorDefinitionFactory
         RequireNoOptions(invocation);
         RequireCount(invocation, 1, "OSL(layer)");
         return StandardBehaviors.OSL(invocation.Arguments[0]);
+    }
+
+    private static BehaviorDefinition CreateOneShotModifier(BehaviorInvocationProfile invocation)
+    {
+        RequireNoOptions(invocation);
+        RequireCount(invocation, 1, "OSM(modifier)");
+        return StandardBehaviors.OSM(NormalizeModifier(invocation.Arguments[0]));
     }
 
     private static BehaviorDefinition CreateUnicode(BehaviorInvocationProfile invocation)
