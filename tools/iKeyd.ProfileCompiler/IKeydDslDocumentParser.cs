@@ -94,6 +94,7 @@ internal static class IKeydDslDocumentParser
            name.Equals("TG", StringComparison.OrdinalIgnoreCase) ||
            name.Equals("TO", StringComparison.OrdinalIgnoreCase) ||
            name.Equals("OSL", StringComparison.OrdinalIgnoreCase) ||
+           name.Equals("OSM", StringComparison.OrdinalIgnoreCase) ||
            name.Equals("UNICODE", StringComparison.OrdinalIgnoreCase) ||
            name.Equals("TEXT", StringComparison.OrdinalIgnoreCase) ||
            name.Equals("EXEC", StringComparison.OrdinalIgnoreCase) ||
