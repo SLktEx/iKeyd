@@ -4,7 +4,8 @@ namespace iKeyd.Core.Behaviors;
 
 /// <summary>
 /// Definition shared by every key using the same behavior implementation.
-/// A fresh runtime instance is created for each physical press.
+/// A fresh runtime instance is created when no bounded pending instance exists for
+/// the same source key.
 /// </summary>
 public abstract class BehaviorDefinition
 {
@@ -12,7 +13,7 @@ public abstract class BehaviorDefinition
 }
 
 /// <summary>
-/// Per-press state machine used by <see cref="BehaviorRuntime"/>.
+/// Per-sequence state machine used by <see cref="BehaviorRuntime"/>.
 /// Implementations emit only primitive <see cref="BehaviorAction"/> values.
 /// </summary>
 public abstract class BehaviorInstance
@@ -29,6 +30,13 @@ public abstract class BehaviorInstance
     /// explicit time advance. Null means the instance has no pending deadline.
     /// </summary>
     internal virtual long? NextDeadlineMs => null;
+
+    /// <summary>
+    /// Whether this instance must remain alive after its source key is released.
+    /// Retained instances are required to expose a finite <see cref="NextDeadlineMs"/>
+    /// so post-release state cannot become an unbounded background task.
+    /// </summary>
+    internal virtual bool KeepAliveAfterRelease => false;
 
     internal virtual void OnPress(long timestampMs, List<BehaviorAction> actions)
     {
@@ -60,14 +68,15 @@ public abstract class BehaviorInstance
 
 /// <summary>
 /// Platform-neutral event runtime for key behaviors. It receives both key-down and
-/// key-up events, observes unrelated key-downs as interruptions, and advances
-/// behavior timers using caller-supplied timestamps. It deliberately knows nothing
-/// about Windows, Wayland, QMK helpers, or a specific DSL surface syntax.
+/// key-up events, observes unrelated key-downs as interruptions, advances bounded
+/// deadlines, and may retain explicitly bounded post-release state. It deliberately
+/// knows nothing about Windows, Wayland, QMK helpers, or a specific DSL surface.
 /// </summary>
 public sealed class BehaviorRuntime
 {
     private readonly Dictionary<KeyId, BehaviorDefinition> _bindings;
     private readonly Dictionary<KeyId, BehaviorInstance> _active = [];
+    private readonly Dictionary<KeyId, BehaviorInstance> _pending = [];
     private bool _hasTimestamp;
     private long _lastTimestampMs;
 
@@ -83,30 +92,27 @@ public sealed class BehaviorRuntime
     }
 
     public int ActiveCount => _active.Count;
+    public int PendingCount => _pending.Count;
 
     /// <summary>
-    /// Earliest pending deadline across all active behavior instances. Backends
-    /// may schedule one bounded wake-up for this value rather than polling or
-    /// introducing a scripting scheduler.
+    /// Earliest pending deadline across physically-active and bounded retained
+    /// behavior instances. Backends may schedule one wake-up for this value rather
+    /// than polling or introducing a general scripting scheduler.
     /// </summary>
     public long? NextDeadlineMs
     {
         get
         {
             long? next = null;
-            foreach (var instance in _active.Values)
-            {
-                if (instance.NextDeadlineMs is not long deadline)
-                    continue;
-                if (next is null || deadline < next.Value)
-                    next = deadline;
-            }
+            FindEarlierDeadline(_active.Values, ref next);
+            FindEarlierDeadline(_pending.Values, ref next);
             return next;
         }
     }
 
     public bool IsBound(KeyId key) => _bindings.ContainsKey(key);
     public bool IsActive(KeyId key) => _active.ContainsKey(key);
+    public bool IsPending(KeyId key) => _pending.ContainsKey(key);
 
     public BehaviorDispatchResult OnKeyDown(KeyId key, long timestampMs)
     {
@@ -124,16 +130,15 @@ public sealed class BehaviorRuntime
     }
 
     /// <summary>
-    /// Advances active instances and reports an unrelated key-down as an
-    /// interruption without starting a newly bound behavior. Routers can use this
-    /// before layer resolution, apply emitted actions, then decide which keymap's
-    /// binding should start for the same physical key event.
+    /// Advances active/pending instances and reports an unrelated key-down as an
+    /// interruption without starting a newly bound behavior. A pending instance for
+    /// the same source key is not interrupted; BeginKeyDown can resume it.
     /// </summary>
     public BehaviorDispatchResult ObserveKeyDown(KeyId key, long timestampMs)
     {
         EnsureMonotonic(timestampMs);
         var actions = new List<BehaviorAction>();
-        AdvanceActive(timestampMs, actions);
+        AdvanceInstances(timestampMs, actions);
 
         foreach (var active in _active.Values)
         {
@@ -141,29 +146,43 @@ public sealed class BehaviorRuntime
                 active.OnInterrupt(key, timestampMs, actions);
         }
 
+        foreach (var pending in _pending.Values)
+        {
+            if (pending.SourceKey != key)
+                pending.OnInterrupt(key, timestampMs, actions);
+        }
+
+        PrunePending();
         return Result(false, actions);
     }
 
     /// <summary>
     /// Starts the behavior bound to <paramref name="key"/> without delivering a
     /// second interruption notification to already-active instances. A repeated
-    /// physical down is delivered to the existing instance instead of creating a
-    /// second instance or restarting its state.
+    /// physical down is delivered to the existing active instance. A bounded
+    /// post-release instance for the same key is resumed before creating a new one.
     /// </summary>
     public BehaviorDispatchResult BeginKeyDown(KeyId key, long timestampMs)
     {
         EnsureMonotonic(timestampMs);
         var actions = new List<BehaviorAction>();
-        AdvanceActive(timestampMs, actions);
-
-        if (!_bindings.TryGetValue(key, out var definition))
-            return Result(false, actions);
+        AdvanceInstances(timestampMs, actions);
 
         if (_active.TryGetValue(key, out var active))
         {
             active.OnRepeat(timestampMs, actions);
             return Result(true, actions);
         }
+
+        if (_pending.Remove(key, out var pending))
+        {
+            pending.OnPress(timestampMs, actions);
+            _active.Add(key, pending);
+            return Result(true, actions);
+        }
+
+        if (!_bindings.TryGetValue(key, out var definition))
+            return Result(false, actions);
 
         var instance = definition.CreateInstance(key, timestampMs);
         instance.OnPress(timestampMs, actions);
@@ -175,12 +194,18 @@ public sealed class BehaviorRuntime
     {
         EnsureMonotonic(timestampMs);
         var actions = new List<BehaviorAction>();
-        AdvanceActive(timestampMs, actions);
+        AdvanceInstances(timestampMs, actions);
 
         if (!_active.Remove(key, out var instance))
             return Result(false, actions);
 
         instance.OnRelease(timestampMs, actions);
+        if (instance.KeepAliveAfterRelease)
+        {
+            EnsureBoundedPending(instance);
+            _pending.Add(key, instance);
+        }
+
         return Result(true, actions);
     }
 
@@ -191,30 +216,80 @@ public sealed class BehaviorRuntime
     {
         EnsureMonotonic(timestampMs);
         var actions = new List<BehaviorAction>();
-        AdvanceActive(timestampMs, actions);
+        AdvanceInstances(timestampMs, actions);
         return actions.Count == 0 ? Array.Empty<BehaviorAction>() : actions;
     }
 
     /// <summary>
-    /// Cancels every active behavior and emits cleanup actions for resources owned
-    /// by those instances. Cancellation does not emit pending tap actions.
+    /// Cancels every active or bounded-pending behavior and emits cleanup actions
+    /// for resources owned by those instances. Cancellation does not resolve a
+    /// pending tap/multi-tap sequence into normal output.
     /// </summary>
     public IReadOnlyList<BehaviorAction> CancelAll()
     {
-        if (_active.Count == 0)
+        if (_active.Count == 0 && _pending.Count == 0)
             return Array.Empty<BehaviorAction>();
 
         var actions = new List<BehaviorAction>();
         foreach (var instance in _active.Values)
             instance.Cancel(actions);
+        foreach (var instance in _pending.Values)
+            instance.Cancel(actions);
         _active.Clear();
+        _pending.Clear();
         return actions.Count == 0 ? Array.Empty<BehaviorAction>() : actions;
     }
 
-    private void AdvanceActive(long timestampMs, List<BehaviorAction> actions)
+    private void AdvanceInstances(long timestampMs, List<BehaviorAction> actions)
     {
         foreach (var instance in _active.Values)
             instance.AdvanceTo(timestampMs, actions);
+        foreach (var instance in _pending.Values)
+            instance.AdvanceTo(timestampMs, actions);
+        PrunePending();
+    }
+
+    private void PrunePending()
+    {
+        List<KeyId>? completed = null;
+        foreach (var pair in _pending)
+        {
+            if (pair.Value.KeepAliveAfterRelease)
+            {
+                EnsureBoundedPending(pair.Value);
+                continue;
+            }
+
+            completed ??= [];
+            completed.Add(pair.Key);
+        }
+
+        if (completed is null)
+            return;
+        foreach (var key in completed)
+            _pending.Remove(key);
+    }
+
+    private static void EnsureBoundedPending(BehaviorInstance instance)
+    {
+        if (instance.NextDeadlineMs is null)
+        {
+            throw new InvalidOperationException(
+                $"Behavior on '{instance.SourceKey}' requested post-release retention without a bounded deadline.");
+        }
+    }
+
+    private static void FindEarlierDeadline(
+        IEnumerable<BehaviorInstance> instances,
+        ref long? next)
+    {
+        foreach (var instance in instances)
+        {
+            if (instance.NextDeadlineMs is not long deadline)
+                continue;
+            if (next is null || deadline < next.Value)
+                next = deadline;
+        }
     }
 
     private void EnsureMonotonic(long timestampMs)
