@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Drawing.Imaging;
 using System.Runtime.InteropServices;
 using iKeyd.Core.Clipboard;
@@ -22,7 +23,27 @@ public sealed class WindowsClipboardService : IClipboardService, IClipboardPaylo
             ["image/tiff"] = "image/tiff",
             ["BMP"] = "image/bmp",
             ["image/bmp"] = "image/bmp",
-            ["image/x-ms-bmp"] = "image/bmp"
+            ["image/x-ms-bmp"] = "image/bmp",
+            ["WEBP"] = "image/webp",
+            ["WebP"] = "image/webp",
+            ["image/webp"] = "image/webp",
+            ["HEIC"] = "image/heic",
+            ["image/heic"] = "image/heic",
+            ["HEIF"] = "image/heif",
+            ["image/heif"] = "image/heif",
+            ["AVIF"] = "image/avif",
+            ["image/avif"] = "image/avif",
+            ["ICO"] = "image/ico",
+            ["image/ico"] = "image/ico",
+            ["image/x-icon"] = "image/ico",
+            ["image/vnd.microsoft.icon"] = "image/ico",
+            ["JPEG XR"] = "image/jxr",
+            ["JXR"] = "image/jxr",
+            ["image/jxr"] = "image/jxr",
+            ["WMP"] = "image/vnd.ms-photo",
+            ["image/vnd.ms-photo"] = "image/vnd.ms-photo",
+            ["DDS"] = "image/vnd.ms-dds",
+            ["image/vnd.ms-dds"] = "image/vnd.ms-dds"
         };
 
     private static readonly IReadOnlyDictionary<string, string> PreferredNativeImageFormats =
@@ -32,7 +53,15 @@ public sealed class WindowsClipboardService : IClipboardService, IClipboardPaylo
             ["image/jpeg"] = "JFIF",
             ["image/gif"] = "GIF",
             ["image/tiff"] = "TIFF",
-            ["image/bmp"] = "BMP"
+            ["image/bmp"] = "BMP",
+            ["image/webp"] = "WEBP",
+            ["image/heic"] = "HEIC",
+            ["image/heif"] = "HEIF",
+            ["image/avif"] = "AVIF",
+            ["image/ico"] = "ICO",
+            ["image/jxr"] = "JPEG XR",
+            ["image/vnd.ms-photo"] = "WMP",
+            ["image/vnd.ms-dds"] = "DDS"
         };
 
     private readonly ManualResetEventSlim _ready = new(false);
@@ -76,9 +105,9 @@ public sealed class WindowsClipboardService : IClipboardService, IClipboardPaylo
                 using var image = System.Windows.Forms.Clipboard.GetImage();
                 if (image is not null)
                 {
-                    // Some applications expose only a decoded bitmap/DIB. Keep the
-                    // PNG conversion as the compatibility fallback, while preserving
-                    // native PNG/JPEG/GIF/TIFF/BMP bytes when they are exposed.
+                    // Some applications expose only a decoded bitmap/DIB. Keep PNG
+                    // as the binary-safe fallback while preserving encoded formats
+                    // (including WebP/HEIF/AVIF when exposed) whenever available.
                     using var stream = new MemoryStream();
                     image.Save(stream, ImageFormat.Png);
                     return ClipboardPayload.FromImage(stream.ToArray(), "image/png");
@@ -132,50 +161,50 @@ public sealed class WindowsClipboardService : IClipboardService, IClipboardPaylo
         if (payload.Data.Length == 0)
             throw new InvalidDataException("Clipboard image payload is empty.");
 
-        Bitmap bitmap;
-        try
+        Bitmap? bitmap = null;
+        var decodeErrorHResult = 0;
+
+        // WIC is the primary decoder because it discovers Windows-installed codecs
+        // at runtime (for example WebP/HEIF extensions) instead of hard-coding a
+        // fixed set of GDI+ image formats.
+        if (!WindowsWicImageDecoder.TryDecode(payload.Data, out bitmap, out decodeErrorHResult))
         {
-            using var sourceStream = new MemoryStream(payload.Data, writable: false);
-            using var source = Image.FromStream(
-                sourceStream,
-                useEmbeddedColorManagement: true,
-                validateImageData: true);
-            bitmap = new Bitmap(source);
-        }
-        catch (Exception exception) when (
-            exception is ArgumentException or OutOfMemoryException or ExternalException)
-        {
-            throw new InvalidDataException(
-                $"Clipboard image payload '{payload.ContentType}' cannot be decoded by the Windows image backend.",
-                exception);
+            // Keep a narrow compatibility fallback for legacy GDI+ decoders. A
+            // missing WIC extension codec must not discard the encoded history item.
+            bitmap = TryDecodeWithGdiPlus(payload.Data);
+            if (bitmap is not null)
+                decodeErrorHResult = 0;
         }
 
         var dataObject = new DataObject();
         var ownedStreams = new List<MemoryStream>();
         try
         {
-            // Publish a normal Bitmap/DIB representation for applications that do
-            // not understand the encoded source format.
-            dataObject.SetData(DataFormats.Bitmap, autoConvert: true, bitmap);
-
-            // Also put the original encoded bytes back under the common Windows
-            // registered format so format-aware applications can retain JPEG/GIF/
-            // TIFF/PNG/BMP data (including animation/pages where applicable).
-            var contentType = NormalizeImageContentType(payload.ContentType);
-            if (PreferredNativeImageFormats.TryGetValue(contentType, out var nativeFormat))
+            if (bitmap is not null)
             {
-                var encodedStream = new MemoryStream(payload.Data, writable: false);
-                ownedStreams.Add(encodedStream);
-                dataObject.SetData(nativeFormat, autoConvert: false, encodedStream);
+                // Standard Bitmap/DIB representation for broad paste compatibility.
+                dataObject.SetData(DataFormats.Bitmap, autoConvert: true, bitmap);
             }
 
-            return new ClipboardImageRestoreData(dataObject, bitmap, ownedStreams);
+            // Always retain the original encoded bytes even when no decoder is
+            // installed. Format-aware applications can still consume the original
+            // representation, and a future codec installation can decode the item.
+            var contentType = NormalizeImageContentType(payload.ContentType);
+            AddEncodedFormat(dataObject, ownedStreams, contentType, payload.Data);
+            if (PreferredNativeImageFormats.TryGetValue(contentType, out var nativeFormat))
+                AddEncodedFormat(dataObject, ownedStreams, nativeFormat, payload.Data);
+
+            return new ClipboardImageRestoreData(
+                dataObject,
+                bitmap,
+                ownedStreams,
+                bitmap is null ? decodeErrorHResult : null);
         }
         catch
         {
             foreach (var stream in ownedStreams)
                 stream.Dispose();
-            bitmap.Dispose();
+            bitmap?.Dispose();
             throw;
         }
     }
@@ -217,8 +246,14 @@ public sealed class WindowsClipboardService : IClipboardService, IClipboardPaylo
                     case ClipboardPayloadKind.Image:
                         using (var restoreData = PrepareImageRestore(payload))
                         {
+                            if (!restoreData.HasBitmap && restoreData.DecodeErrorHResult is int error)
+                            {
+                                Trace.WriteLine(
+                                    $"iKeyd Clipboard History could not decode '{payload.ContentType}' through installed Windows image codecs (HRESULT 0x{error:X8}); preserving encoded data only.");
+                            }
+
                             // copy=true flushes the data into the system clipboard
-                            // before the backing bitmap/streams are disposed.
+                            // before backing bitmap/streams are disposed.
                             System.Windows.Forms.Clipboard.SetDataObject(restoreData.DataObject, copy: true);
                         }
                         break;
@@ -307,14 +342,47 @@ public sealed class WindowsClipboardService : IClipboardService, IClipboardPaylo
         }
     }
 
+    private static void AddEncodedFormat(
+        DataObject dataObject,
+        ICollection<MemoryStream> ownedStreams,
+        string format,
+        byte[] data)
+    {
+        if (string.IsNullOrWhiteSpace(format) || dataObject.GetDataPresent(format, autoConvert: false))
+            return;
+
+        var stream = new MemoryStream(data, writable: false);
+        ownedStreams.Add(stream);
+        dataObject.SetData(format, autoConvert: false, stream);
+    }
+
+    private static Bitmap? TryDecodeWithGdiPlus(byte[] data)
+    {
+        try
+        {
+            using var sourceStream = new MemoryStream(data, writable: false);
+            using var source = Image.FromStream(
+                sourceStream,
+                useEmbeddedColorManagement: true,
+                validateImageData: true);
+            return new Bitmap(source);
+        }
+        catch (Exception exception) when (
+            exception is ArgumentException or OutOfMemoryException or ExternalException)
+        {
+            return null;
+        }
+    }
+
     private static string NormalizeImageContentType(string contentType)
     {
         var separator = contentType.IndexOf(';');
         var mediaType = separator >= 0 ? contentType[..separator] : contentType;
         return mediaType.Trim().ToLowerInvariant() switch
         {
-            "image/jpg" => "image/jpeg",
+            "image/jpg" or "image/jpe" => "image/jpeg",
             "image/x-ms-bmp" => "image/bmp",
+            "image/x-icon" or "image/vnd.microsoft.icon" => "image/ico",
             var normalized => normalized
         };
     }
@@ -390,21 +458,25 @@ public sealed class WindowsClipboardService : IClipboardService, IClipboardPaylo
 
 internal sealed class ClipboardImageRestoreData : IDisposable
 {
-    private readonly Bitmap _bitmap;
+    private readonly Bitmap? _bitmap;
     private readonly IReadOnlyList<MemoryStream> _streams;
     private bool _disposed;
 
     public ClipboardImageRestoreData(
         DataObject dataObject,
-        Bitmap bitmap,
-        IReadOnlyList<MemoryStream> streams)
+        Bitmap? bitmap,
+        IReadOnlyList<MemoryStream> streams,
+        int? decodeErrorHResult)
     {
         DataObject = dataObject ?? throw new ArgumentNullException(nameof(dataObject));
-        _bitmap = bitmap ?? throw new ArgumentNullException(nameof(bitmap));
+        _bitmap = bitmap;
         _streams = streams ?? throw new ArgumentNullException(nameof(streams));
+        DecodeErrorHResult = decodeErrorHResult;
     }
 
     public DataObject DataObject { get; }
+    public bool HasBitmap => _bitmap is not null;
+    public int? DecodeErrorHResult { get; }
 
     public void Dispose()
     {
@@ -414,6 +486,6 @@ internal sealed class ClipboardImageRestoreData : IDisposable
 
         foreach (var stream in _streams)
             stream.Dispose();
-        _bitmap.Dispose();
+        _bitmap?.Dispose();
     }
 }

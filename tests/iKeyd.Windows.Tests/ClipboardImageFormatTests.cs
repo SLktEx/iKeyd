@@ -21,6 +21,25 @@ public sealed class ClipboardImageFormatTests
     [InlineData("BMP", "image/bmp")]
     [InlineData("image/bmp", "image/bmp")]
     [InlineData("image/x-ms-bmp", "image/bmp")]
+    [InlineData("WEBP", "image/webp")]
+    [InlineData("WebP", "image/webp")]
+    [InlineData("image/webp", "image/webp")]
+    [InlineData("HEIC", "image/heic")]
+    [InlineData("image/heic", "image/heic")]
+    [InlineData("HEIF", "image/heif")]
+    [InlineData("image/heif", "image/heif")]
+    [InlineData("AVIF", "image/avif")]
+    [InlineData("image/avif", "image/avif")]
+    [InlineData("ICO", "image/ico")]
+    [InlineData("image/x-icon", "image/ico")]
+    [InlineData("image/vnd.microsoft.icon", "image/ico")]
+    [InlineData("JPEG XR", "image/jxr")]
+    [InlineData("JXR", "image/jxr")]
+    [InlineData("image/jxr", "image/jxr")]
+    [InlineData("WMP", "image/vnd.ms-photo")]
+    [InlineData("image/vnd.ms-photo", "image/vnd.ms-photo")]
+    [InlineData("DDS", "image/vnd.ms-dds")]
+    [InlineData("image/vnd.ms-dds", "image/vnd.ms-dds")]
     public void Native_encoded_image_bytes_are_preserved(string format, string expectedContentType)
     {
         var bytes = new byte[] { 0x01, 0x23, 0x45, 0x67, 0x89 };
@@ -52,6 +71,8 @@ public sealed class ClipboardImageFormatTests
 
         using var restore = WindowsClipboardService.PrepareImageRestore(payload);
 
+        Assert.True(restore.HasBitmap);
+        Assert.Null(restore.DecodeErrorHResult);
         Assert.True(restore.DataObject.GetDataPresent(DataFormats.Bitmap, autoConvert: false));
         var bitmap = Assert.IsType<Bitmap>(
             restore.DataObject.GetData(DataFormats.Bitmap, autoConvert: false));
@@ -59,8 +80,114 @@ public sealed class ClipboardImageFormatTests
         Assert.Equal(2, bitmap.Height);
 
         Assert.True(restore.DataObject.GetDataPresent(expectedNativeFormat, autoConvert: false));
-        var native = restore.DataObject.GetData(expectedNativeFormat, autoConvert: false);
-        Assert.Equal(bytes, ReadBytes(native));
+        Assert.Equal(bytes, ReadBytes(
+            restore.DataObject.GetData(expectedNativeFormat, autoConvert: false)));
+
+        var normalizedMime = contentType.ToLowerInvariant() switch
+        {
+            "image/jpg" => "image/jpeg",
+            "image/x-ms-bmp" => "image/bmp",
+            var value => value
+        };
+        Assert.True(restore.DataObject.GetDataPresent(normalizedMime, autoConvert: false));
+        Assert.Equal(bytes, ReadBytes(
+            restore.DataObject.GetData(normalizedMime, autoConvert: false)));
+    }
+
+    [Theory]
+    [InlineData("image/png")]
+    [InlineData("image/jpeg")]
+    [InlineData("image/gif")]
+    [InlineData("image/tiff")]
+    [InlineData("image/bmp")]
+    public void Wic_decodes_builtin_common_formats(string contentType)
+    {
+        if (!OperatingSystem.IsWindows())
+            return;
+
+        var bytes = CreateImageBytes(contentType);
+        var decoded = WindowsWicImageDecoder.TryDecode(bytes, out var bitmap, out var error);
+
+        Assert.True(decoded, $"WIC decode failed for {contentType} with HRESULT 0x{error:X8}.");
+        using (bitmap)
+        {
+            Assert.NotNull(bitmap);
+            Assert.Equal(2, bitmap.Width);
+            Assert.Equal(2, bitmap.Height);
+        }
+    }
+
+    [Theory]
+    [InlineData("image/webp", "WEBP")]
+    [InlineData("image/heic", "HEIC")]
+    [InlineData("image/heif", "HEIF")]
+    [InlineData("image/avif", "AVIF")]
+    [InlineData("image/x-icon", "ICO")]
+    [InlineData("image/jxr", "JPEG XR")]
+    [InlineData("image/vnd.ms-photo", "WMP")]
+    [InlineData("image/vnd.ms-dds", "DDS")]
+    public void Codec_optional_formats_keep_encoded_data_even_when_bitmap_decode_is_unavailable(
+        string contentType,
+        string expectedNativeFormat)
+    {
+        var bytes = new byte[] { 0x11, 0x22, 0x33, 0x44, 0x55 };
+        var payload = ClipboardPayload.FromImage(bytes, contentType);
+
+        using var restore = WindowsClipboardService.PrepareImageRestore(payload);
+
+        Assert.True(restore.DataObject.GetDataPresent(expectedNativeFormat, autoConvert: false));
+        Assert.Equal(bytes, ReadBytes(
+            restore.DataObject.GetData(expectedNativeFormat, autoConvert: false)));
+
+        var normalizedMime = contentType == "image/x-icon" ? "image/ico" : contentType;
+        Assert.True(restore.DataObject.GetDataPresent(normalizedMime, autoConvert: false));
+        Assert.Equal(bytes, ReadBytes(
+            restore.DataObject.GetData(normalizedMime, autoConvert: false)));
+
+        if (!restore.HasBitmap)
+            Assert.NotNull(restore.DecodeErrorHResult);
+    }
+
+    [Fact]
+    public void Webp_uses_installed_WIC_codec_when_available()
+    {
+        if (!OperatingSystem.IsWindows())
+            return;
+
+        var bytes = Convert.FromBase64String(
+            "UklGRhwAAABXRUJQVlA4TA8AAAAvAUAAAAcQ/Y/+ByKi/wEA");
+
+        var decoded = WindowsWicImageDecoder.TryDecode(bytes, out var bitmap, out _);
+        if (!decoded)
+            return; // WebP Image Extension is not guaranteed to be installed.
+
+        using (bitmap)
+        {
+            Assert.NotNull(bitmap);
+            Assert.Equal(2, bitmap.Width);
+            Assert.Equal(2, bitmap.Height);
+        }
+    }
+
+    [Fact]
+    public void Avif_uses_installed_WIC_codec_when_available()
+    {
+        if (!OperatingSystem.IsWindows())
+            return;
+
+        var bytes = Convert.FromBase64String(
+            "AAAAIGZ0eXBhdmlmAAAAAGF2aWZtaWYxbWlhZk1BMUIAAADrbWV0YQAAAAAAAAAhaGRscgAAAAAAAAAAcGljdAAAAAAAAAAAAAAAAAAAAAAOcGl0bQAAAAAAAQAAAB5pbG9jAAAAAEQAAAEAAQAAAAEAAAETAAAAKgAAAChpaW5mAAAAAAABAAAAGmluZmUCAAAAAAEAAGF2MDFDb2xvcgAAAABqaXBycAAAAEtpcGNvAAAAFGlzcGUAAAAAAAAAAgAAAAIAAAAQcGl4aQAAAAADCAgIAAAADGF2MUOBAAwAAAAAE2NvbHJuY2x4AAEADQAGgAAAABdpcG1hAAAAAAAAAAEAAQQBAoMEAAAAMm1kYXQSAAoIGAA2iAhoNCAyHBTHh4ZlAgggnlAAAABIWtlc1jIgMQsbXgqRN4A=");
+
+        var decoded = WindowsWicImageDecoder.TryDecode(bytes, out var bitmap, out _);
+        if (!decoded)
+            return; // AV1/AVIF codec availability depends on the Windows install.
+
+        using (bitmap)
+        {
+            Assert.NotNull(bitmap);
+            Assert.Equal(2, bitmap.Width);
+            Assert.Equal(2, bitmap.Height);
+        }
     }
 
     [Fact]
@@ -81,14 +208,19 @@ public sealed class ClipboardImageFormatTests
     }
 
     [Fact]
-    public void Malformed_image_payload_reports_controlled_restore_failure()
+    public void Malformed_image_payload_is_preserved_without_crashing_restore()
     {
-        var payload = ClipboardPayload.FromImage([0x01, 0x02, 0x03, 0x04], "image/png");
+        var bytes = new byte[] { 0x01, 0x02, 0x03, 0x04 };
+        var payload = ClipboardPayload.FromImage(bytes, "image/png");
 
-        var exception = Assert.Throws<InvalidDataException>(
-            () => WindowsClipboardService.PrepareImageRestore(payload));
+        using var restore = WindowsClipboardService.PrepareImageRestore(payload);
 
-        Assert.Contains("image/png", exception.Message, StringComparison.Ordinal);
+        Assert.False(restore.HasBitmap);
+        Assert.NotNull(restore.DecodeErrorHResult);
+        Assert.True(restore.DataObject.GetDataPresent("PNG", autoConvert: false));
+        Assert.Equal(bytes, ReadBytes(restore.DataObject.GetData("PNG", autoConvert: false)));
+        Assert.True(restore.DataObject.GetDataPresent("image/png", autoConvert: false));
+        Assert.Equal(bytes, ReadBytes(restore.DataObject.GetData("image/png", autoConvert: false)));
     }
 
     [Fact]
