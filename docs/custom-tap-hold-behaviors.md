@@ -94,7 +94,9 @@ The behavior language does not get a general asynchronous scripting scheduler. E
 
 On the Windows reference backend this means a held `LT` / `MT` or custom `on_hold` behavior now resolves at its tapping boundary even when no second keyboard event arrives. The backend wake-up only calls the same target-neutral `BehaviorRuntime.AdvanceTo(timestamp)` path; it does not execute source DSL, create event loops, or add helper-name-specific timing branches.
 
-A release, interruption that resolves the behavior, cancellation/reset, or completed timeout removes the pending deadline. Stale backend wake-ups are harmless because the runtime deadline is checked again before advancing.
+The production Windows wake-up uses `WM_TIMER` on the low-level keyboard hook's own message loop rather than a ThreadPool callback. Physical keyboard messages already queued ahead of the timer are therefore processed first, preventing a release timestamped just before the boundary from racing an unrelated timer thread and being misclassified as a hold.
+
+A release, interruption that resolves the behavior, cancellation/reset, or completed timeout removes the pending deadline. Stale backend wake-ups are harmless because the current absolute deadline is checked again before advancing.
 
 The behavior language still forbids unbounded loops, recursion, blocking I/O, and arbitrary asynchronous work in the input path.
 
