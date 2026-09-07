@@ -10,6 +10,7 @@ using Xunit;
 
 namespace iKeyd.Windows.Tests;
 
+[Collection(GlobalWindowsInputCollection.Name)]
 public sealed class Jis109WindowsHookRuntimeE2ETests
 {
     private const uint KeyEventKeyUp = 0x0002;
