@@ -69,7 +69,11 @@ public sealed class CompiledProfileTests
 
     private static void AssertLookupEquivalent(Keymap<string> expected, Keymap<string> actual)
     {
-        for (var firstCode = (int)KeyCode.A; firstCode <= (int)KeyCode.At; firstCode++)
+        // Do not silently limit parity checks to the historical A..At range.
+        // #174 requires the generated profile to agree with the canonical profile
+        // for the complete compact key universe: number/function rows, JIS keys,
+        // navigation, system keys, numpad and media keys as well as letters.
+        for (var firstCode = (int)KeyCode.A; firstCode <= (int)KeyId.LastCompactCode; firstCode++)
         {
             var first = new KeyId((KeyCode)firstCode);
             var expectedSingleFound = expected.TryGetSingle(first, out var expectedSingle);
@@ -78,7 +82,7 @@ public sealed class CompiledProfileTests
             if (expectedSingleFound)
                 Assert.Equal(expectedSingle, actualSingle);
 
-            for (var secondCode = (int)KeyCode.A; secondCode <= (int)KeyCode.At; secondCode++)
+            for (var secondCode = (int)KeyCode.A; secondCode <= (int)KeyId.LastCompactCode; secondCode++)
             {
                 var second = new KeyId((KeyCode)secondCode);
                 var expectedChordFound = expected.TryGetChord(first, second, out var expectedChord);
