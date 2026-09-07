@@ -120,8 +120,8 @@ public sealed class DesktopFunctionLayerParityTests
         var events = new List<string>();
         foreach (var key in keys)
             events.Add($"keyDown:{key}");
-        for (var index = keys.Length - 1; index >= 0; index--)
-            events.Add($"keyUp:{keys[index]}");
+        foreach (var key in keys)
+            events.Add($"keyUp:{key}");
         return new(events.ToArray(), []);
     }
 
