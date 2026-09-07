@@ -287,7 +287,7 @@ public sealed class WindowsClipboardService : IClipboardService, IClipboardPaylo
 
         protected override void WndProc(ref Message m)
         {
-            base.WndProc(ref Message m);
+            base.WndProc(ref m);
             if (m.Msg == WmClipboardUpdate)
                 _changed();
         }
