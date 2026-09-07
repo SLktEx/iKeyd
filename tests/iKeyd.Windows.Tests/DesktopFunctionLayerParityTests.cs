@@ -120,8 +120,13 @@ public sealed class DesktopFunctionLayerParityTests
         var events = new List<string>();
         foreach (var key in keys)
             events.Add($"keyDown:{key}");
-        foreach (var key in keys)
-            events.Add($"keyUp:{key}");
+
+        // LegacySendOutput releases the target first, then releases modifiers in
+        // the same order they were pressed. This matches pinned AutoHotkey v1.
+        events.Add($"keyUp:{keys[^1]}");
+        for (var index = 0; index < keys.Length - 1; index++)
+            events.Add($"keyUp:{keys[index]}");
+
         return new(events.ToArray(), []);
     }
 
