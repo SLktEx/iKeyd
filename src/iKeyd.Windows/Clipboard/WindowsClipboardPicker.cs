@@ -143,10 +143,11 @@ public sealed class WindowsClipboardPicker : IClipboardPicker, IClipboardPayload
 
                 // The picker is invoked from a global low-level keyboard hook while
                 // another application normally owns the foreground window. Keep it
-                // above that application until Windows grants activation; otherwise
-                // the old focus-loss handler can make the dialog disappear before it
-                // is ever visible to the user.
-                TopMost = true;
+                // above other applications for the whole visible lifetime so it
+                // cannot slip behind the window that owned focus before the hotkey.
+                // The dialog still closes on a real focus loss after activation, so
+                // TopMost cannot linger after the picker is dismissed.
+                TopMost = _activationState.ShouldStayTopMostWhileOpen;
                 BringToFront();
                 Activate();
                 _list.Focus();
@@ -174,18 +175,7 @@ public sealed class WindowsClipboardPicker : IClipboardPicker, IClipboardPayload
             => _list.SelectedItem is PickerItem item ? item.Index : -1;
 
         private void ArmFocusLossClose()
-        {
-            if (!_activationState.MarkActivated())
-                return;
-
-            // TopMost is only an activation bootstrap/fallback. Do not leave the
-            // picker permanently above unrelated applications after it owns focus.
-            BeginInvoke((Action)(() =>
-            {
-                if (!IsDisposed && !Disposing)
-                    TopMost = false;
-            }));
-        }
+            => _activationState.MarkActivated();
 
         private void AcceptSelection()
         {
@@ -208,6 +198,7 @@ internal sealed class ClipboardPickerActivationState
     private bool _activatedAfterShow;
 
     public bool CanCloseOnDeactivate => _shown && _activatedAfterShow;
+    public bool ShouldStayTopMostWhileOpen => _shown;
 
     public void MarkShown() => _shown = true;
 

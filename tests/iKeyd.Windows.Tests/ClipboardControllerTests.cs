@@ -119,6 +119,20 @@ public sealed class ClipboardControllerTests
         Assert.False(state.MarkActivated());
     }
 
+    [Fact]
+    public void Picker_remains_topmost_after_visible_activation()
+    {
+        var state = new ClipboardPickerActivationState();
+
+        Assert.False(state.ShouldStayTopMostWhileOpen);
+
+        state.MarkShown();
+        Assert.True(state.ShouldStayTopMostWhileOpen);
+
+        Assert.True(state.MarkActivated());
+        Assert.True(state.ShouldStayTopMostWhileOpen);
+    }
+
     private sealed class FakeClipboardService : IClipboardService
     {
         public event EventHandler? Changed;
