@@ -5,24 +5,13 @@ namespace iKeyd.Windows.Tests;
 
 public sealed class LayerGestureTimingParityTests
 {
-    public static TheoryData<int, int, int> TimingProfiles => new()
-    {
-        // gap Space-down -> NonConvert-down, overlap/second-key hold, gap between releases (ms)
-        { 1, 1, 1 },
-        { 5, 5, 5 },
-        { 10, 10, 10 },
-        { 39, 1, 1 },
-        { 40, 1, 1 },
-        { 41, 1, 1 },
-        { 1, 39, 1 },
-        { 1, 40, 1 },
-        { 1, 41, 1 },
-        { 10, 100, 10 },
-        { 100, 10, 100 },
-        { 500, 10, 10 },
-        { 10, 500, 10 },
-        { 10, 10, 500 },
-    };
+    public static IEnumerable<object[]> TimingProfiles
+        => LayerGestureTimingProfiles.All.Select(profile => new object[]
+        {
+            profile.PressGapMs,
+            profile.OverlapMs,
+            profile.ReleaseGapMs
+        });
 
     [Theory]
     [MemberData(nameof(TimingProfiles))]
@@ -79,7 +68,7 @@ public sealed class LayerGestureTimingParityTests
         var ikeyd = new IKeydRuntimeScenarioRunner();
         var failures = new List<string>();
 
-        foreach (var profile in EnumerateTimingProfiles())
+        foreach (var profile in LayerGestureTimingProfiles.All)
         {
             foreach (var releaseNonConvertFirst in new[] { true, false })
             {
@@ -113,12 +102,6 @@ public sealed class LayerGestureTimingParityTests
                 ? string.Empty
                 : $"{failures.Count} timing-dependent layer-gesture mismatches:{Environment.NewLine}" +
                   string.Join(Environment.NewLine, failures));
-    }
-
-    private static IEnumerable<(int PressGapMs, int OverlapMs, int ReleaseGapMs)> EnumerateTimingProfiles()
-    {
-        foreach (var row in TimingProfiles)
-            yield return ((int)row[0]!, (int)row[1]!, (int)row[2]!);
     }
 
     private static CompatibilityScenario BuildScenario(
