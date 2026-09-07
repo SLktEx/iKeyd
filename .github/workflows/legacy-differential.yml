@@ -3,7 +3,7 @@ name: Legacy differential
 on:
   workflow_dispatch:
   push:
-    branches: [main]
+    branches: [main-v2-alpha]
     paths:
       - tests/legacy-binary/hotkeySKG.exe.gpg
       - tests/legacy-binary/hotkeySKG.ahk.gpg.asc
@@ -29,7 +29,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: legacy-oracles-v1
+  group: legacy-oracles-v2-alpha
   cancel-in-progress: true
 
 jobs:
@@ -201,7 +201,7 @@ jobs:
       - name: Run compiled EXE differential
         shell: powershell
         env:
-          IKEYD_LEGACY_EXE: ${{ steps.legacy.outputs.path }}
+          IKEYD_LEGACY_EXE: ${{ steps.legacy.outputs.exe }}
           IKEYD_LEGACY_EXE_SHA256: 5492198ce403d796c8588b17419bce82a0e6de3961bb40896a875ee5dee359ea
           IKEYD_DIFFERENTIAL_REPORT_DIR: ${{ github.workspace }}\TestResults\legacy-differential\compiled-exe
         run: |
