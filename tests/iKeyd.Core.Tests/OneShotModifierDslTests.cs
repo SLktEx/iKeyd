@@ -33,25 +33,27 @@ public sealed class OneShotModifierDslTests
     }
 
     [Fact]
-    public void Canonical_dsl_rejects_invalid_OSM_modifier_when_profile_is_materialized()
+    public void Canonical_dsl_rejects_invalid_OSM_modifier_during_parse()
     {
-        var document = IKeydDslDocumentParser.Parse(
-            """
-            profile demo {
-                chord_window = 40ms
-                startup_mode = S
-            }
+        var error = Assert.Throws<InvalidDataException>(() =>
+            IKeydDslDocumentParser.Parse(
+                """
+                profile demo {
+                    chord_window = 40ms
+                    startup_mode = S
+                }
 
-            keymap S {
-                A = OSM(Hyper)
-            }
+                keymap S {
+                    A = OSM(Hyper)
+                }
 
-            keymap K {
-            }
-            """,
-            "bad-osm.ikeyd");
+                keymap K {
+                }
+                """,
+                "bad-osm.ikeyd"));
 
-        Assert.Throws<InvalidDataException>(() =>
-            document.Profile.GetKeymap("S").BuildBehaviorBindings(document.Profile.BehaviorDefinitions));
+        Assert.Contains("bad-osm.ikeyd", error.Message, StringComparison.Ordinal);
+        Assert.Contains("OSM", error.Message, StringComparison.Ordinal);
+        Assert.Contains("Hyper", error.Message, StringComparison.OrdinalIgnoreCase);
     }
 }
