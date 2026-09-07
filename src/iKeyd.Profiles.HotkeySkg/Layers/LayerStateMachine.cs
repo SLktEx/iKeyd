@@ -265,7 +265,15 @@ public static class LayerStateMachine
     }
 
     private static LayerTransition PressAltSpace(LayerRuntimeState state)
-        => Result(state with { Layers = state.Layers.Press(LayerKey.A).Press(LayerKey.S) });
+        // The physical Alt down used to select this legacy handler is not a
+        // modified-key dispatch and must not count as using the layer gesture.
+        // Reset the consumed flag here so a subsequent AltSpaceUp from AMS can
+        // still emit the pinned Alt+Space action.
+        => Result(state with
+        {
+            Layers = state.Layers.Press(LayerKey.A).Press(LayerKey.S),
+            Consumed = false
+        });
 
     private static LayerTransition ReleaseAltSpace(LayerRuntimeState state)
     {
