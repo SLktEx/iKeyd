@@ -432,15 +432,18 @@ internal sealed class IKeydRuntimeHandler : IKeyboardEventHandler, IInputStateRe
 
     private bool DispatchFunctionKey(KeyId key, LayerState state)
     {
-        if (TrySwitchLegacyModeKey(key.Code))
-            return true;
-
+        // SH/KSH/ASH are special legacy dispatch states and must win over
+        // func_1..4 mode switching. This matters for physical 1..4, whose
+        // SHKey_* values are F1..F4 rather than process1..4.
         if (LegacyFunctionSendMap.TryResolve(key.Code, state, out var legacySend))
         {
             if (legacySend.Length != 0)
                 _send.Send(legacySend);
             return true;
         }
+
+        if (TrySwitchLegacyModeKey(key.Code))
+            return true;
 
         switch (key.Code)
         {
@@ -504,15 +507,17 @@ internal sealed class IKeydRuntimeHandler : IKeyboardEventHandler, IInputStateRe
 
     private bool DispatchFunctionKey(KeyId key, string state)
     {
-        if (TrySwitchLegacyModeKey(key.Code))
-            return true;
-
+        // Keep macro/function dispatch precedence aligned with the typed runtime
+        // path: explicit legacy send mappings are resolved before process1..4.
         if (LegacyFunctionSendMap.TryResolve(key.Code, state, out var legacySend))
         {
             if (legacySend.Length != 0)
                 _send.Send(legacySend);
             return true;
         }
+
+        if (TrySwitchLegacyModeKey(key.Code))
+            return true;
 
         var name = key.Value;
 
