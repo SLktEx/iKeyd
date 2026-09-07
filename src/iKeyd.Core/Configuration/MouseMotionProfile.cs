@@ -9,7 +9,7 @@ public sealed record MouseMotionProfile
         2,
         "smoothstep",
         1000.0,
-        800.0,
+        900.0,
         240.0,
         4400.0,
         "neutral",
