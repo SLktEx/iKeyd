@@ -99,7 +99,7 @@ def _parse_mouse(lines: list[str], start: int, end: int, path: Path) -> OrderedD
         ])),
         ("speed", OrderedDict([
             ("normal", 1000),
-            ("precision", 800),
+            ("precision", 900),
             ("fine", 240),
             ("fast", 4400),
         ])),
