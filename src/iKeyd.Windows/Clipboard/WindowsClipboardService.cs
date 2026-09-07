@@ -19,7 +19,20 @@ public sealed class WindowsClipboardService : IClipboardService, IClipboardPaylo
             ["GIF"] = "image/gif",
             ["image/gif"] = "image/gif",
             ["TIFF"] = "image/tiff",
-            ["image/tiff"] = "image/tiff"
+            ["image/tiff"] = "image/tiff",
+            ["BMP"] = "image/bmp",
+            ["image/bmp"] = "image/bmp",
+            ["image/x-ms-bmp"] = "image/bmp"
+        };
+
+    private static readonly IReadOnlyDictionary<string, string> PreferredNativeImageFormats =
+        new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["image/png"] = "PNG",
+            ["image/jpeg"] = "JFIF",
+            ["image/gif"] = "GIF",
+            ["image/tiff"] = "TIFF",
+            ["image/bmp"] = "BMP"
         };
 
     private readonly ManualResetEventSlim _ready = new(false);
@@ -64,8 +77,8 @@ public sealed class WindowsClipboardService : IClipboardService, IClipboardPaylo
                 if (image is not null)
                 {
                     // Some applications expose only a decoded bitmap/DIB. Keep the
-                    // existing PNG conversion as the compatibility fallback, while
-                    // preserving native JPEG/PNG/GIF/TIFF bytes when they are exposed.
+                    // PNG conversion as the compatibility fallback, while preserving
+                    // native PNG/JPEG/GIF/TIFF/BMP bytes when they are exposed.
                     using var stream = new MemoryStream();
                     image.Save(stream, ImageFormat.Png);
                     return ClipboardPayload.FromImage(stream.ToArray(), "image/png");
@@ -111,6 +124,62 @@ public sealed class WindowsClipboardService : IClipboardService, IClipboardPaylo
         return null;
     }
 
+    internal static ClipboardImageRestoreData PrepareImageRestore(ClipboardPayload payload)
+    {
+        ArgumentNullException.ThrowIfNull(payload);
+        if (payload.Kind != ClipboardPayloadKind.Image)
+            throw new ArgumentException("Clipboard payload must be an image.", nameof(payload));
+        if (payload.Data.Length == 0)
+            throw new InvalidDataException("Clipboard image payload is empty.");
+
+        Bitmap bitmap;
+        try
+        {
+            using var sourceStream = new MemoryStream(payload.Data, writable: false);
+            using var source = Image.FromStream(
+                sourceStream,
+                useEmbeddedColorManagement: true,
+                validateImageData: true);
+            bitmap = new Bitmap(source);
+        }
+        catch (Exception exception) when (
+            exception is ArgumentException or OutOfMemoryException or ExternalException)
+        {
+            throw new InvalidDataException(
+                $"Clipboard image payload '{payload.ContentType}' cannot be decoded by the Windows image backend.",
+                exception);
+        }
+
+        var dataObject = new DataObject();
+        var ownedStreams = new List<MemoryStream>();
+        try
+        {
+            // Publish a normal Bitmap/DIB representation for applications that do
+            // not understand the encoded source format.
+            dataObject.SetData(DataFormats.Bitmap, autoConvert: true, bitmap);
+
+            // Also put the original encoded bytes back under the common Windows
+            // registered format so format-aware applications can retain JPEG/GIF/
+            // TIFF/PNG/BMP data (including animation/pages where applicable).
+            var contentType = NormalizeImageContentType(payload.ContentType);
+            if (PreferredNativeImageFormats.TryGetValue(contentType, out var nativeFormat))
+            {
+                var encodedStream = new MemoryStream(payload.Data, writable: false);
+                ownedStreams.Add(encodedStream);
+                dataObject.SetData(nativeFormat, autoConvert: false, encodedStream);
+            }
+
+            return new ClipboardImageRestoreData(dataObject, bitmap, ownedStreams);
+        }
+        catch
+        {
+            foreach (var stream in ownedStreams)
+                stream.Dispose();
+            bitmap.Dispose();
+            throw;
+        }
+    }
+
     public void WriteText(string text)
     {
         ArgumentNullException.ThrowIfNull(text);
@@ -146,10 +215,12 @@ public sealed class WindowsClipboardService : IClipboardService, IClipboardPaylo
                         break;
 
                     case ClipboardPayloadKind.Image:
-                        using (var stream = new MemoryStream(payload.Data, writable: false))
-                        using (var source = Image.FromStream(stream))
-                        using (var bitmap = new Bitmap(source))
-                            System.Windows.Forms.Clipboard.SetImage(bitmap);
+                        using (var restoreData = PrepareImageRestore(payload))
+                        {
+                            // copy=true flushes the data into the system clipboard
+                            // before the backing bitmap/streams are disposed.
+                            System.Windows.Forms.Clipboard.SetDataObject(restoreData.DataObject, copy: true);
+                        }
                         break;
 
                     default:
@@ -236,6 +307,18 @@ public sealed class WindowsClipboardService : IClipboardService, IClipboardPaylo
         }
     }
 
+    private static string NormalizeImageContentType(string contentType)
+    {
+        var separator = contentType.IndexOf(';');
+        var mediaType = separator >= 0 ? contentType[..separator] : contentType;
+        return mediaType.Trim().ToLowerInvariant() switch
+        {
+            "image/jpg" => "image/jpeg",
+            "image/x-ms-bmp" => "image/bmp",
+            var normalized => normalized
+        };
+    }
+
     private static byte[]? TryReadBytes(object? value)
     {
         if (value is byte[] bytes)
@@ -302,5 +385,35 @@ public sealed class WindowsClipboardService : IClipboardService, IClipboardPaylo
         [DllImport("user32.dll", SetLastError = true)]
         [return: MarshalAs(UnmanagedType.Bool)]
         public static extern bool RemoveClipboardFormatListener(nint window);
+    }
+}
+
+internal sealed class ClipboardImageRestoreData : IDisposable
+{
+    private readonly Bitmap _bitmap;
+    private readonly IReadOnlyList<MemoryStream> _streams;
+    private bool _disposed;
+
+    public ClipboardImageRestoreData(
+        DataObject dataObject,
+        Bitmap bitmap,
+        IReadOnlyList<MemoryStream> streams)
+    {
+        DataObject = dataObject ?? throw new ArgumentNullException(nameof(dataObject));
+        _bitmap = bitmap ?? throw new ArgumentNullException(nameof(bitmap));
+        _streams = streams ?? throw new ArgumentNullException(nameof(streams));
+    }
+
+    public DataObject DataObject { get; }
+
+    public void Dispose()
+    {
+        if (_disposed)
+            return;
+        _disposed = true;
+
+        foreach (var stream in _streams)
+            stream.Dispose();
+        _bitmap.Dispose();
     }
 }
