@@ -10,4 +10,4 @@ For `Space -> NonConvert -> NonConvert up -> Space up`, Space is held for `press
 
 For `Space -> NonConvert -> Space up -> NonConvert up`, Space is held for `pressGapMs + overlapMs` and NonConvert is held for `overlapMs + releaseGapMs`.
 
-The matrix intentionally crosses 39/40/41ms and includes 100ms/500ms holds to catch threshold-dependent legacy behavior.
+The matrix crosses 39/40/41ms independently in all three phases and also tests 100ms/500ms delays independently in all three phases. This keeps threshold failures attributable to press-gap, overlap, or final-release timing instead of conflating multiple long delays in one profile.
