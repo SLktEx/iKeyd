@@ -4,9 +4,9 @@ using iKeyd.Profiles.HotkeySkg.Layers;
 namespace iKeyd.App;
 
 /// <summary>
-/// Exact resolved arguments passed to hotkeySKG's withFuncKey(mkey,mhkey,hmkey,mskey).
-/// Values come from the pinned-source #56 Send reachability inventory, not from
-/// reinterpreting AHK string literals at runtime.
+/// Exact resolved arguments passed to hotkeySKG's withFuncKey(mkey,mhkey,hmkey,mskey)
+/// plus the legacy SHKey_* table used by the Space -> Convert number/function layer.
+/// Values come from the pinned legacy source rather than being inferred from runtime output.
 /// </summary>
 internal static class LegacyFunctionSendMap
 {
@@ -24,27 +24,29 @@ internal static class LegacyFunctionSendMap
         string AM,
         string AMH,
         string AHM,
-        string AMS);
+        string AMS,
+        string SH,
+        string KSH,
+        string ASH);
 
     private static readonly ExpandedValues[] Expanded = BuildExpanded();
 
     public static bool TryResolve(KeyCode key, LayerState state, out string sendText)
-    {
-        var slot = ResolveSlot(state);
-        if (slot < 0 || !IsDirectKey(key))
-        {
-            sendText = string.Empty;
-            return false;
-        }
-
-        sendText = GetExpanded(key, slot);
-        return true;
-    }
+        => TryResolveSlot(key, ResolveSlot(state), out sendText);
 
     public static bool TryResolve(KeyCode key, string state, out string sendText)
+        => TryResolveSlot(key, ResolveSlot(state), out sendText);
+
+    private static bool TryResolveSlot(KeyCode key, int slot, out string sendText)
     {
-        var slot = ResolveSlot(state);
-        if (slot < 0 || !IsDirectKey(key))
+        var isSupported = slot switch
+        {
+            >= 0 and <= 11 => IsDirectKey(key),
+            >= 12 and <= 14 => IsShiftNumberKey(key),
+            _ => false
+        };
+
+        if (!isSupported)
         {
             sendText = string.Empty;
             return false;
@@ -93,6 +95,58 @@ internal static class LegacyFunctionSendMap
         return IsDirectKey(key);
     }
 
+    internal static bool TryGetShiftNumberValue(KeyCode key, out string value)
+    {
+        value = key switch
+        {
+            KeyCode.Q => "#1",
+            KeyCode.W => "#2",
+            KeyCode.E => "#3",
+            KeyCode.R => "#4",
+            KeyCode.T => "#5",
+            KeyCode.Y => "#6",
+            KeyCode.U => "#7",
+            KeyCode.I => "#8",
+            KeyCode.O => "#9",
+            KeyCode.P => "#0",
+            KeyCode.At => "{F11}",
+            KeyCode.A => "1",
+            KeyCode.S => "2",
+            KeyCode.D => "3",
+            KeyCode.F => "4",
+            KeyCode.G => "5",
+            KeyCode.H => "6",
+            KeyCode.J => "7",
+            KeyCode.K => "8",
+            KeyCode.L => "9",
+            KeyCode.SColon => "0",
+            KeyCode.Colon => "{F12}",
+            KeyCode.Z => "{F1}",
+            KeyCode.X => "{F2}",
+            KeyCode.C => "{F3}",
+            KeyCode.V => "{F4}",
+            KeyCode.B => "{F5}",
+            KeyCode.N => "{F6}",
+            KeyCode.M => "{F7}",
+            KeyCode.Comma => "{F8}",
+            KeyCode.Dot => "{F9}",
+            KeyCode.Slash => "{F10}",
+            KeyCode.Digit1 => "{F1}",
+            KeyCode.Digit2 => "{F2}",
+            KeyCode.Digit3 => "{F3}",
+            KeyCode.Digit4 => "{F4}",
+            KeyCode.Digit5 => "{F5}",
+            KeyCode.Digit6 => "{F6}",
+            KeyCode.Digit7 => "{F7}",
+            KeyCode.Digit8 => "{F8}",
+            KeyCode.Digit9 => "{F9}",
+            KeyCode.Digit0 => "{F10}",
+            _ => string.Empty
+        };
+
+        return IsShiftNumberKey(key);
+    }
+
     private static int ResolveSlot(LayerState state)
         => state.IsExact(LayerKey.M) ? 0
             : state.IsExact(LayerKey.M, LayerKey.H) ? 1
@@ -106,6 +160,9 @@ internal static class LegacyFunctionSendMap
             : state.IsExact(LayerKey.A, LayerKey.M, LayerKey.H) ? 9
             : state.IsExact(LayerKey.A, LayerKey.H, LayerKey.M) ? 10
             : state.IsExact(LayerKey.A, LayerKey.M, LayerKey.S) ? 11
+            : state.IsExact(LayerKey.S, LayerKey.H) ? 12
+            : state.IsExact(LayerKey.K, LayerKey.S, LayerKey.H) ? 13
+            : state.IsExact(LayerKey.A, LayerKey.S, LayerKey.H) ? 14
             : -1;
 
     private static int ResolveSlot(string state)
@@ -123,6 +180,9 @@ internal static class LegacyFunctionSendMap
             "AMH" => 9,
             "AHM" => 10,
             "AMS" => 11,
+            "SH" => 12,
+            "KSH" => 13,
+            "ASH" => 14,
             _ => -1
         };
 
@@ -143,6 +203,9 @@ internal static class LegacyFunctionSendMap
             9 => values.AMH,
             10 => values.AHM,
             11 => values.AMS,
+            12 => values.SH,
+            13 => values.KSH,
+            14 => values.ASH,
             _ => throw new ArgumentOutOfRangeException(nameof(slot))
         };
     }
@@ -150,40 +213,36 @@ internal static class LegacyFunctionSendMap
     private static ExpandedValues[] BuildExpanded()
     {
         var result = new ExpandedValues[(int)KeyCode.At + 1];
-        foreach (var key in DirectKeys())
+        for (var raw = (int)KeyCode.A; raw <= (int)KeyCode.At; raw++)
         {
-            if (!TryGetValues(key, out var values))
+            var key = (KeyCode)raw;
+            var hasDirect = TryGetValues(key, out var values);
+            var hasShiftNumber = TryGetShiftNumberValue(key, out var shiftNumber);
+            if (!hasDirect && !hasShiftNumber)
                 continue;
 
             result[(int)key] = new ExpandedValues(
-                values.M,
-                values.MH,
-                values.HM,
-                values.MS,
-                Prefix('^', values.M),
-                Prefix('^', values.MH),
-                Prefix('^', values.HM),
-                Prefix('^', values.MS),
-                Prefix('!', values.M),
-                Prefix('!', values.MH),
-                Prefix('!', values.HM),
-                Prefix('!', values.MS));
+                hasDirect ? values.M : string.Empty,
+                hasDirect ? values.MH : string.Empty,
+                hasDirect ? values.HM : string.Empty,
+                hasDirect ? values.MS : string.Empty,
+                hasDirect ? Prefix('^', values.M) : string.Empty,
+                hasDirect ? Prefix('^', values.MH) : string.Empty,
+                hasDirect ? Prefix('^', values.HM) : string.Empty,
+                hasDirect ? Prefix('^', values.MS) : string.Empty,
+                hasDirect ? Prefix('!', values.M) : string.Empty,
+                hasDirect ? Prefix('!', values.MH) : string.Empty,
+                hasDirect ? Prefix('!', values.HM) : string.Empty,
+                hasDirect ? Prefix('!', values.MS) : string.Empty,
+                hasShiftNumber ? shiftNumber : string.Empty,
+                hasShiftNumber ? Prefix('^', shiftNumber) : string.Empty,
+                hasShiftNumber ? Prefix('!', shiftNumber) : string.Empty);
         }
         return result;
     }
 
     private static string Prefix(char prefix, string value)
         => value.Length == 0 ? string.Empty : string.Concat(prefix, value);
-
-    private static IEnumerable<KeyCode> DirectKeys()
-    {
-        for (var value = (int)KeyCode.A; value <= (int)KeyCode.At; value++)
-        {
-            var key = (KeyCode)value;
-            if (IsDirectKey(key))
-                yield return key;
-        }
-    }
 
     private static bool IsDirectKey(KeyCode key)
         => key is
@@ -192,4 +251,15 @@ internal static class LegacyFunctionSendMap
             KeyCode.L or KeyCode.SColon or KeyCode.Colon or KeyCode.Z or KeyCode.X or KeyCode.C or
             KeyCode.N or KeyCode.M or KeyCode.Comma or KeyCode.Dot or KeyCode.Slash or
             KeyCode.Digit5 or KeyCode.Digit6 or KeyCode.Digit7 or KeyCode.Digit8 or KeyCode.Digit9 or KeyCode.Digit0;
+
+    private static bool IsShiftNumberKey(KeyCode key)
+        => key is
+            KeyCode.Q or KeyCode.W or KeyCode.E or KeyCode.R or KeyCode.T or
+            KeyCode.Y or KeyCode.U or KeyCode.I or KeyCode.O or KeyCode.P or KeyCode.At or
+            KeyCode.A or KeyCode.S or KeyCode.D or KeyCode.F or KeyCode.G or
+            KeyCode.H or KeyCode.J or KeyCode.K or KeyCode.L or KeyCode.SColon or KeyCode.Colon or
+            KeyCode.Z or KeyCode.X or KeyCode.C or KeyCode.V or KeyCode.B or
+            KeyCode.N or KeyCode.M or KeyCode.Comma or KeyCode.Dot or KeyCode.Slash or
+            KeyCode.Digit1 or KeyCode.Digit2 or KeyCode.Digit3 or KeyCode.Digit4 or KeyCode.Digit5 or
+            KeyCode.Digit6 or KeyCode.Digit7 or KeyCode.Digit8 or KeyCode.Digit9 or KeyCode.Digit0;
 }
