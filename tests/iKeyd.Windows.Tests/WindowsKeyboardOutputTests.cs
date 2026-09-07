@@ -1,4 +1,6 @@
 using System.Runtime.InteropServices;
+using iKeyd.App;
+using iKeyd.Core.Chords;
 using iKeyd.Core.Input;
 using iKeyd.Windows.Input;
 using Xunit;
@@ -42,6 +44,29 @@ public sealed class WindowsKeyboardOutputTests
         Assert.Equal(expectedScanCode, input.Data.Keyboard.ScanCode);
         Assert.NotEqual(0u, input.Data.Keyboard.Flags & 0x0008u);
         Assert.Equal(WindowsKeyboardOutput.InjectionMarker, input.Data.Keyboard.ExtraInfo);
+    }
+
+    [Fact]
+    public void Number_and_function_identity_replay_matches_the_JIS109_registry()
+    {
+        var checkedBindings = 0;
+        foreach (var binding in WindowsKeyMap.Jis109PhysicalBindings)
+        {
+            var isNumberRow = binding.Code is >= KeyCode.Digit0 and <= KeyCode.Digit9;
+            var isFunctionRow = binding.Code is >= KeyCode.F1 and <= KeyCode.F12;
+            if (!isNumberRow && !isFunctionRow)
+                continue;
+
+            var normalized = WindowsKeyboardOutput.NormalizeIdentityReplayKey(
+                new KeyboardKey(binding.WindowsKey.VirtualKey, 0, binding.WindowsKey.IsExtended));
+
+            Assert.Equal((ushort)0, normalized.VirtualKey);
+            Assert.Equal(binding.WindowsKey.ScanCode, normalized.ScanCode);
+            Assert.Equal(binding.WindowsKey.IsExtended, normalized.IsExtended);
+            checkedBindings++;
+        }
+
+        Assert.Equal(22, checkedBindings);
     }
 
     [Fact]
