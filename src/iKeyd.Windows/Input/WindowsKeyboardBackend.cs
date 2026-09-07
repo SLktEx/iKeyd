@@ -18,6 +18,9 @@ public sealed class WindowsKeyboardBackend : IKeyboardInputSource, IKeyboardOutp
     public void Start(IKeyboardEventHandler handler) => _hook.Start(handler);
     public void Stop() => _hook.Stop();
 
+    public void ScheduleBehaviorDeadline(long? deadlineMs, Action<long> callback)
+        => _hook.ScheduleBehaviorDeadline(deadlineMs, callback);
+
     public void SendKey(KeyboardKey key, KeyEventKind kind) => _output.SendKey(key, kind);
     public void SendKeyPress(KeyboardKey key) => _output.SendKeyPress(key);
     public void SendText(string text) => _output.SendText(text);
