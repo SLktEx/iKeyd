@@ -1,3 +1,5 @@
+using iKeyd.Windows.Input;
+
 namespace iKeyd.App;
 
 /// <summary>
@@ -10,92 +12,50 @@ internal interface IBehaviorDeadlineScheduler : IDisposable
     void Schedule(long? deadlineMs, Action<long> callback);
 }
 
-internal sealed class ThreadPoolBehaviorDeadlineScheduler : IBehaviorDeadlineScheduler
+/// <summary>
+/// Default used by isolated router tests/callers that do not provide a platform
+/// wake-up source. Event-driven AdvanceTo semantics continue to work unchanged.
+/// </summary>
+internal sealed class NoOpBehaviorDeadlineScheduler : IBehaviorDeadlineScheduler
 {
-    private readonly object _gate = new();
-    private readonly Func<long> _clock;
-    private readonly Timer _timer;
-    private Action<long>? _callback;
-    private long? _deadlineMs;
-    private bool _disposed;
-
-    public ThreadPoolBehaviorDeadlineScheduler(Func<long>? clock = null)
-    {
-        _clock = clock ?? static () => Environment.TickCount64;
-        _timer = new Timer(
-            OnTimer,
-            null,
-            Timeout.InfiniteTimeSpan,
-            Timeout.InfiniteTimeSpan);
-    }
-
     public void Schedule(long? deadlineMs, Action<long> callback)
     {
         ArgumentNullException.ThrowIfNull(callback);
-
-        lock (_gate)
-        {
-            if (_disposed)
-                return;
-
-            _deadlineMs = deadlineMs;
-            _callback = deadlineMs is null ? null : callback;
-            RearmLocked();
-        }
     }
 
     public void Dispose()
     {
-        lock (_gate)
-        {
-            if (_disposed)
-                return;
-
-            _disposed = true;
-            _deadlineMs = null;
-            _callback = null;
-            _timer.Change(Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
-        }
-
-        _timer.Dispose();
     }
+}
 
-    private void OnTimer(object? state)
+/// <summary>
+/// Production Windows adapter. The underlying keyboard hook owns the actual timer
+/// so timeout callbacks are serialized through the same Windows message loop as
+/// physical input instead of racing it on a ThreadPool thread.
+/// </summary>
+internal sealed class WindowsHookBehaviorDeadlineScheduler : IBehaviorDeadlineScheduler
+{
+    private readonly WindowsKeyboardBackend _keyboard;
+    private bool _disposed;
+
+    public WindowsHookBehaviorDeadlineScheduler(WindowsKeyboardBackend keyboard)
+        => _keyboard = keyboard ?? throw new ArgumentNullException(nameof(keyboard));
+
+    public void Schedule(long? deadlineMs, Action<long> callback)
     {
-        Action<long>? callback = null;
-        long now = 0;
-
-        lock (_gate)
-        {
-            if (_disposed || _deadlineMs is not long deadline)
-                return;
-
-            now = _clock();
-            if (now < deadline)
-            {
-                // A callback from a superseded schedule may already have been
-                // queued. Never let that stale wake-up fire a newer deadline early.
-                RearmLocked();
-                return;
-            }
-
-            callback = _callback;
-            _deadlineMs = null;
-            _callback = null;
-        }
-
-        callback?.Invoke(now);
-    }
-
-    private void RearmLocked()
-    {
-        if (_deadlineMs is not long deadline)
-        {
-            _timer.Change(Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
+        ArgumentNullException.ThrowIfNull(callback);
+        if (_disposed)
             return;
-        }
 
-        var dueMs = Math.Max(0, deadline - _clock());
-        _timer.Change(TimeSpan.FromMilliseconds(dueMs), Timeout.InfiniteTimeSpan);
+        _keyboard.ScheduleBehaviorDeadline(deadlineMs, callback);
+    }
+
+    public void Dispose()
+    {
+        if (_disposed)
+            return;
+
+        _disposed = true;
+        _keyboard.ScheduleBehaviorDeadline(null, static _ => { });
     }
 }
