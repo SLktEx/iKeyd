@@ -5,6 +5,7 @@ using iKeyd.Core.Configuration;
 using iKeyd.Core.Input;
 using iKeyd.Core.Keymaps;
 using iKeyd.Core.State;
+using iKeyd.Windows.Input;
 
 namespace iKeyd.App;
 
@@ -23,6 +24,7 @@ internal sealed class BehaviorWindowsInputRouter : IKeyboardEventHandler, IInput
     private readonly IKeyboardEventHandler _fallback;
     private readonly Action<BehaviorAction>? _postHostAction;
     private readonly IRuntimeStateStore _runtimeState;
+    private readonly IBehaviorDeadlineScheduler _behaviorDeadlineScheduler;
     private readonly Dictionary<string, BehaviorRuntime> _behaviorRuntimes;
     private readonly Dictionary<string, Keymap<string>> _keymaps;
     private readonly List<string> _activeLayers = [];
@@ -45,7 +47,8 @@ internal sealed class BehaviorWindowsInputRouter : IKeyboardEventHandler, IInput
         IKeyboardEventHandler fallback,
         Action<BehaviorAction>? postHostAction = null,
         ISystemQuerySnapshot? systemQueries = null,
-        IRuntimeStateStore? runtimeState = null)
+        IRuntimeStateStore? runtimeState = null,
+        IBehaviorDeadlineScheduler? behaviorDeadlineScheduler = null)
     {
         _profile = profile ?? throw new ArgumentNullException(nameof(profile));
         _baseKeymapName = baseKeymapName ?? throw new ArgumentNullException(nameof(baseKeymapName));
@@ -57,6 +60,10 @@ internal sealed class BehaviorWindowsInputRouter : IKeyboardEventHandler, IInput
         _runtimeState = runtimeState ?? (profile.State.Count == 0
             ? EmptyRuntimeStateStore.Instance
             : new RuntimeStateStore(profile.State));
+        _behaviorDeadlineScheduler = behaviorDeadlineScheduler ??
+            (keyboard is WindowsKeyboardBackend windowsKeyboard
+                ? new WindowsHookBehaviorDeadlineScheduler(windowsKeyboard)
+                : new NoOpBehaviorDeadlineScheduler());
 
         _keymaps = new Dictionary<string, Keymap<string>>(StringComparer.OrdinalIgnoreCase);
         _behaviorRuntimes = new Dictionary<string, BehaviorRuntime>(StringComparer.OrdinalIgnoreCase);
@@ -89,12 +96,20 @@ internal sealed class BehaviorWindowsInputRouter : IKeyboardEventHandler, IInput
 
         lock (_gate)
         {
-            return keyboardEvent.Kind switch
+            try
             {
-                KeyEventKind.Down => HandleKeyDown(keyboardEvent, keyId.Value),
-                KeyEventKind.Up => HandleKeyUp(keyboardEvent, keyId.Value),
-                _ => _fallback.OnKeyboardEvent(keyboardEvent)
-            };
+                return keyboardEvent.Kind switch
+                {
+                    KeyEventKind.Down => HandleKeyDown(keyboardEvent, keyId.Value),
+                    KeyEventKind.Up => HandleKeyUp(keyboardEvent, keyId.Value),
+                    _ => _fallback.OnKeyboardEvent(keyboardEvent)
+                };
+            }
+            finally
+            {
+                if (!_disposed)
+                    ScheduleNextBehaviorDeadlineLocked();
+            }
         }
     }
 
@@ -112,12 +127,29 @@ internal sealed class BehaviorWindowsInputRouter : IKeyboardEventHandler, IInput
 
     public void Dispose()
     {
-        lock (_gate)
+        var disposeScheduler = false;
+        try
         {
-            if (_disposed)
-                return;
-            ResetLocalState();
-            _disposed = true;
+            lock (_gate)
+            {
+                if (_disposed)
+                    return;
+
+                try
+                {
+                    ResetLocalState();
+                }
+                finally
+                {
+                    _disposed = true;
+                    disposeScheduler = true;
+                }
+            }
+        }
+        finally
+        {
+            if (disposeScheduler)
+                _behaviorDeadlineScheduler.Dispose();
         }
     }
 
@@ -136,6 +168,7 @@ internal sealed class BehaviorWindowsInputRouter : IKeyboardEventHandler, IInput
         _oneShotConsumedKey = null;
         _armedOneShotModifier = null;
         _runtimeState.Reset();
+        _behaviorDeadlineScheduler.Schedule(null, OnBehaviorDeadline);
     }
 
     private KeyboardDisposition HandleKeyDown(KeyboardEvent keyboardEvent, KeyId keyId)
@@ -292,6 +325,58 @@ internal sealed class BehaviorWindowsInputRouter : IKeyboardEventHandler, IInput
             if (releaseOneShotModifier)
                 ReleaseConsumedOneShotModifier();
         }
+    }
+
+    private void OnBehaviorDeadline(long timestampMs)
+    {
+        lock (_gate)
+        {
+            if (_disposed)
+                return;
+
+            try
+            {
+                foreach (var runtime in _behaviorRuntimes.Values)
+                {
+                    if (runtime.NextDeadlineMs is not long deadline || deadline > timestampMs)
+                        continue;
+                    ApplyActions(runtime.AdvanceTo(timestampMs));
+                }
+            }
+            catch
+            {
+                // Timer callbacks run outside the low-level hook's fail-open guard.
+                // Recover locally so an action failure cannot terminate the process
+                // or leave a layer/modifier owned by a half-applied transition.
+                try
+                {
+                    ResetLocalState();
+                }
+                catch
+                {
+                    // Recovery itself is best-effort, matching hook reset safety.
+                }
+            }
+            finally
+            {
+                if (!_disposed)
+                    ScheduleNextBehaviorDeadlineLocked();
+            }
+        }
+    }
+
+    private void ScheduleNextBehaviorDeadlineLocked()
+    {
+        long? next = null;
+        foreach (var runtime in _behaviorRuntimes.Values)
+        {
+            if (runtime.NextDeadlineMs is not long deadline)
+                continue;
+            if (next is null || deadline < next.Value)
+                next = deadline;
+        }
+
+        _behaviorDeadlineScheduler.Schedule(next, OnBehaviorDeadline);
     }
 
     private void ReleaseConsumedOneShotModifier()

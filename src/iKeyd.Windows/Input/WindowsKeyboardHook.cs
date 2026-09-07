@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Diagnostics;
 using System.Runtime.InteropServices;
 using iKeyd.Core.Input;
 
@@ -8,16 +9,22 @@ public sealed class WindowsKeyboardHook : IKeyboardInputSource, IDisposable
 {
     private const int WhKeyboardLl = 13;
     private const uint WmQuit = 0x0012;
+    private const uint WmTimer = 0x0113;
+    private const uint WmBehaviorDeadlineChanged = 0x8001;
     private const uint PmNoRemove = 0x0000;
 
     private readonly object _lifecycleGate = new();
+    private readonly object _deadlineGate = new();
     private readonly KeyboardState _state;
     private readonly HookProc _hookProc;
 
     private Thread? _hookThread;
     private uint _hookThreadId;
     private nint _hookHandle;
+    private nuint _behaviorTimerId;
     private IKeyboardEventHandler? _handler;
+    private Action<long>? _behaviorDeadlineCallback;
+    private long? _behaviorDeadlineMs;
     private Exception? _startError;
     private ManualResetEventSlim? _started;
     private bool _disposed;
@@ -101,6 +108,33 @@ public sealed class WindowsKeyboardHook : IKeyboardInputSource, IDisposable
             thread.Join();
     }
 
+    /// <summary>
+    /// Schedules one absolute Environment.TickCount64 deadline on the keyboard
+    /// hook's own Windows message queue. The callback therefore cannot overtake a
+    /// physical input notification that is already queued ahead of the timer.
+    /// </summary>
+    public void ScheduleBehaviorDeadline(long? deadlineMs, Action<long> callback)
+    {
+        ArgumentNullException.ThrowIfNull(callback);
+
+        lock (_deadlineGate)
+        {
+            _behaviorDeadlineMs = deadlineMs;
+            _behaviorDeadlineCallback = deadlineMs is null ? null : callback;
+        }
+
+        uint threadId;
+        lock (_lifecycleGate)
+            threadId = _hookThreadId;
+
+        if (threadId == 0)
+            return;
+
+        // State is updated before posting. Even if an old WM_TIMER is already
+        // queued, its handler will re-check the current deadline before firing.
+        _ = NativeMethods.PostThreadMessageW(threadId, WmBehaviorDeadlineChanged, 0, 0);
+    }
+
     public void Dispose()
     {
         lock (_lifecycleGate)
@@ -116,6 +150,7 @@ public sealed class WindowsKeyboardHook : IKeyboardInputSource, IDisposable
         }
         finally
         {
+            ClearBehaviorDeadline();
             _state.Clear();
             GC.SuppressFinalize(this);
         }
@@ -149,6 +184,20 @@ public sealed class WindowsKeyboardHook : IKeyboardInputSource, IDisposable
                 if (result == -1)
                     throw new Win32Exception(Marshal.GetLastWin32Error(), "Keyboard hook message loop failed.");
 
+                if (message.Message == WmBehaviorDeadlineChanged)
+                {
+                    RearmBehaviorDeadlineTimerOnHookThread();
+                    continue;
+                }
+
+                if (message.Message == WmTimer &&
+                    _behaviorTimerId != 0 &&
+                    message.WParam == _behaviorTimerId)
+                {
+                    HandleBehaviorDeadlineTimerOnHookThread();
+                    continue;
+                }
+
                 NativeMethods.TranslateMessage(ref message);
                 NativeMethods.DispatchMessageW(ref message);
             }
@@ -161,6 +210,9 @@ public sealed class WindowsKeyboardHook : IKeyboardInputSource, IDisposable
         }
         finally
         {
+            KillBehaviorDeadlineTimerOnHookThread();
+            ClearBehaviorDeadline();
+
             if (hook != 0)
                 NativeMethods.UnhookWindowsHookEx(hook);
 
@@ -177,6 +229,94 @@ public sealed class WindowsKeyboardHook : IKeyboardInputSource, IDisposable
 
             TryResetHandler(handler);
             _state.Clear();
+        }
+    }
+
+    private void RearmBehaviorDeadlineTimerOnHookThread()
+    {
+        KillBehaviorDeadlineTimerOnHookThread();
+
+        long? deadline;
+        lock (_deadlineGate)
+            deadline = _behaviorDeadlineMs;
+
+        if (deadline is null)
+            return;
+
+        var remainingMs = Math.Max(1L, deadline.Value - Environment.TickCount64);
+        var dueMs = checked((uint)Math.Min(remainingMs, uint.MaxValue));
+        _behaviorTimerId = NativeMethods.SetTimer(0, 0, dueMs, 0);
+        if (_behaviorTimerId == 0)
+        {
+            Trace.WriteLine(
+                $"iKeyd could not schedule Behavior deadline timer: Win32 error {Marshal.GetLastWin32Error()}.");
+        }
+    }
+
+    private void HandleBehaviorDeadlineTimerOnHookThread()
+    {
+        KillBehaviorDeadlineTimerOnHookThread();
+
+        Action<long>? callback;
+        long? deadline;
+        var now = Environment.TickCount64;
+        lock (_deadlineGate)
+        {
+            deadline = _behaviorDeadlineMs;
+            if (deadline is null)
+                return;
+
+            if (now < deadline.Value)
+            {
+                callback = null;
+            }
+            else
+            {
+                callback = _behaviorDeadlineCallback;
+                _behaviorDeadlineMs = null;
+                _behaviorDeadlineCallback = null;
+            }
+        }
+
+        if (now < deadline.Value)
+        {
+            // A stale WM_TIMER can survive cancellation/replacement in the queue.
+            // Re-arm from the current absolute deadline instead of firing early.
+            RearmBehaviorDeadlineTimerOnHookThread();
+            return;
+        }
+
+        if (callback is null)
+            return;
+
+        try
+        {
+            callback(now);
+        }
+        catch
+        {
+            // Deadline execution is part of the same stateful input pipeline. Keep
+            // the hook alive and apply the same fail-open reset discipline used by
+            // physical hook callbacks.
+            TryResetHandler(_handler);
+        }
+    }
+
+    private void KillBehaviorDeadlineTimerOnHookThread()
+    {
+        if (_behaviorTimerId == 0)
+            return;
+
+        _ = NativeMethods.KillTimer(0, _behaviorTimerId);
+        _behaviorTimerId = 0;
+    }
+
+    private void ClearBehaviorDeadline()
+    {
+        lock (_deadlineGate)
+        {
+            _behaviorDeadlineMs = null;
+            _behaviorDeadlineCallback = null;
         }
     }
 
@@ -276,12 +416,19 @@ public sealed class WindowsKeyboardHook : IKeyboardInputSource, IDisposable
         [DllImport("user32.dll", SetLastError = true)]
         public static extern nint SetWindowsHookExW(int hookId, HookProc callback, nint module, uint threadId);
 
+        [DllImport("user32.dll")]
+        public static extern nint CallNextHookEx(nint hook, int code, nuint wParam, nint lParam);
+
         [DllImport("user32.dll", SetLastError = true)]
         [return: MarshalAs(UnmanagedType.Bool)]
         public static extern bool UnhookWindowsHookEx(nint hook);
 
-        [DllImport("user32.dll")]
-        public static extern nint CallNextHookEx(nint hook, int code, nuint wParam, nint lParam);
+        [DllImport("user32.dll", SetLastError = true)]
+        public static extern nuint SetTimer(nint window, nuint timerId, uint elapsedMs, nint timerProc);
+
+        [DllImport("user32.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static extern bool KillTimer(nint window, nuint timerId);
 
         [DllImport("user32.dll", SetLastError = true)]
         public static extern int GetMessageW(out NativeMessage message, nint window, uint minMessage, uint maxMessage);
