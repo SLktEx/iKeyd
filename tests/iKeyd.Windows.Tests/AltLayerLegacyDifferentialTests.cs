@@ -3,6 +3,11 @@ using Xunit;
 
 namespace iKeyd.Windows.Tests;
 
+/// <summary>
+/// Physical Alt-layer parity intentionally includes AutoHotkey v1's Ctrl menu-mask
+/// tap. hotkeySKG depends on that hook-hotkey behavior to keep an Alt chord from
+/// surfacing the Windows menu when the layer trigger itself is suppressed.
+/// </summary>
 [Collection(GlobalWindowsInputCollection.Name)]
 public sealed class AltLayerLegacyDifferentialTests
 {
