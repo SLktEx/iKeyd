@@ -143,26 +143,35 @@ internal sealed class BehaviorWindowsInputRouter : IKeyboardEventHandler, IInput
         ConsumeArmedOneShot(keyboardEvent.Key);
         ConsumeArmedOneShotModifier(keyboardEvent.Key);
 
-        foreach (var activeRuntime in _behaviorRuntimes.Values)
-            ApplyActions(activeRuntime.ObserveKeyDown(keyId, keyboardEvent.TimestampMs).Actions);
-
-        if (_activeBehaviorKeys.Contains(keyId))
+        try
         {
             foreach (var activeRuntime in _behaviorRuntimes.Values)
+                ApplyActions(activeRuntime.ObserveKeyDown(keyId, keyboardEvent.TimestampMs).Actions);
+
+            if (_activeBehaviorKeys.Contains(keyId))
             {
-                if (!activeRuntime.IsActive(keyId))
-                    continue;
+                foreach (var activeRuntime in _behaviorRuntimes.Values)
+                {
+                    if (!activeRuntime.IsActive(keyId))
+                        continue;
 
-                ApplyActions(activeRuntime.BeginKeyDown(keyId, keyboardEvent.TimestampMs).Actions);
-                break;
+                    ApplyActions(activeRuntime.BeginKeyDown(keyId, keyboardEvent.TimestampMs).Actions);
+                    break;
+                }
+                return KeyboardDisposition.Suppress;
             }
-            return KeyboardDisposition.Suppress;
+
+            if (TryHandleLayeredKeyDown(keyboardEvent, keyId))
+                return KeyboardDisposition.Suppress;
+
+            return _fallback.OnKeyboardEvent(keyboardEvent);
         }
-
-        if (TryHandleLayeredKeyDown(keyboardEvent, keyId))
-            return KeyboardDisposition.Suppress;
-
-        return _fallback.OnKeyboardEvent(keyboardEvent);
+        catch
+        {
+            if (_oneShotModifierConsumedKey is KeyboardKey consumedKey && consumedKey == keyboardEvent.Key)
+                ReleaseConsumedOneShotModifier();
+            throw;
+        }
     }
 
     private void ConsumeArmedOneShot(KeyboardKey key)
