@@ -23,6 +23,7 @@ public enum BehaviorActionKind
     LayerOneShot,
     ModifierDown,
     ModifierUp,
+    ModifierOneShot,
     Exec,
     Shell,
     Query,
@@ -121,6 +122,14 @@ public readonly record struct BehaviorAction
 
     public static BehaviorAction ModifierUp(string modifier)
         => new(BehaviorActionKind.ModifierUp, default, RequireName(modifier, nameof(modifier)), null, null, BehaviorRepeatPolicy.Never);
+
+    /// <summary>
+    /// Arms a modifier for the next supported physical key lifecycle. Platform
+    /// routing must press it before the target key-down and release it only after
+    /// the matching target key-up has been processed.
+    /// </summary>
+    public static BehaviorAction ModifierOneShot(string modifier)
+        => new(BehaviorActionKind.ModifierOneShot, default, RequireName(modifier, nameof(modifier)), null, null, BehaviorRepeatPolicy.Never);
 
     public static BehaviorAction Exec(string executable, IEnumerable<string>? arguments = null)
     {
