@@ -71,8 +71,6 @@ After a one-shot is consumed by a key, repeated physical key-down events for tha
 
 ## Scope
 
-This slice intentionally implements `OSL` only.
+This helper only owns layer semantics. `OSM(modifier)` is implemented separately because a one-shot modifier has a stricter physical output ordering and cleanup contract. See `one-shot-modifier-behavior.md` for the `modifier-down -> target-key-down -> target-key-up -> modifier-up` contract.
 
-`OSM(modifier)` is separate because a one-shot modifier must preserve the modifier-down / target-key-down / target-key-up / modifier-up ordering and cleanup contract without creating stuck modifiers. It should not be implemented as a superficial copy of the layer state.
-
-Locking, tap-toggle, multi-tap, and tap-dance semantics are also outside this helper and remain generic Behavior work rather than OSL-specific runtime branches.
+Locking, tap-toggle, multi-tap, and tap-dance semantics remain generic Behavior work rather than OSL/OSM-specific runtime branches.

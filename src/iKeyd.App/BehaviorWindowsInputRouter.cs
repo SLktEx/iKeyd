@@ -32,6 +32,9 @@ internal sealed class BehaviorWindowsInputRouter : IKeyboardEventHandler, IInput
     private string? _armedOneShotLayer;
     private string? _consumedOneShotLayer;
     private KeyboardKey? _oneShotConsumedKey;
+    private KeyboardKey? _armedOneShotModifier;
+    private KeyboardKey? _consumedOneShotModifier;
+    private KeyboardKey? _oneShotModifierConsumedKey;
     private bool _disposed;
 
     public BehaviorWindowsInputRouter(
@@ -123,6 +126,7 @@ internal sealed class BehaviorWindowsInputRouter : IKeyboardEventHandler, IInput
         foreach (var runtime in _behaviorRuntimes.Values)
             ApplyActions(runtime.CancelAll());
 
+        ReleaseConsumedOneShotModifier();
         _activeBehaviorKeys.Clear();
         _layerMappedKeys.Clear();
         _activeLayers.Clear();
@@ -130,33 +134,44 @@ internal sealed class BehaviorWindowsInputRouter : IKeyboardEventHandler, IInput
         _armedOneShotLayer = null;
         _consumedOneShotLayer = null;
         _oneShotConsumedKey = null;
+        _armedOneShotModifier = null;
         _runtimeState.Reset();
     }
 
     private KeyboardDisposition HandleKeyDown(KeyboardEvent keyboardEvent, KeyId keyId)
     {
         ConsumeArmedOneShot(keyboardEvent.Key);
+        ConsumeArmedOneShotModifier(keyboardEvent.Key);
 
-        foreach (var activeRuntime in _behaviorRuntimes.Values)
-            ApplyActions(activeRuntime.ObserveKeyDown(keyId, keyboardEvent.TimestampMs).Actions);
-
-        if (_activeBehaviorKeys.Contains(keyId))
+        try
         {
             foreach (var activeRuntime in _behaviorRuntimes.Values)
+                ApplyActions(activeRuntime.ObserveKeyDown(keyId, keyboardEvent.TimestampMs).Actions);
+
+            if (_activeBehaviorKeys.Contains(keyId))
             {
-                if (!activeRuntime.IsActive(keyId))
-                    continue;
+                foreach (var activeRuntime in _behaviorRuntimes.Values)
+                {
+                    if (!activeRuntime.IsActive(keyId))
+                        continue;
 
-                ApplyActions(activeRuntime.BeginKeyDown(keyId, keyboardEvent.TimestampMs).Actions);
-                break;
+                    ApplyActions(activeRuntime.BeginKeyDown(keyId, keyboardEvent.TimestampMs).Actions);
+                    break;
+                }
+                return KeyboardDisposition.Suppress;
             }
-            return KeyboardDisposition.Suppress;
+
+            if (TryHandleLayeredKeyDown(keyboardEvent, keyId))
+                return KeyboardDisposition.Suppress;
+
+            return _fallback.OnKeyboardEvent(keyboardEvent);
         }
-
-        if (TryHandleLayeredKeyDown(keyboardEvent, keyId))
-            return KeyboardDisposition.Suppress;
-
-        return _fallback.OnKeyboardEvent(keyboardEvent);
+        catch
+        {
+            if (_oneShotModifierConsumedKey is KeyboardKey consumedKey && consumedKey == keyboardEvent.Key)
+                ReleaseConsumedOneShotModifier();
+            throw;
+        }
     }
 
     private void ConsumeArmedOneShot(KeyboardKey key)
@@ -167,6 +182,17 @@ internal sealed class BehaviorWindowsInputRouter : IKeyboardEventHandler, IInput
         _consumedOneShotLayer = _armedOneShotLayer;
         _armedOneShotLayer = null;
         _oneShotConsumedKey = key;
+    }
+
+    private void ConsumeArmedOneShotModifier(KeyboardKey key)
+    {
+        if (_armedOneShotModifier is not KeyboardKey modifier || _oneShotModifierConsumedKey is not null)
+            return;
+
+        _armedOneShotModifier = null;
+        _consumedOneShotModifier = modifier;
+        _oneShotModifierConsumedKey = key;
+        _keyboard.SendKey(modifier, KeyEventKind.Down);
     }
 
     private bool TryHandleLayeredKeyDown(KeyboardEvent keyboardEvent, KeyId keyId)
@@ -251,9 +277,30 @@ internal sealed class BehaviorWindowsInputRouter : IKeyboardEventHandler, IInput
             _consumedOneShotLayer = null;
         }
 
-        return suppress
-            ? KeyboardDisposition.Suppress
-            : _fallback.OnKeyboardEvent(keyboardEvent);
+        var releaseOneShotModifier =
+            _oneShotModifierConsumedKey is KeyboardKey modifierConsumedKey &&
+            modifierConsumedKey == keyboardEvent.Key;
+
+        try
+        {
+            return suppress
+                ? KeyboardDisposition.Suppress
+                : _fallback.OnKeyboardEvent(keyboardEvent);
+        }
+        finally
+        {
+            if (releaseOneShotModifier)
+                ReleaseConsumedOneShotModifier();
+        }
+    }
+
+    private void ReleaseConsumedOneShotModifier()
+    {
+        if (_consumedOneShotModifier is KeyboardKey modifier)
+            _keyboard.SendKey(modifier, KeyEventKind.Up);
+
+        _consumedOneShotModifier = null;
+        _oneShotModifierConsumedKey = null;
     }
 
     private void ApplyActions(IReadOnlyList<BehaviorAction> actions)
@@ -303,6 +350,10 @@ internal sealed class BehaviorWindowsInputRouter : IKeyboardEventHandler, IInput
 
                 case BehaviorActionKind.ModifierUp:
                     _keyboard.SendKey(ResolveModifier(action.Name), KeyEventKind.Up);
+                    break;
+
+                case BehaviorActionKind.ModifierOneShot:
+                    _armedOneShotModifier = ResolveModifier(action.Name);
                     break;
 
                 case BehaviorActionKind.StateSet:
