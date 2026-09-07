@@ -290,7 +290,7 @@ mouse {
 
     speed {
         normal = 1000
-        precision = 800
+        precision = 900
         fine = 240
         fast = 4400
     }
