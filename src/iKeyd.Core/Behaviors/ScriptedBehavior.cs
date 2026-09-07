@@ -287,6 +287,11 @@ internal sealed class ScriptedBehaviorInstance : BehaviorInstance
             StringComparer.OrdinalIgnoreCase);
     }
 
+    internal override long? NextDeadlineMs
+        => !_released && _tapHoldResolution == TapHoldResolution.Pending
+            ? _pressedAtMs + _tapHoldOptions.TappingTermMs
+            : null;
+
     internal override void OnPress(long timestampMs, List<BehaviorAction> actions)
         => ExecuteHandler("press", null, actions);
 
