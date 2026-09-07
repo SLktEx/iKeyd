@@ -177,14 +177,21 @@ internal static class WindowsWicImageDecoder
         if (pointer == IntPtr.Zero)
             throw new ExternalException("SHCreateMemStream failed.", EFail);
 
+        IStream stream;
         try
         {
-            return (IStream)Marshal.GetObjectForIUnknown(pointer);
+            stream = (IStream)Marshal.GetObjectForIUnknown(pointer);
         }
         finally
         {
             _ = Marshal.Release(pointer);
         }
+
+        // WIC consumes from the stream's current position. Keep this explicit even
+        // though memory-stream implementations commonly start at zero; it avoids a
+        // decoder WRONGSTATE when an implementation leaves the cursor elsewhere.
+        stream.Seek(0, 0, IntPtr.Zero);
+        return stream;
     }
 
     private static void ReleaseComObject(object? value)
