@@ -63,6 +63,13 @@ public static class StandardBehaviors
     public static BehaviorDefinition OSL(string layer)
         => new OneShotLayerBehaviorDefinition(layer);
 
+    /// <summary>
+    /// While held, acts as a normal modifier. A clean tap arms the modifier for
+    /// exactly the next supported physical key lifecycle.
+    /// </summary>
+    public static BehaviorDefinition OSM(string modifier)
+        => new OneShotModifierBehaviorDefinition(modifier);
+
     public static BehaviorDefinition Unicode(string scalar)
         => Press(BehaviorAction.SendUnicode(scalar));
 
@@ -357,6 +364,55 @@ internal sealed class ModifierHoldBehaviorInstance(KeyId sourceKey, string modif
     internal override void Cancel(List<BehaviorAction> actions) => Release(actions);
 
     private void Release(List<BehaviorAction> actions)
+    {
+        if (!_active)
+            return;
+
+        _active = false;
+        actions.Add(BehaviorAction.ModifierUp(modifier));
+    }
+}
+
+internal sealed class OneShotModifierBehaviorDefinition : BehaviorDefinition
+{
+    private readonly string _modifier;
+
+    public OneShotModifierBehaviorDefinition(string modifier)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(modifier);
+        _modifier = modifier.Trim();
+    }
+
+    internal override BehaviorInstance CreateInstance(KeyId sourceKey, long timestampMs)
+        => new OneShotModifierBehaviorInstance(sourceKey, _modifier);
+}
+
+internal sealed class OneShotModifierBehaviorInstance(KeyId sourceKey, string modifier) : BehaviorInstance(sourceKey)
+{
+    private bool _active;
+    private bool _interrupted;
+
+    internal override void OnPress(long timestampMs, List<BehaviorAction> actions)
+    {
+        _active = true;
+        actions.Add(BehaviorAction.ModifierDown(modifier));
+    }
+
+    internal override void OnInterrupt(KeyId otherKey, long timestampMs, List<BehaviorAction> actions)
+        => _interrupted = true;
+
+    internal override void OnRelease(long timestampMs, List<BehaviorAction> actions)
+    {
+        if (!_active)
+            return;
+
+        _active = false;
+        actions.Add(BehaviorAction.ModifierUp(modifier));
+        if (!_interrupted)
+            actions.Add(BehaviorAction.ModifierOneShot(modifier));
+    }
+
+    internal override void Cancel(List<BehaviorAction> actions)
     {
         if (!_active)
             return;
