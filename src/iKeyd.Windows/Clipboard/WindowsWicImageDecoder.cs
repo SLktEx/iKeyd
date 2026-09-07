@@ -187,9 +187,6 @@ internal static class WindowsWicImageDecoder
             _ = Marshal.Release(pointer);
         }
 
-        // WIC consumes from the stream's current position. Keep this explicit even
-        // though memory-stream implementations commonly start at zero; it avoids a
-        // decoder WRONGSTATE when an implementation leaves the cursor elsewhere.
         stream.Seek(0, 0, IntPtr.Zero);
         return stream;
     }
@@ -246,6 +243,28 @@ internal static class WindowsWicImageDecoder
     [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
     private interface IWICBitmapFrameDecode : IWICBitmapSource
     {
+        // [ComImport] does not include COM base-interface methods in a derived
+        // interface's vtable automatically. Redeclare all IWICBitmapSource slots
+        // so the three frame-specific methods begin at the native COM slot.
+        [PreserveSig]
+        new int GetSize(out uint width, out uint height);
+
+        [PreserveSig]
+        new int GetPixelFormat(out Guid pixelFormat);
+
+        [PreserveSig]
+        new int GetResolution(out double dpiX, out double dpiY);
+
+        [PreserveSig]
+        new int CopyPalette(IntPtr palette);
+
+        [PreserveSig]
+        new int CopyPixels(
+            IntPtr rectangle,
+            uint stride,
+            uint bufferSize,
+            IntPtr buffer);
+
         [PreserveSig]
         int GetMetadataQueryReader(out IntPtr metadataQueryReader);
 
@@ -300,6 +319,27 @@ internal static class WindowsWicImageDecoder
     [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
     private interface IWICFormatConverter : IWICBitmapSource
     {
+        // Same ComImport inheritance rule as IWICBitmapFrameDecode: the native
+        // converter's Initialize method is slot 8, after the five source methods.
+        [PreserveSig]
+        new int GetSize(out uint width, out uint height);
+
+        [PreserveSig]
+        new int GetPixelFormat(out Guid pixelFormat);
+
+        [PreserveSig]
+        new int GetResolution(out double dpiX, out double dpiY);
+
+        [PreserveSig]
+        new int CopyPalette(IntPtr palette);
+
+        [PreserveSig]
+        new int CopyPixels(
+            IntPtr rectangle,
+            uint stride,
+            uint bufferSize,
+            IntPtr buffer);
+
         [PreserveSig]
         int Initialize(
             IWICBitmapSource source,
