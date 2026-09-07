@@ -163,6 +163,11 @@ internal abstract class TapHoldBehaviorInstance : BehaviorInstance
         _pressedAtMs = pressedAtMs;
     }
 
+    internal override long? NextDeadlineMs
+        => _resolution == Resolution.Pending
+            ? _pressedAtMs + _tappingTermMs
+            : null;
+
     protected abstract BehaviorAction HoldDownAction { get; }
     protected abstract BehaviorAction HoldUpAction { get; }
 
