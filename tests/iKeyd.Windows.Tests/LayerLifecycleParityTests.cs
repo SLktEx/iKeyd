@@ -93,6 +93,7 @@ public sealed class LayerLifecycleParityTests
                 Down("CONVERT", 90), Up("CONVERT", 100)
             ],
             [
+                "keyDown:Control", "keyUp:Control",
                 "keyDown:Alt", "keyDown:Enter", "keyUp:Enter", "keyUp:Alt",
                 "keyDown:Control", "keyUp:Control"
             ]),
@@ -106,6 +107,7 @@ public sealed class LayerLifecycleParityTests
                 Down("CONVERT", 70), Up("CONVERT", 80)
             ],
             [
+                "keyDown:Control", "keyUp:Control",
                 "keyDown:Alt", "keyDown:Q", "keyUp:Q", "keyUp:Alt",
                 "keyDown:Control", "keyUp:Control"
             ]),
@@ -117,7 +119,10 @@ public sealed class LayerLifecycleParityTests
                 Down("ALT", 10), Down("CONVERT", 20), Up("CONVERT", 30), Up("ALT", 40),
                 Down("CONVERT", 50), Up("CONVERT", 60)
             ],
-            ["keyDown:Control", "keyUp:Control"]),
+            [
+                "keyDown:Control", "keyUp:Control",
+                "keyDown:Control", "keyUp:Control"
+            ]),
 
         new(
             "m-alt-space-does-not-become-ams",
@@ -128,7 +133,10 @@ public sealed class LayerLifecycleParityTests
                 Up("NONCONVERT", 60),
                 Down("CONVERT", 70), Up("CONVERT", 80)
             ],
-            ["keyDown:Control", "keyUp:Control"]),
+            [
+                "keyDown:Control", "keyUp:Control",
+                "keyDown:Control", "keyUp:Control"
+            ]),
 
         new(
             "a-m-alt-space-release-emits-alt-space-and-cleans-a",
@@ -141,6 +149,8 @@ public sealed class LayerLifecycleParityTests
                 Down("CONVERT", 110), Up("CONVERT", 120)
             ],
             [
+                "keyDown:Control", "keyUp:Control",
+                "keyDown:Control", "keyUp:Control",
                 "keyDown:Alt", "keyDown:Space", "keyUp:Space", "keyUp:Alt",
                 "keyDown:Control", "keyUp:Control"
             ]),
@@ -183,9 +193,17 @@ public sealed class LayerLifecycleParityTests
                 string.Equals(item.GetProperty("finalState").GetString(), transition.State.Layers.ToString(), StringComparison.Ordinal),
                 $"{name}: final state expected '{item.GetProperty("finalState").GetString()}', actual '{transition.State.Layers}'.");
             Assert.Equal(item.GetProperty("finalFlag").GetInt32() != 0, transition.State.Consumed);
-            Assert.Equal(
-                item.GetProperty("actions").EnumerateArray().Select(value => value.GetString() ?? string.Empty).ToArray(),
-                transition.Actions.Select(ActionName).ToArray());
+
+            // The pinned fixture captures hotkeySKG's logical layer actions. AHK
+            // itself additionally emits a Ctrl tap for physical Alt hook hotkeys
+            // to mask menu activation. Keep that transport artifact out of the
+            // fixture while still requiring the executable state machine to
+            // reproduce it for the three Alt-down trigger events.
+            var expectedActions = layerEvent is LayerEvent.AltHDown or LayerEvent.AltSpaceDown or LayerEvent.AltKanaDown
+                ? new[] { "Ctrl" }
+                : item.GetProperty("actions").EnumerateArray().Select(value => value.GetString() ?? string.Empty).ToArray();
+
+            Assert.Equal(expectedActions, transition.Actions.Select(ActionName).ToArray());
         }
     }
 
