@@ -20,6 +20,7 @@ public sealed class WindowsKeyboardOutput : IKeyboardOutput
 
     public void SendKey(KeyboardKey key, KeyEventKind kind)
     {
+        key = NormalizeIdentityReplayKey(key);
         if (UsesCombinedVirtualScanPath(key))
         {
             SendCombinedVirtualScanKey(key, kind);
@@ -33,6 +34,7 @@ public sealed class WindowsKeyboardOutput : IKeyboardOutput
 
     public void SendKeyPress(KeyboardKey key)
     {
+        key = NormalizeIdentityReplayKey(key);
         if (UsesCombinedVirtualScanPath(key))
         {
             SendCombinedVirtualScanKey(key, KeyEventKind.Down);
@@ -77,6 +79,27 @@ public sealed class WindowsKeyboardOutput : IKeyboardOutput
     public bool IsToggleOn(ushort virtualKey)
         => (NativeMethods.GetKeyState(virtualKey) & 0x0001) != 0;
 
+    /// <summary>
+    /// The legacy S/K keymaps consume number/function-row input and then replay an
+    /// identity output. Real JIS verification found that the VK-only SendInput path
+    /// used by those replays could disappear even though the in-memory keymap tests
+    /// passed. Recreate those two physical rows as set-1 scan-code input instead.
+    ///
+    /// Keep this deliberately narrow: romaji/new-shita character output remains on
+    /// the existing VK path, and explicit legacy vk+sc pairs keep their pair-preserving
+    /// compatibility path below.
+    /// </summary>
+    internal static KeyboardKey NormalizeIdentityReplayKey(KeyboardKey key)
+    {
+        if (key.ScanCode != 0 || key.VirtualKey == 0)
+            return key;
+
+        var scanCode = IdentityReplayScanCode(key.VirtualKey);
+        return scanCode == 0
+            ? key
+            : new KeyboardKey(0, scanCode, key.IsExtended);
+    }
+
     internal static bool UsesCombinedVirtualScanPath(KeyboardKey key)
         => key.VirtualKey is > 0 and <= byte.MaxValue &&
            key.ScanCode is > 0 and <= byte.MaxValue;
@@ -119,6 +142,23 @@ public sealed class WindowsKeyboardOutput : IKeyboardOutput
             inputs[index++] = BuildUnicodeInput(codeUnit, KeyEventKind.Down);
             inputs[index++] = BuildUnicodeInput(codeUnit, KeyEventKind.Up);
         }
+    }
+
+    private static ushort IdentityReplayScanCode(ushort virtualKey)
+    {
+        if (virtualKey is >= '1' and <= '9')
+            return checked((ushort)(0x02 + virtualKey - '1'));
+        if (virtualKey == '0')
+            return 0x0B;
+
+        if (virtualKey is >= 0x70 and <= 0x79) // F1-F10
+            return checked((ushort)(0x3B + virtualKey - 0x70));
+        if (virtualKey == 0x7A) // F11
+            return 0x57;
+        if (virtualKey == 0x7B) // F12
+            return 0x58;
+
+        return 0;
     }
 
     private static void SendCombinedVirtualScanKey(KeyboardKey key, KeyEventKind kind)
