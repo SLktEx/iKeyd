@@ -130,6 +130,29 @@ public sealed class OneShotModifierBehaviorRoutingTests
             events);
     }
 
+    [Fact]
+    public void Target_down_failure_releases_consumed_modifier_before_rethrowing()
+    {
+        var events = new List<string>();
+        var keyboard = new RecordingKeyboardOutput(events);
+        var fallback = new RecordingHandler(events, throwOnDown: true);
+        using var router = Router(keyboard, fallback);
+
+        Press(router, 'A', 0);
+        events.Clear();
+
+        Assert.Throws<InvalidOperationException>(() =>
+            router.OnKeyboardEvent(Physical('B', KeyEventKind.Down, 20)));
+
+        Assert.Equal(
+            [
+                Output(WindowsKeyMap.Control, KeyEventKind.Down),
+                Fallback('B', KeyEventKind.Down),
+                Output(WindowsKeyMap.Control, KeyEventKind.Up)
+            ],
+            events);
+    }
+
     private static BehaviorWindowsInputRouter Router(
         RecordingKeyboardOutput keyboard,
         RecordingHandler fallback)
@@ -186,11 +209,13 @@ public sealed class OneShotModifierBehaviorRoutingTests
         public bool IsToggleOn(ushort virtualKey) => false;
     }
 
-    private sealed class RecordingHandler(List<string> events) : IKeyboardEventHandler
+    private sealed class RecordingHandler(List<string> events, bool throwOnDown = false) : IKeyboardEventHandler
     {
         public KeyboardDisposition OnKeyboardEvent(KeyboardEvent keyboardEvent)
         {
             events.Add(Fallback(keyboardEvent.Key.VirtualKey, keyboardEvent.Kind));
+            if (throwOnDown && keyboardEvent.Kind == KeyEventKind.Down)
+                throw new InvalidOperationException("Synthetic target-down failure.");
             return KeyboardDisposition.PassThrough;
         }
     }
