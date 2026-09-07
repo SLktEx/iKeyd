@@ -132,11 +132,7 @@ public sealed class ShiftNumberLayerRegressionTests
             ],
             Expected = new ScenarioExpected
             {
-                Events =
-                [
-                    new ObservedKeyEvent { Kind = "keyDown", Key = "1" },
-                    new ObservedKeyEvent { Kind = "keyUp", Key = "1" }
-                ]
+                Text = "1"
             }
         };
 
