@@ -3,6 +3,7 @@ using Xunit;
 
 namespace iKeyd.Windows.Tests;
 
+[Collection(GlobalWindowsInputCollection.Name)]
 public sealed class LayerGestureTimingParityTests
 {
     public static IEnumerable<object[]> TimingProfiles
