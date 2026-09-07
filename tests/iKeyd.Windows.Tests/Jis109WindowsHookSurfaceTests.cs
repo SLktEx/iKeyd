@@ -8,6 +8,7 @@ using Xunit;
 
 namespace iKeyd.Windows.Tests;
 
+[Collection(GlobalWindowsInputCollection.Name)]
 public sealed class Jis109WindowsHookSurfaceTests
 {
     private const uint KeyEventExtendedKey = 0x0001;
