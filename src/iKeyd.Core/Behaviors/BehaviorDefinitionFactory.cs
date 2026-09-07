@@ -18,6 +18,11 @@ public static class BehaviorDefinitionFactory
         "hold_on_other_key_press"
     ];
 
+    private static readonly string[] TapDanceOptionNames =
+    [
+        "tapping_term"
+    ];
+
     public static BehaviorDefinition Create(BehaviorInvocationProfile invocation)
         => Create(
             invocation,
@@ -76,6 +81,8 @@ public static class BehaviorDefinitionFactory
             return CreateOneShotLayer(invocation);
         if (string.Equals(invocation.Name, "OSM", StringComparison.OrdinalIgnoreCase))
             return CreateOneShotModifier(invocation);
+        if (string.Equals(invocation.Name, "TD", StringComparison.OrdinalIgnoreCase))
+            return CreateTapDance(invocation);
         if (string.Equals(invocation.Name, "UNICODE", StringComparison.OrdinalIgnoreCase))
             return CreateUnicode(invocation);
         if (string.Equals(invocation.Name, "TEXT", StringComparison.OrdinalIgnoreCase))
@@ -210,6 +217,27 @@ public static class BehaviorDefinitionFactory
         RequireNoOptions(invocation);
         RequireCount(invocation, 1, "OSM(modifier)");
         return StandardBehaviors.OSM(NormalizeModifier(invocation.Arguments[0]));
+    }
+
+    private static BehaviorDefinition CreateTapDance(BehaviorInvocationProfile invocation)
+    {
+        if (invocation.Arguments.Count < 2 || invocation.Arguments.Count > TapDanceOptions.MaxTapCount)
+        {
+            throw new InvalidDataException(
+                $"TD requires between 2 and {TapDanceOptions.MaxTapCount} output keys: TD(single, double, ...).");
+        }
+
+        ValidateKnownOptions(invocation, TapDanceOptionNames);
+        var options = new TapDanceOptions
+        {
+            TappingTermMs = ReadDurationMs(
+                invocation,
+                "tapping_term",
+                TapDanceOptions.DefaultTappingTermMs)
+        };
+        return StandardBehaviors.TD(
+            invocation.Arguments.Select(value => new KeyId(value)).ToArray(),
+            options);
     }
 
     private static BehaviorDefinition CreateUnicode(BehaviorInvocationProfile invocation)
