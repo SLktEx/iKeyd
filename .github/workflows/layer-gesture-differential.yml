@@ -5,11 +5,16 @@ on:
     branches: [main-v1]
     paths:
       - .github/workflows/layer-gesture-differential.yml
+      - tools/audit-legacy-layer-timing.py
       - src/iKeyd.App/IKeydRuntimeHandler.cs
       - src/iKeyd.Profiles.HotkeySkg/Layers/LayerStateMachine.cs
       - src/iKeyd.Core/Layers/LayerState.cs
       - tests/iKeyd.Windows.Tests/LayerGestureParityTests.cs
+      - tests/iKeyd.Windows.Tests/LayerGestureTimingParityTests.cs
+      - tests/iKeyd.Windows.Tests/LayerLifecycleParityTests.cs
+      - tests/iKeyd.Windows.Tests/AltLayerLegacyDifferentialTests.cs
       - tests/iKeyd.Windows.Tests/LegacyLayerGestureScenarioRunner.cs
+      - tests/iKeyd.Windows.Tests/LegacyAltLayerGestureScenarioRunner.cs
 
 permissions:
   contents: read
@@ -30,6 +35,10 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 8.0.x
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
 
       - name: Resolve bundled GnuPG
         id: gpg
@@ -79,6 +88,9 @@ jobs:
 
           "exe=$exe" >> $env:GITHUB_OUTPUT
           "source=$source" >> $env:GITHUB_OUTPUT
+
+      - name: Audit legacy layer handlers for explicit timing controls
+        run: python tools/audit-legacy-layer-timing.py "${{ steps.legacy.outputs.source }}"
 
       - name: Download pinned AutoHotkey v1.1.16.05 interpreter
         id: ahk
