@@ -27,6 +27,25 @@ public sealed partial class LegacyShLayerParityTests
         AssertObservedEqual(state, "A", expectedSend, expected, actual);
     }
 
+    [Theory]
+    [InlineData("1", "{F1}")]
+    [InlineData("2", "{F2}")]
+    [InlineData("3", "{F3}")]
+    [InlineData("4", "{F4}")]
+    public void SH_physical_mode_digits_are_resolved_before_process1_to_4_mode_switches(
+        string keyName,
+        string shSend)
+    {
+        foreach (var (state, prefix) in LoadShDispatchStates())
+        {
+            var expectedSend = prefix + shSend;
+            var expected = RenderLegacySend(expectedSend);
+            var actual = DispatchThroughRuntime(state, keyName);
+
+            AssertObservedEqual(state, keyName, expectedSend, expected, actual);
+        }
+    }
+
     [Fact]
     public void Runtime_fixture_keeps_all_SHKey_dispatch_states_in_the_parity_matrix()
     {
