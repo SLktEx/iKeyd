@@ -103,6 +103,22 @@ public sealed class ClipboardControllerTests
         Assert.Equal("a ↵ b ⇥ c", preview);
     }
 
+    [Fact]
+    public void Picker_does_not_close_for_focus_churn_before_first_visible_activation()
+    {
+        var state = new ClipboardPickerActivationState();
+
+        Assert.False(state.MarkActivated());
+        Assert.False(state.CanCloseOnDeactivate);
+
+        state.MarkShown();
+        Assert.False(state.CanCloseOnDeactivate);
+
+        Assert.True(state.MarkActivated());
+        Assert.True(state.CanCloseOnDeactivate);
+        Assert.False(state.MarkActivated());
+    }
+
     private sealed class FakeClipboardService : IClipboardService
     {
         public event EventHandler? Changed;
