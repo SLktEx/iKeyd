@@ -265,7 +265,11 @@ public static class LayerStateMachine
     }
 
     private static LayerTransition PressAltSpace(LayerRuntimeState state)
-        => Result(state with { Layers = state.Layers.Press(LayerKey.A).Press(LayerKey.S) });
+        => Result(state with
+        {
+            Layers = state.Layers.Press(LayerKey.A).Press(LayerKey.S),
+            Consumed = false
+        });
 
     private static LayerTransition ReleaseAltSpace(LayerRuntimeState state)
     {
