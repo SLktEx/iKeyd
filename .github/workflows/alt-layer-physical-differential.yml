@@ -1,0 +1,111 @@
+name: Alt layer physical differential
+
+on:
+  pull_request:
+    branches: [main-v0.7]
+    paths:
+      - .github/workflows/alt-layer-physical-differential.yml
+      - src/iKeyd.App/IKeydRuntimeHandler.cs
+      - src/iKeyd.Profiles.HotkeySkg/Layers/LayerStateMachine.cs
+      - tests/iKeyd.Windows.Tests/LegacyAltLayerPhysicalDifferentialTests.cs
+      - tests/iKeyd.Windows.Tests/LayerTriggerPhysicalRoutingTests.cs
+
+permissions:
+  contents: read
+
+concurrency:
+  group: alt-layer-physical-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  parity:
+    if: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
+    runs-on: windows-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Resolve bundled GnuPG
+        id: gpg
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $gpg = Join-Path $env:ProgramFiles 'Git\usr\bin\gpg.exe'
+          if (-not (Test-Path -LiteralPath $gpg -PathType Leaf)) {
+            $command = Get-Command gpg.exe -ErrorAction SilentlyContinue
+            if ($null -eq $command) { throw 'GnuPG was not found.' }
+            $gpg = $command.Source
+          }
+          "path=$gpg" >> $env:GITHUB_OUTPUT
+
+      - name: Decrypt pinned legacy executable and source
+        id: legacy
+        shell: powershell
+        env:
+          LEGACY_EXE_GPG_PASSPHRASE: ${{ secrets.LEGACY_EXE_GPG_PASSPHRASE }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ([string]::IsNullOrWhiteSpace($env:LEGACY_EXE_GPG_PASSPHRASE)) {
+            throw 'LEGACY_EXE_GPG_PASSPHRASE is not configured.'
+          }
+
+          $exe = Join-Path $env:RUNNER_TEMP 'compiled-hotkeySKG.exe'
+          $source = Join-Path $env:RUNNER_TEMP 'hotkeySKG.ahk'
+
+          & '${{ steps.gpg.outputs.path }}' --batch --yes --pinentry-mode loopback `
+            --passphrase $env:LEGACY_EXE_GPG_PASSPHRASE `
+            --output $exe --decrypt (Join-Path $PWD 'tests\legacy-binary\hotkeySKG.exe.gpg')
+          if ($LASTEXITCODE -ne 0) { throw 'Could not decrypt legacy executable.' }
+
+          & '${{ steps.gpg.outputs.path }}' --batch --yes --pinentry-mode loopback `
+            --passphrase $env:LEGACY_EXE_GPG_PASSPHRASE `
+            --output $source --decrypt (Join-Path $PWD 'tests\legacy-binary\hotkeySKG.ahk.gpg.asc')
+          if ($LASTEXITCODE -ne 0) { throw 'Could not decrypt legacy AHK source.' }
+
+          $exeSha = (Get-FileHash -LiteralPath $exe -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($exeSha -ne '5492198ce403d796c8588b17419bce82a0e6de3961bb40896a875ee5dee359ea') {
+            throw "Legacy executable SHA mismatch: $exeSha"
+          }
+          $sourceSha = (Get-FileHash -LiteralPath $source -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($sourceSha -ne 'fde46d179a2cfb8123a314d4ea6b8de714a65302867d4b3a654af07f9472bab7') {
+            throw "Legacy source SHA mismatch: $sourceSha"
+          }
+
+          "exe=$exe" >> $env:GITHUB_OUTPUT
+          "source=$source" >> $env:GITHUB_OUTPUT
+
+      - name: Download pinned AutoHotkey v1.1.16.05 interpreter
+        id: ahk
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $path = Join-Path $env:RUNNER_TEMP 'AutoHotkey-v1.1.16.05.exe'
+          Invoke-WebRequest `
+            -Uri 'https://raw.githubusercontent.com/2wayne/AutoHotkey_LPortable/2fca5b7f6b84e8c9574b78b01c101831068016e5/App/AutoHotkey/AutoHotkey.exe' `
+            -OutFile $path -MaximumRedirection 10
+          $blob = (& git hash-object $path).Trim().ToLowerInvariant()
+          if ($blob -ne 'a776454e1eccfdcb92b7ab5214bca2832d52a1e8') {
+            throw "Unexpected AutoHotkey interpreter blob: $blob"
+          }
+          "path=$path" >> $env:GITHUB_OUTPUT
+
+      - name: Restore
+        run: dotnet restore iKeyd.sln
+
+      - name: Compare physical Alt layer path with compiled EXE and AHK source
+        shell: powershell
+        env:
+          IKEYD_LEGACY_EXE: ${{ steps.legacy.outputs.exe }}
+          IKEYD_LEGACY_EXE_SHA256: 5492198ce403d796c8588b17419bce82a0e6de3961bb40896a875ee5dee359ea
+          IKEYD_LEGACY_AHK: ${{ steps.legacy.outputs.source }}
+          IKEYD_AHK_V1_EXE: ${{ steps.ahk.outputs.path }}
+        run: |
+          dotnet test tests/iKeyd.Windows.Tests/iKeyd.Windows.Tests.csproj `
+            --no-restore `
+            --configuration Release `
+            --filter 'Category=HostedAltLayerPhysicalDifferentialE2E'
