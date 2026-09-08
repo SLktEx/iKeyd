@@ -19,8 +19,9 @@ jobs:
           fetch-depth: 0
 
       - name: Apply minimal runtime fix
-        shell: python
+        shell: bash
         run: |
+          python - <<'PY'
           from pathlib import Path
 
           path = Path('src/iKeyd.App/IKeydRuntimeHandler.cs')
@@ -54,8 +55,8 @@ jobs:
               raise SystemExit('expected runtime block was not found')
           path.write_text(text.replace(old, new, 1), encoding='utf-8')
 
-          workflow = Path('.github/workflows/apply-alt-layer-runtime-fix.yml')
-          workflow.unlink()
+          Path('.github/workflows/apply-alt-layer-runtime-fix.yml').unlink()
+          PY
 
       - name: Commit fix
         shell: bash
