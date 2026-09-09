@@ -34,7 +34,19 @@ public sealed class WindowsKeyboardOutputTests
     [InlineData((ushort)0x79, (ushort)0x44)]
     [InlineData((ushort)0x7A, (ushort)0x57)]
     [InlineData((ushort)0x7B, (ushort)0x58)]
-    public void Number_and_function_identity_replay_uses_physical_scan_code(ushort virtualKey, ushort expectedScanCode)
+    [InlineData((ushort)0xBD, (ushort)0x0C)]
+    [InlineData((ushort)0xDE, (ushort)0x0D)]
+    [InlineData((ushort)0xDC, (ushort)0x7D)]
+    [InlineData((ushort)0xC0, (ushort)0x1A)]
+    [InlineData((ushort)0xDB, (ushort)0x1B)]
+    [InlineData((ushort)0xBB, (ushort)0x27)]
+    [InlineData((ushort)0xBA, (ushort)0x28)]
+    [InlineData((ushort)0xDD, (ushort)0x2B)]
+    [InlineData((ushort)0xBC, (ushort)0x33)]
+    [InlineData((ushort)0xBE, (ushort)0x34)]
+    [InlineData((ushort)0xBF, (ushort)0x35)]
+    [InlineData((ushort)0xE2, (ushort)0x73)]
+    public void Identity_replay_uses_physical_scan_code_for_rows_and_JIS_punctuation(ushort virtualKey, ushort expectedScanCode)
     {
         var normalized = WindowsKeyboardOutput.NormalizeIdentityReplayKey(new KeyboardKey(virtualKey, 0));
         var input = WindowsKeyboardOutput.BuildKeyInput(normalized, KeyEventKind.Down);
@@ -47,14 +59,17 @@ public sealed class WindowsKeyboardOutputTests
     }
 
     [Fact]
-    public void Number_and_function_identity_replay_matches_the_JIS109_registry()
+    public void Identity_replay_matches_the_JIS109_registry_for_number_function_and_punctuation_keys()
     {
         var checkedBindings = 0;
         foreach (var binding in WindowsKeyMap.Jis109PhysicalBindings)
         {
             var isNumberRow = binding.Code is >= KeyCode.Digit0 and <= KeyCode.Digit9;
             var isFunctionRow = binding.Code is >= KeyCode.F1 and <= KeyCode.F12;
-            if (!isNumberRow && !isFunctionRow)
+            var isPunctuation = binding.Code is KeyCode.Minus or KeyCode.Caret or KeyCode.Yen or KeyCode.At or
+                KeyCode.LBracket or KeyCode.SColon or KeyCode.Colon or KeyCode.RBracket or
+                KeyCode.Comma or KeyCode.Dot or KeyCode.Slash or KeyCode.Ro;
+            if (!isNumberRow && !isFunctionRow && !isPunctuation)
                 continue;
 
             var normalized = WindowsKeyboardOutput.NormalizeIdentityReplayKey(
@@ -66,7 +81,7 @@ public sealed class WindowsKeyboardOutputTests
             checkedBindings++;
         }
 
-        Assert.Equal(22, checkedBindings);
+        Assert.Equal(34, checkedBindings);
     }
 
     [Fact]
