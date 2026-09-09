@@ -32,16 +32,26 @@ public sealed class LegacySendOutputCompatibilityTests
     }
 
     [Fact]
-    public void AHK_backtick_escapes_reachable_default_key_punctuation()
+    public void AHK_backtick_escapes_reachable_default_key_punctuation_as_key_events()
     {
         var keyboard = new RecordingKeyboardOutput();
         var output = new LegacySendOutput(keyboard);
 
         output.Send("`;`,`.`[`]^`;");
 
-        Assert.Equal([";,.[]"], keyboard.Text);
+        Assert.Empty(keyboard.Text);
         Assert.Equal(
         [
+            Event(WindowsKeyMap.OemSemicolon, KeyEventKind.Down),
+            Event(WindowsKeyMap.OemSemicolon, KeyEventKind.Up),
+            Event(WindowsKeyMap.OemComma, KeyEventKind.Down),
+            Event(WindowsKeyMap.OemComma, KeyEventKind.Up),
+            Event(WindowsKeyMap.OemPeriod, KeyEventKind.Down),
+            Event(WindowsKeyMap.OemPeriod, KeyEventKind.Up),
+            Event(WindowsKeyMap.OemLBracket, KeyEventKind.Down),
+            Event(WindowsKeyMap.OemLBracket, KeyEventKind.Up),
+            Event(WindowsKeyMap.OemRBracket, KeyEventKind.Down),
+            Event(WindowsKeyMap.OemRBracket, KeyEventKind.Up),
             Event(LeftControl, KeyEventKind.Down),
             Event(WindowsKeyMap.OemSemicolon, KeyEventKind.Down),
             Event(WindowsKeyMap.OemSemicolon, KeyEventKind.Up),

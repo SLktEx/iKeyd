@@ -91,7 +91,13 @@ internal sealed class LegacySendOutput : IMacroOutput
                 var escaped = legacySendText[index + 1];
                 if (modifiers.Count == 0)
                 {
-                    plain.Append(escaped);
+                    // AHK-escaped punctuation represents a key-like literal, not
+                    // Unicode text. Replaying it as a physical key preserves JIS
+                    // scan-code/IME semantics for new-shita outputs such as `, `[
+                    // and `]. Unknown escaped characters retain the old text path.
+                    FlushPlain();
+                    if (!TrySendModifiedCharacter(escaped, modifiers))
+                        plain.Append(escaped);
                 }
                 else
                 {
