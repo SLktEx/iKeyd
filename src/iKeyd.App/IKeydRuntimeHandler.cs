@@ -36,6 +36,7 @@ internal sealed class IKeydRuntimeHandler : IKeyboardEventHandler, IInputStateRe
     private LayerRuntimeState _layers = LayerRuntimeState.Empty;
     private KeymapMode? _timerMode;
     private long _timerDueAt;
+    private bool _spaceImeRolloverCommitted;
     private bool _disposed;
 
     public IKeydRuntimeHandler(
@@ -167,6 +168,12 @@ internal sealed class IKeydRuntimeHandler : IKeyboardEventHandler, IInputStateRe
 
         if (_layers.Layers.Count != 0)
         {
+            if (keyId is not null && TryHandleImeSpaceAlphabetRollover(keyId.Value))
+            {
+                _layers = _layers.MarkConsumed();
+                return KeyboardDisposition.PassThrough;
+            }
+
             var handled = keyId is not null && DispatchLayeredKey(keyId.Value, keyboardEvent.Key.VirtualKey);
             _layers = _layers.MarkConsumed();
             if (handled)
@@ -291,6 +298,7 @@ internal sealed class IKeydRuntimeHandler : IKeyboardEventHandler, IInputStateRe
         _layers = LayerRuntimeState.Empty;
         _heldLayerPresses.Clear();
         _suppressedKeys.Clear();
+        _spaceImeRolloverCommitted = false;
         _mouseMotion.Reset();
     }
 
@@ -331,10 +339,16 @@ internal sealed class IKeydRuntimeHandler : IKeyboardEventHandler, IInputStateRe
     private void ApplyLayerEvent(LayerEvent layerEvent)
     {
         FlushAllPending();
+        if (layerEvent == LayerEvent.SpaceDown)
+            _spaceImeRolloverCommitted = false;
+
         var transition = LayerStateMachine.Apply(_layers, layerEvent);
         _layers = transition.State;
         foreach (var action in transition.Actions)
             SendLayerAction(action);
+
+        if (layerEvent == LayerEvent.SpaceUp)
+            _spaceImeRolloverCommitted = false;
     }
 
     private LayerEvent ResolveLayerPress(KeyCode physicalCode)
@@ -372,6 +386,34 @@ internal sealed class IKeydRuntimeHandler : IKeyboardEventHandler, IInputStateRe
 
     private static bool IsLayerTrigger(KeyCode physicalCode)
         => physicalCode is KeyCode.NonConvert or KeyCode.Convert or KeyCode.Space or KeyCode.Kana;
+
+    private bool TryHandleImeSpaceAlphabetRollover(KeyId key)
+    {
+        if (!_layers.Layers.IsExact(LayerKey.S))
+            return false;
+
+        // Once ordinary Japanese typing has committed the held Space as a literal
+        // separator, keep the rest of that physical Space hold transparent. This
+        // prevents auto-repeat or a following letter from falling back to the
+        // legacy Space-as-Shift path and corrupting IME composition again.
+        if (_spaceImeRolloverCommitted)
+            return true;
+
+        if (_layers.Consumed || !_inputMethod.IsKanaInputActive() || !IsAlphabetKey(key.Code))
+            return false;
+
+        // During Japanese composition, a fast Space -> letter rollover is much
+        // more likely to mean "space, then the next letter" than an intentional
+        // Shift chord. Emit the deferred Space exactly once and let the physical
+        // letter continue through the normal Windows/IME path. IME-off behavior
+        // remains the legacy Space-as-Shift contract.
+        _send.SendKey(WindowsKeyMap.Space);
+        _spaceImeRolloverCommitted = true;
+        return true;
+    }
+
+    private static bool IsAlphabetKey(KeyCode key)
+        => (ushort)key >= (ushort)KeyCode.A && (ushort)key <= (ushort)KeyCode.Z;
 
     private bool DispatchLayeredKey(KeyId key, ushort virtualKey)
     {
