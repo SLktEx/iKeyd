@@ -80,14 +80,14 @@ public sealed class WindowsKeyboardOutput : IKeyboardOutput
         => (NativeMethods.GetKeyState(virtualKey) & 0x0001) != 0;
 
     /// <summary>
-    /// The legacy S/K keymaps consume number/function-row input and then replay an
-    /// identity output. Real JIS verification found that the VK-only SendInput path
-    /// used by those replays could disappear even though the in-memory keymap tests
-    /// passed. Recreate those two physical rows as set-1 scan-code input instead.
+    /// Some compatibility paths consume a physical key and then replay the same
+    /// key identity from a VK-only representation. Real JIS verification found
+    /// that VK-only SendInput is not sufficient for number/function rows and also
+    /// loses the physical JIS punctuation semantics needed by Japanese IME.
+    /// Recreate those identities as set-1 scan-code input instead.
     ///
-    /// Keep this deliberately narrow: romaji/new-shita character output remains on
-    /// the existing VK path, and explicit legacy vk+sc pairs keep their pair-preserving
-    /// compatibility path below.
+    /// Keep ordinary romaji/new-shita letter output on the existing VK path, and
+    /// keep explicit legacy vk+sc pairs on their pair-preserving compatibility path.
     /// </summary>
     internal static KeyboardKey NormalizeIdentityReplayKey(KeyboardKey key)
     {
@@ -158,7 +158,25 @@ public sealed class WindowsKeyboardOutput : IKeyboardOutput
         if (virtualKey == 0x7B) // F12
             return 0x58;
 
-        return 0;
+        // JIS106/109 punctuation positions. These must be replayed as physical
+        // scan codes so Microsoft IME can apply the same punctuation semantics as
+        // a real key press instead of receiving a layout-agnostic VK-only event.
+        return virtualKey switch
+        {
+            0xBD => 0x0C, // - / =
+            0xDE => 0x0D, // ^ / ~
+            0xDC => 0x7D, // Yen / backslash
+            0xC0 => 0x1A, // @ / `
+            0xDB => 0x1B, // [ / {
+            0xBB => 0x27, // ; / +
+            0xBA => 0x28, // : / *
+            0xDD => 0x2B, // ] / }
+            0xBC => 0x33, // , / <
+            0xBE => 0x34, // . / >
+            0xBF => 0x35, // / / ?
+            0xE2 => 0x73, // Ro / _
+            _ => 0
+        };
     }
 
     private static void SendCombinedVirtualScanKey(KeyboardKey key, KeyEventKind kind)
