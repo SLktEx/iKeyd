@@ -9,18 +9,37 @@ public sealed class LegacySendOutputAllocationTests
     [Fact]
     public void Compiled_mapping_output_fast_paths_allocate_zero_bytes_after_warmup()
     {
+        const int MeasurementIterations = 10_000;
+        const int MaxWarmupWindows = 6;
+        const int RequiredStableWindows = 2;
+
         var keyboard = new CountingKeyboardOutput();
         var output = new LegacySendOutput(keyboard);
 
+        // A fixed small warmup can race .NET's tiered JIT/PGO promotion and count
+        // one-time runtime initialization as product-path allocation. Require two
+        // consecutive zero-allocation windows instead: persistent per-call
+        // allocation can never satisfy this, while bounded JIT warmup can.
         for (var i = 0; i < 100; i++)
             Exercise(output);
 
-        var before = GC.GetAllocatedBytesForCurrentThread();
-        for (var i = 0; i < 10_000; i++)
-            Exercise(output);
-        var allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+        var stableWindows = 0;
+        long lastAllocated = long.MaxValue;
+        for (var attempt = 0; attempt < MaxWarmupWindows; attempt++)
+        {
+            var before = GC.GetAllocatedBytesForCurrentThread();
+            for (var i = 0; i < MeasurementIterations; i++)
+                Exercise(output);
+            lastAllocated = GC.GetAllocatedBytesForCurrentThread() - before;
 
-        Assert.Equal(0, allocated);
+            stableWindows = lastAllocated == 0 ? stableWindows + 1 : 0;
+            if (stableWindows >= RequiredStableWindows)
+                break;
+        }
+
+        Assert.True(
+            stableWindows >= RequiredStableWindows,
+            $"Fast paths did not reach steady-state zero allocation; last window allocated {lastAllocated} bytes.");
         Assert.True(keyboard.CallCount > 0);
     }
 
