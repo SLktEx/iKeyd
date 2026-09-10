@@ -9,10 +9,12 @@ on:
       - src/iKeyd.App/IKeydRuntimeHandler.cs
       - src/iKeyd.Profiles.HotkeySkg/Layers/LayerStateMachine.cs
       - src/iKeyd.Core/Layers/LayerState.cs
-      - tests/iKeyd.Windows.Tests/AssemblyParallelization.cs
       - tests/iKeyd.Windows.Tests/LayerGestureParityTests.cs
       - tests/iKeyd.Windows.Tests/LayerGestureTimingParityTests.cs
+      - tests/iKeyd.Windows.Tests/LayerLifecycleParityTests.cs
+      - tests/iKeyd.Windows.Tests/AltLayerLegacyDifferentialTests.cs
       - tests/iKeyd.Windows.Tests/LegacyLayerGestureScenarioRunner.cs
+      - tests/iKeyd.Windows.Tests/LegacyAltLayerGestureScenarioRunner.cs
 
 permissions:
   contents: read
