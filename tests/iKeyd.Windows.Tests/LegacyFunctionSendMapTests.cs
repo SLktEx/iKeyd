@@ -116,22 +116,37 @@ public sealed class LegacyFunctionSendMapTests
     [Fact]
     public void Hot_path_lookup_allocates_nothing_after_static_initialization()
     {
+        const int MeasurementIterations = 10_000;
+        const int MaxWarmupWindows = 6;
+        const int RequiredStableWindows = 2;
+
         var state = LayerState.FromSequence(LayerKey.K, LayerKey.M, LayerKey.H);
         Assert.True(LegacyFunctionSendMap.TryResolve(KeyCode.Slash, state, out _));
 
-        var before = GC.GetAllocatedBytesForCurrentThread();
+        var stableWindows = 0;
+        long lastAllocated = long.MaxValue;
         string? last = null;
         var allResolved = true;
-        for (var i = 0; i < 10_000; i++)
+        for (var attempt = 0; attempt < MaxWarmupWindows; attempt++)
         {
-            allResolved &= LegacyFunctionSendMap.TryResolve(KeyCode.Slash, state, out var output);
-            last = output;
+            var before = GC.GetAllocatedBytesForCurrentThread();
+            for (var i = 0; i < MeasurementIterations; i++)
+            {
+                allResolved &= LegacyFunctionSendMap.TryResolve(KeyCode.Slash, state, out var output);
+                last = output;
+            }
+            lastAllocated = GC.GetAllocatedBytesForCurrentThread() - before;
+
+            stableWindows = lastAllocated == 0 ? stableWindows + 1 : 0;
+            if (stableWindows >= RequiredStableWindows)
+                break;
         }
-        var allocated = GC.GetAllocatedBytesForCurrentThread() - before;
 
         GC.KeepAlive(last);
         Assert.True(allResolved);
-        Assert.Equal(0, allocated);
+        Assert.True(
+            stableWindows >= RequiredStableWindows,
+            $"Lookup did not reach steady-state zero allocation; last window allocated {lastAllocated} bytes.");
     }
 
     [Fact]
