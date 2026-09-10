@@ -3,11 +3,12 @@ using iKeyd.Core.Input;
 
 namespace iKeyd.Windows.Input;
 
-public sealed class WindowsInputMethod : IInputMethod
+public sealed class WindowsInputMethod : IInputMethod, IInputCompositionState
 {
     private const uint WmImeControl = 0x0283;
     private const int ImcGetConversionMode = 0x0001;
     private const int ImcGetOpenStatus = 0x0005;
+    private const uint GcsCompStr = 0x0008;
 
     public bool IsKanaInputActive()
     {
@@ -30,6 +31,34 @@ public sealed class WindowsInputMethod : IInputMethod
             0);
 
         return IsRomaKanaConversionMode(conversionMode);
+    }
+
+    public bool IsCompositionActive()
+    {
+        var target = GetFocusedWindow();
+        if (target == 0)
+            return false;
+
+        var inputContext = NativeMethods.ImmGetContext(target);
+        if (inputContext == 0)
+            return false;
+
+        try
+        {
+            // With a null output buffer, ImmGetCompositionStringW returns the byte
+            // count required for the requested data. A positive GCS_COMPSTR size
+            // therefore means the focused application currently owns unconfirmed
+            // composition text. IME-open state by itself does not imply this.
+            return NativeMethods.ImmGetCompositionStringW(
+                inputContext,
+                GcsCompStr,
+                0,
+                0) > 0;
+        }
+        finally
+        {
+            _ = NativeMethods.ImmReleaseContext(target, inputContext);
+        }
     }
 
     public static bool IsRomaKanaConversionMode(int conversionMode)
@@ -82,6 +111,20 @@ public sealed class WindowsInputMethod : IInputMethod
 
         [DllImport("imm32.dll")]
         public static extern nint ImmGetDefaultIMEWnd(nint window);
+
+        [DllImport("imm32.dll")]
+        public static extern nint ImmGetContext(nint window);
+
+        [DllImport("imm32.dll")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static extern bool ImmReleaseContext(nint window, nint inputContext);
+
+        [DllImport("imm32.dll", CharSet = CharSet.Unicode)]
+        public static extern int ImmGetCompositionStringW(
+            nint inputContext,
+            uint index,
+            nint buffer,
+            uint bufferLength);
 
         [DllImport("user32.dll", CharSet = CharSet.Unicode)]
         public static extern nint SendMessageW(nint window, uint message, nint wParam, nint lParam);
