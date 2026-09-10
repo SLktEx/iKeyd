@@ -84,6 +84,10 @@ public sealed class LayerLifecycleParityTests
             ],
             HostedLegacy: true),
 
+        // The physical Alt hotkey itself causes AutoHotkey v1 to inject a Ctrl
+        // menu-mask tap. That transport artifact is intentionally not part of
+        // iKeyd's logical LayerStateMachine output; AltLayerLegacyDifferentialTests
+        // verifies and normalizes it separately.
         new(
             "a-m-space-release-clears-a",
             ["ams-space-up"],
@@ -93,7 +97,6 @@ public sealed class LayerLifecycleParityTests
                 Down("CONVERT", 90), Up("CONVERT", 100)
             ],
             [
-                "keyDown:Control", "keyUp:Control",
                 "keyDown:Alt", "keyDown:Enter", "keyUp:Enter", "keyUp:Alt",
                 "keyDown:Control", "keyUp:Control"
             ]),
@@ -107,7 +110,6 @@ public sealed class LayerLifecycleParityTests
                 Down("CONVERT", 70), Up("CONVERT", 80)
             ],
             [
-                "keyDown:Control", "keyUp:Control",
                 "keyDown:Alt", "keyDown:Q", "keyUp:Q", "keyUp:Alt",
                 "keyDown:Control", "keyUp:Control"
             ]),
@@ -119,10 +121,7 @@ public sealed class LayerLifecycleParityTests
                 Down("ALT", 10), Down("CONVERT", 20), Up("CONVERT", 30), Up("ALT", 40),
                 Down("CONVERT", 50), Up("CONVERT", 60)
             ],
-            [
-                "keyDown:Control", "keyUp:Control",
-                "keyDown:Control", "keyUp:Control"
-            ]),
+            ["keyDown:Control", "keyUp:Control"]),
 
         new(
             "m-alt-space-does-not-become-ams",
@@ -133,10 +132,7 @@ public sealed class LayerLifecycleParityTests
                 Up("NONCONVERT", 60),
                 Down("CONVERT", 70), Up("CONVERT", 80)
             ],
-            [
-                "keyDown:Control", "keyUp:Control",
-                "keyDown:Control", "keyUp:Control"
-            ]),
+            ["keyDown:Control", "keyUp:Control"]),
 
         new(
             "a-m-alt-space-release-emits-alt-space-and-cleans-a",
@@ -149,15 +145,13 @@ public sealed class LayerLifecycleParityTests
                 Down("CONVERT", 110), Up("CONVERT", 120)
             ],
             [
-                "keyDown:Control", "keyUp:Control",
-                "keyDown:Control", "keyUp:Control",
                 "keyDown:Alt", "keyDown:Space", "keyUp:Space", "keyUp:Alt",
                 "keyDown:Control", "keyUp:Control"
             ]),
 
-        // `K` is documented as one-shot for ordinary modified dispatch.  #230
-        // verifies Win+key output; this follow-up additionally proves the sticky
-        // K state is actually gone before the next H tap.
+        // `K` is documented as one-shot for ordinary modified dispatch. #230
+        // verifies Win+key output; this additionally proves K is gone before the
+        // next H tap.
         new(
             "k-modified-dispatch-is-one-shot",
             [],
@@ -176,7 +170,7 @@ public sealed class LayerLifecycleParityTests
         => PhysicalCases.Select(item => new object[] { item });
 
     [Fact]
-    public void Every_pinned_layer_case_matches_the_executable_state_machine()
+    public void Every_pinned_layer_case_matches_the_logical_state_machine()
     {
         using var document = JsonDocument.Parse(File.ReadAllText(RuntimeFixturePath));
 
@@ -194,15 +188,10 @@ public sealed class LayerLifecycleParityTests
                 $"{name}: final state expected '{item.GetProperty("finalState").GetString()}', actual '{transition.State.Layers}'.");
             Assert.Equal(item.GetProperty("finalFlag").GetInt32() != 0, transition.State.Consumed);
 
-            // The pinned fixture captures hotkeySKG's logical layer actions. AHK
-            // itself additionally emits a Ctrl tap for physical Alt hook hotkeys
-            // to mask menu activation. Keep that transport artifact out of the
-            // fixture while still requiring the executable state machine to
-            // reproduce it for the three Alt-down trigger events.
-            var expectedActions = layerEvent is LayerEvent.AltHDown or LayerEvent.AltSpaceDown or LayerEvent.AltKanaDown
-                ? new[] { "Ctrl" }
-                : item.GetProperty("actions").EnumerateArray().Select(value => value.GetString() ?? string.Empty).ToArray();
-
+            var expectedActions = item.GetProperty("actions")
+                .EnumerateArray()
+                .Select(value => value.GetString() ?? string.Empty)
+                .ToArray();
             Assert.Equal(expectedActions, transition.Actions.Select(ActionName).ToArray());
         }
     }
