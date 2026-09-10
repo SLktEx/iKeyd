@@ -1,0 +1,31 @@
+// The example illustrated by the README artwork; not the default profile.
+profile readmeDemo {
+    chord_window = 40ms
+    startup_mode = S
+}
+
+keymap S {
+    A = LT(NUM, Z)
+    Q = "q"
+    W = "w"
+    E = "e"
+    S = "s"
+    D = "d"
+    combo Q + W = "escape"
+}
+
+keymap NUM {
+    Q = "1"
+    W = "2"
+    E = "3"
+}
+
+// The current Windows static compiler requires both S and K modes.
+keymap K {
+    A = "a"
+    Q = "q"
+    W = "w"
+    E = "e"
+    S = "s"
+    D = "d"
+}

@@ -82,7 +82,7 @@ Use one idea per section:
 
 1. **Hero** — Your keyboard, defined in code. + one real DSL example.
 2. **Define** — Show readable authoring syntax.
-3. **Compile** — Show the real DSL → static JSON profile relationship.
+3. **Compile** — Show the real `.ikeyd` → generated C# profiles → `iKeyd.exe` build relationship.
 4. **Run** — Show minimal keyboard state that demonstrates documented behavior.
 5. **Why iKeyd** — Versionable, reviewable, shareable, understandable.
 6. **Real configuration** — Show a believable excerpt from `config/hotkeySKG.ikeyd`.
@@ -114,9 +114,23 @@ Brand assets live in `docs/assets/brand/`.
 
 - `ikeyd-icon.png` — canonical application / brand mark
 - `ikeyd-logo.png` — canonical combined logo / wordmark
-- `readme-hero.png` — legacy/supporting README artwork retained for compatibility but no longer the primary brand language
-- `readme-features.png` — legacy/supporting README artwork retained for compatibility
-- `readme-dsl.png` — legacy/supporting README artwork retained for compatibility
+- `readme-hero.png` — real DSL beside the number layer it defines
+- `readme-features.png` — tap, hold, and combo input/output examples
+- `readme-dsl.png` — current Windows build from DSL through generated C# profiles to the executable
+- `readme-tap-hold.gif` — illustrated tap/hold sequence, with timing slowed for readability
+- `readme-*.svg` — editable vector sources for the three static diagrams
 - `src/iKeyd.App/Assets/ikeyd.ico` — Windows executable and tray icon
 
 The landing page should use the official logo and real product code rather than inventing additional logos or illustration systems. Future imagery should prefer real code and real behavior over illustration.
+
+### README artwork
+
+The README uses the official icon, a text heading, and the diagrams above. The canonical icon and logo files remain unchanged. The keyboard drawings illustrate [`examples/readme-demo.ikeyd`](examples/readme-demo.ikeyd), not the default profile. Labels and explanatory text also appear in the README so readers can understand the examples without the images or animation.
+
+Run `python tools/render_readme_art.py` from the repository root to regenerate the PNGs, SVGs, and GIF. The renderer requires Pillow, fontconfig, Nimbus Sans (`fonts-urw-base35` on Debian), and DejaVu Sans Mono (`fonts-dejavu-core`). It reads the DSL excerpt from the example file and checks that the illustrated mappings still match. The artwork uses exact text and flat key geometry; cyan identifies syntax keywords and pressed keys or active state. The GIF is an illustration with deliberately slowed timing.
+
+For a compiler check of the example, use the canonical build-time compiler:
+
+```sh
+dotnet run --project tools/iKeyd.DslCompiler -- docs/examples/readme-demo.ikeyd /tmp/ikeyd-readme/GeneratedProfile.g.cs /tmp/ikeyd-readme/GeneratedMouseProfile.g.cs
+```

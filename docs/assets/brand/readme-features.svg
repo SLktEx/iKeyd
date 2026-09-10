@@ -1,0 +1,55 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1000" viewBox="0 0 1600 1000" role="img">
+<title>Tap A for Z; hold A and press Q for 1; combine Q and W for Escape</title>
+<rect width="1600" height="1000" fill="#0A0A0A"/>
+<text x="88" y="81.38" fill="#999999" font-family="DejaVu Sans Mono, monospace" font-size="21" font-weight="400" text-anchor="start" xml:space="preserve">THREE WAYS TO USE THE SAME KEYS</text>
+<text x="88" y="179.26" fill="#F2F2F2" font-family="Nimbus Sans, Arial, sans-serif" font-size="67" font-weight="700" text-anchor="start" xml:space="preserve">Tap. Hold. Combine.</text>
+<path d="M88 235 L1512 235" fill="none" stroke="#363636" stroke-width="1"/>
+<text x="88" y="295.42" fill="#F2F2F2" font-family="Nimbus Sans, Arial, sans-serif" font-size="39" font-weight="700" text-anchor="start" xml:space="preserve">Tap</text>
+<text x="88" y="347.5" fill="#999999" font-family="Nimbus Sans, Arial, sans-serif" font-size="25" font-weight="400" text-anchor="start" xml:space="preserve">Press and release A.</text>
+<rect x="560" y="264" width="112" height="112" rx="7" fill="#151515" stroke="#363636"/>
+<text x="616.0" y="333.66400000000004" fill="#F2F2F2" font-family="DejaVu Sans Mono, monospace" font-size="44.800000000000004" font-weight="400" text-anchor="middle" xml:space="preserve">A</text>
+<path d="M908 320 L1000 320" fill="none" stroke="#999999" stroke-width="2"/>
+<path d="M990 312 L1000 320" fill="none" stroke="#999999" stroke-width="2"/>
+<path d="M990 328 L1000 320" fill="none" stroke="#999999" stroke-width="2"/>
+<rect x="1052" y="264" width="112" height="112" rx="7" fill="#151515" stroke="#363636"/>
+<text x="1108.0" y="333.66400000000004" fill="#F2F2F2" font-family="DejaVu Sans Mono, monospace" font-size="44.800000000000004" font-weight="400" text-anchor="middle" xml:space="preserve">Z</text>
+<text x="1200" y="321.6" fill="#999999" font-family="DejaVu Sans Mono, monospace" font-size="20" font-weight="400" text-anchor="start" xml:space="preserve">OUTPUT</text>
+<text x="1052" y="425.94" fill="#999999" font-family="Nimbus Sans, Arial, sans-serif" font-size="23" font-weight="400" text-anchor="start" xml:space="preserve">Sends the Z key.</text>
+<path d="M88 449 L1512 449" fill="none" stroke="#363636" stroke-width="1"/>
+<text x="88" y="509.42" fill="#F2F2F2" font-family="Nimbus Sans, Arial, sans-serif" font-size="39" font-weight="700" text-anchor="start" xml:space="preserve">Hold</text>
+<text x="88" y="561.5" fill="#999999" font-family="Nimbus Sans, Arial, sans-serif" font-size="25" font-weight="400" text-anchor="start" xml:space="preserve">Hold A, then press Q.</text>
+<rect x="560" y="478" width="112" height="112" rx="7" fill="#2ED3D0" stroke="#2ED3D0"/>
+<text x="616.0" y="547.664" fill="#0A0A0A" font-family="DejaVu Sans Mono, monospace" font-size="44.800000000000004" font-weight="400" text-anchor="middle" xml:space="preserve">A</text>
+<path d="M575 578 L657 578" fill="none" stroke="#0A0A0A" stroke-width="2"/>
+<rect x="714" y="478" width="112" height="112" rx="7" fill="#2ED3D0" stroke="#2ED3D0"/>
+<text x="770.0" y="547.664" fill="#0A0A0A" font-family="DejaVu Sans Mono, monospace" font-size="44.800000000000004" font-weight="400" text-anchor="middle" xml:space="preserve">Q</text>
+<path d="M729 578 L811 578" fill="none" stroke="#0A0A0A" stroke-width="2"/>
+<text x="690" y="539.84" fill="#999999" font-family="DejaVu Sans Mono, monospace" font-size="28" font-weight="400" text-anchor="start" xml:space="preserve">+</text>
+<path d="M908 534 L1000 534" fill="none" stroke="#999999" stroke-width="2"/>
+<path d="M990 526 L1000 534" fill="none" stroke="#999999" stroke-width="2"/>
+<path d="M990 542 L1000 534" fill="none" stroke="#999999" stroke-width="2"/>
+<rect x="1052" y="478" width="112" height="112" rx="7" fill="#151515" stroke="#363636"/>
+<text x="1108.0" y="547.664" fill="#F2F2F2" font-family="DejaVu Sans Mono, monospace" font-size="44.800000000000004" font-weight="400" text-anchor="middle" xml:space="preserve">1</text>
+<text x="1200" y="535.6" fill="#999999" font-family="DejaVu Sans Mono, monospace" font-size="20" font-weight="400" text-anchor="start" xml:space="preserve">OUTPUT</text>
+<text x="1052" y="639.94" fill="#999999" font-family="Nimbus Sans, Arial, sans-serif" font-size="23" font-weight="400" text-anchor="start" xml:space="preserve">Q uses the NUM mapping.</text>
+<path d="M88 663 L1512 663" fill="none" stroke="#363636" stroke-width="1"/>
+<text x="88" y="723.42" fill="#F2F2F2" font-family="Nimbus Sans, Arial, sans-serif" font-size="39" font-weight="700" text-anchor="start" xml:space="preserve">Combine</text>
+<text x="88" y="775.5" fill="#999999" font-family="Nimbus Sans, Arial, sans-serif" font-size="25" font-weight="400" text-anchor="start" xml:space="preserve">Press Q + W together.</text>
+<rect x="560" y="692" width="112" height="112" rx="7" fill="#2ED3D0" stroke="#2ED3D0"/>
+<text x="616.0" y="761.664" fill="#0A0A0A" font-family="DejaVu Sans Mono, monospace" font-size="44.800000000000004" font-weight="400" text-anchor="middle" xml:space="preserve">Q</text>
+<path d="M575 792 L657 792" fill="none" stroke="#0A0A0A" stroke-width="2"/>
+<rect x="714" y="692" width="112" height="112" rx="7" fill="#2ED3D0" stroke="#2ED3D0"/>
+<text x="770.0" y="761.664" fill="#0A0A0A" font-family="DejaVu Sans Mono, monospace" font-size="44.800000000000004" font-weight="400" text-anchor="middle" xml:space="preserve">W</text>
+<path d="M729 792 L811 792" fill="none" stroke="#0A0A0A" stroke-width="2"/>
+<text x="690" y="753.84" fill="#999999" font-family="DejaVu Sans Mono, monospace" font-size="28" font-weight="400" text-anchor="start" xml:space="preserve">+</text>
+<path d="M908 748 L1000 748" fill="none" stroke="#999999" stroke-width="2"/>
+<path d="M990 740 L1000 748" fill="none" stroke="#999999" stroke-width="2"/>
+<path d="M990 756 L1000 748" fill="none" stroke="#999999" stroke-width="2"/>
+<rect x="1052" y="692" width="112" height="112" rx="7" fill="#151515" stroke="#363636"/>
+<text x="1108.0" y="754.6752" fill="#F2F2F2" font-family="DejaVu Sans Mono, monospace" font-size="35.84" font-weight="400" text-anchor="middle" xml:space="preserve">Esc</text>
+<text x="1200" y="749.6" fill="#999999" font-family="DejaVu Sans Mono, monospace" font-size="20" font-weight="400" text-anchor="start" xml:space="preserve">OUTPUT</text>
+<text x="1052" y="853.94" fill="#999999" font-family="Nimbus Sans, Arial, sans-serif" font-size="23" font-weight="400" text-anchor="start" xml:space="preserve">The pair sends Escape.</text>
+<path d="M88 922 L1512 922" fill="none" stroke="#363636" stroke-width="1"/>
+<text x="88" y="971.5" fill="#F2F2F2" font-family="Nimbus Sans, Arial, sans-serif" font-size="25" font-weight="700" text-anchor="start" xml:space="preserve">iKeyd</text>
+<text x="1512" y="967.82" fill="#999999" font-family="DejaVu Sans Mono, monospace" font-size="19" font-weight="400" text-anchor="end" xml:space="preserve">Example configuration / not the default keymap</text>
+</svg>

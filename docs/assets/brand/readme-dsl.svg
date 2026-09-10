@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="680" viewBox="0 0 1600 680" role="img">
+<title>Current Windows build: .ikeyd source, generated C# profiles, iKeyd.exe</title>
+<rect width="1600" height="680" fill="#0A0A0A"/>
+<text x="88" y="81.38" fill="#999999" font-family="DejaVu Sans Mono, monospace" font-size="21" font-weight="400" text-anchor="start" xml:space="preserve">THE WINDOWS BUILD</text>
+<text x="88" y="176.7" fill="#F2F2F2" font-family="Nimbus Sans, Arial, sans-serif" font-size="65" font-weight="700" text-anchor="start" xml:space="preserve">From source to executable.</text>
+<text x="88" y="308.08" fill="#F2F2F2" font-family="Nimbus Sans, Arial, sans-serif" font-size="36" font-weight="700" text-anchor="start" xml:space="preserve">Write</text>
+<text x="640" y="308.08" fill="#F2F2F2" font-family="Nimbus Sans, Arial, sans-serif" font-size="36" font-weight="700" text-anchor="start" xml:space="preserve">Compile</text>
+<text x="1270" y="308.08" fill="#F2F2F2" font-family="Nimbus Sans, Arial, sans-serif" font-size="36" font-weight="700" text-anchor="start" xml:space="preserve">Run</text>
+<text x="88" y="383.84" fill="#999999" font-family="DejaVu Sans Mono, monospace" font-size="28" font-weight="400" text-anchor="start" xml:space="preserve">config/</text>
+<text x="88" y="434.4" fill="#F2F2F2" font-family="DejaVu Sans Mono, monospace" font-size="30" font-weight="400" text-anchor="start" xml:space="preserve">hotkeySKG.ikeyd</text>
+<path d="M468 385 L581 385" fill="none" stroke="#999999" stroke-width="2"/>
+<path d="M571 377 L581 385" fill="none" stroke="#999999" stroke-width="2"/>
+<path d="M571 393 L581 385" fill="none" stroke="#999999" stroke-width="2"/>
+<text x="640" y="380.72" fill="#F2F2F2" font-family="DejaVu Sans Mono, monospace" font-size="24" font-weight="400" text-anchor="start" xml:space="preserve">GeneratedProfile.g.cs</text>
+<text x="640" y="429.72" fill="#F2F2F2" font-family="DejaVu Sans Mono, monospace" font-size="24" font-weight="400" text-anchor="start" xml:space="preserve">GeneratedMouseProfile.g.cs</text>
+<path d="M1080 385 L1205 385" fill="none" stroke="#999999" stroke-width="2"/>
+<path d="M1195 377 L1205 385" fill="none" stroke="#999999" stroke-width="2"/>
+<path d="M1195 393 L1205 385" fill="none" stroke="#999999" stroke-width="2"/>
+<text x="1270" y="397.74" fill="#F2F2F2" font-family="DejaVu Sans Mono, monospace" font-size="33" font-weight="400" text-anchor="start" xml:space="preserve">iKeyd.exe</text>
+<text x="88" y="533.5" fill="#999999" font-family="Nimbus Sans, Arial, sans-serif" font-size="25" font-weight="400" text-anchor="start" xml:space="preserve">Readable configuration</text>
+<text x="640" y="533.5" fill="#999999" font-family="Nimbus Sans, Arial, sans-serif" font-size="25" font-weight="400" text-anchor="start" xml:space="preserve">Profiles generated during the build</text>
+<text x="1270" y="519.5" fill="#999999" font-family="Nimbus Sans, Arial, sans-serif" font-size="25" font-weight="400" text-anchor="start" xml:space="preserve">Compiled</text>
+<text x="1270" y="554.5" fill="#999999" font-family="Nimbus Sans, Arial, sans-serif" font-size="25" font-weight="400" text-anchor="start" xml:space="preserve">profile included</text>
+<path d="M88 602 L1512 602" fill="none" stroke="#363636" stroke-width="1"/>
+<text x="88" y="651.5" fill="#F2F2F2" font-family="Nimbus Sans, Arial, sans-serif" font-size="25" font-weight="700" text-anchor="start" xml:space="preserve">iKeyd</text>
+<text x="1512" y="647.82" fill="#999999" font-family="DejaVu Sans Mono, monospace" font-size="19" font-weight="400" text-anchor="end" xml:space="preserve">Current .NET / Windows build</text>
+</svg>

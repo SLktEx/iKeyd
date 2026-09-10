@@ -2,20 +2,17 @@
   <img src="docs/assets/brand/ikeyd-icon.png" alt="iKeyd official icon" width="160">
 </p>
 
-<h1 align="center">
-  <img src="docs/assets/brand/ikeyd-logo.png" alt="iKeyd" width="420">
-</h1>
-
-<p align="center">
-  <strong>Your keyboard, defined in code.</strong><br>
-  Write keyboard behavior as configuration you can read, version, and run.
-</p>
+<h1 align="center">iKeyd</h1>
 
 <p align="center">
   <a href="https://slktex.github.io/iKeyd/">Website</a>
   · <a href="docs/ikeyd-dsl.md">iKeyd DSL</a>
   · <a href="https://github.com/SLktEx/iKeyd/actions/workflows/windows-package.yml">Windows package</a>
   · <a href="docs/implementation-details.md">Implementation details</a>
+</p>
+
+<p align="center">
+  <img src="docs/assets/brand/readme-hero.png" alt="Your keyboard, defined in code. Example: A = LT(NUM, Z) sends Z on tap and activates NUM while held. In NUM, Q, W and E send 1, 2 and 3." width="100%">
 </p>
 
 ---
@@ -26,20 +23,46 @@ iKeyd is an open-source keyboard customization runtime built around the `.ikeyd`
 
 The `.ikeyd` format keeps physical layout, key mappings, combos, tap/hold behavior, and other supported keyboard semantics in text you can review and version.
 
-```text
-layout BASE {
-    row Q W E
-    row A S D
+```ikeyd
+keymap S {
+    A = LT(NUM, Z)
+    Q = "q"
+    W = "w"
+    E = "e"
+    S = "s"
+    D = "d"
+    combo Q + W = "escape"
 }
 
-keymap S {
-    POS[1,1] = LT(NUM, Z)
-    POS[1,2] = "w"
-    combo POS[1,1] + POS[2,2] = "escape"
+keymap NUM {
+    Q = "1"
+    W = "2"
+    E = "3"
 }
 ```
 
+This excerpt and the illustrations use the [README example](docs/examples/readme-demo.ikeyd), which includes the profile settings and the `K` keymap required by the Windows compiler. It is an example, not the default `hotkeySKG` configuration.
+
+<p align="center">
+  <img src="docs/assets/brand/readme-features.png" alt="Example: tap and release A to send Z; hold A then press Q to send 1; press Q and W together to send Escape." width="100%">
+</p>
+
+<details>
+<summary>Watch the tap/hold example</summary>
+
+<p align="center">
+  <img src="docs/assets/brand/readme-tap-hold.gif" alt="Illustrated sequence: tap A and release to send Z. Hold A to activate NUM, press Q to send 1, then release A to return to S without sending Z." width="100%">
+</p>
+
+The animation illustrates the example above. Timing is slowed for readability; it is not a screen recording or a latency measurement. The static diagram above shows the same tap and hold results.
+
+</details>
+
 Normal builds consume `.ikeyd` directly at build time:
+
+<p align="center">
+  <img src="docs/assets/brand/readme-dsl.png" alt="Current Windows build: config/hotkeySKG.ikeyd becomes GeneratedProfile.g.cs and GeneratedMouseProfile.g.cs during the build, then iKeyd.exe with its compiled profile included." width="100%">
+</p>
 
 ```text
 config/hotkeySKG.ikeyd
