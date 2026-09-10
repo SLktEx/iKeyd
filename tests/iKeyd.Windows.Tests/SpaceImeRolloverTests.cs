@@ -12,9 +12,9 @@ public sealed class SpaceImeRolloverTests
     private static string ProfilePath => Path.Combine(AppContext.BaseDirectory, "Fixtures", "hotkeySKG.behavior.json");
 
     [Fact]
-    public void Ime_active_Space_alphabet_rollover_commits_Space_once_and_passes_letters_through()
+    public void Ime_active_composition_Space_alphabet_rollover_commits_Space_once_and_passes_letters_through()
     {
-        using var fixture = CreateRuntime(kanaInputActive: true);
+        using var fixture = CreateRuntime(kanaInputActive: true, compositionActive: true);
 
         Assert.Equal(KeyboardDisposition.Suppress, Dispatch(fixture, WindowsKeyMap.Space, KeyEventKind.Down, 0));
 
@@ -37,9 +37,9 @@ public sealed class SpaceImeRolloverTests
     [Theory]
     [InlineData(39)]
     [InlineData(40)]
-    public void Ime_active_fast_Space_alphabet_rollover_is_inclusive_at_chord_boundary(long pressGapMs)
+    public void Ime_active_composition_fast_Space_alphabet_rollover_is_inclusive_at_chord_boundary(long pressGapMs)
     {
-        using var fixture = CreateRuntime(kanaInputActive: true);
+        using var fixture = CreateRuntime(kanaInputActive: true, compositionActive: true);
 
         Assert.Equal(KeyboardDisposition.Suppress, Dispatch(fixture, WindowsKeyMap.Space, KeyEventKind.Down, 0));
         Assert.Equal(KeyboardDisposition.PassThrough, Dispatch(fixture, 'A', KeyEventKind.Down, pressGapMs));
@@ -55,13 +55,49 @@ public sealed class SpaceImeRolloverTests
         Assert.Empty(fixture.Output.Text);
     }
 
+    [Fact]
+    public void Ime_active_without_composition_fast_Space_alphabet_preserves_legacy_thumb_shift()
+    {
+        using var fixture = CreateRuntime(kanaInputActive: true, compositionActive: false);
+
+        Assert.Equal(KeyboardDisposition.Suppress, Dispatch(fixture, WindowsKeyMap.Space, KeyEventKind.Down, 0));
+        Assert.Equal(KeyboardDisposition.Suppress, Dispatch(fixture, 'A', KeyEventKind.Down, 10));
+        Assert.Equal(KeyboardDisposition.Suppress, Dispatch(fixture, 'A', KeyEventKind.Up, 11));
+        Assert.Equal(KeyboardDisposition.Suppress, Dispatch(fixture, WindowsKeyMap.Space, KeyEventKind.Up, 20));
+
+        Assert.Equal(
+        [
+            Event(0xA0, KeyEventKind.Down),
+            Event('A', KeyEventKind.Down),
+            Event('A', KeyEventKind.Up),
+            Event(0xA0, KeyEventKind.Up)
+        ],
+        fixture.Output.Events);
+        Assert.Empty(fixture.Output.Text);
+    }
+
+    [Fact]
+    public void Ime_active_without_composition_does_not_inject_literal_Space_byte()
+    {
+        using var fixture = CreateRuntime(kanaInputActive: true, compositionActive: false);
+
+        Dispatch(fixture, WindowsKeyMap.Space, KeyEventKind.Down, 0);
+        Dispatch(fixture, 'A', KeyEventKind.Down, 10);
+        Dispatch(fixture, 'A', KeyEventKind.Up, 11);
+        Dispatch(fixture, WindowsKeyMap.Space, KeyEventKind.Up, 20);
+
+        Assert.DoesNotContain(
+            fixture.Output.Events,
+            item => item.Key.VirtualKey == WindowsKeyMap.Space);
+    }
+
     [Theory]
     [InlineData(41)]
     [InlineData(100)]
     [InlineData(500)]
     public void Ime_active_long_held_Space_alphabet_preserves_legacy_thumb_shift(long pressGapMs)
     {
-        using var fixture = CreateRuntime(kanaInputActive: true);
+        using var fixture = CreateRuntime(kanaInputActive: true, compositionActive: true);
 
         Assert.Equal(KeyboardDisposition.Suppress, Dispatch(fixture, WindowsKeyMap.Space, KeyEventKind.Down, 0));
         Assert.Equal(KeyboardDisposition.Suppress, Dispatch(fixture, 'A', KeyEventKind.Down, pressGapMs));
@@ -82,7 +118,7 @@ public sealed class SpaceImeRolloverTests
     [Fact]
     public void Ime_inactive_Space_alphabet_preserves_legacy_thumb_shift()
     {
-        using var fixture = CreateRuntime(kanaInputActive: false);
+        using var fixture = CreateRuntime(kanaInputActive: false, compositionActive: false);
 
         Assert.Equal(KeyboardDisposition.Suppress, Dispatch(fixture, WindowsKeyMap.Space, KeyEventKind.Down, 0));
         Assert.Equal(KeyboardDisposition.Suppress, Dispatch(fixture, 'A', KeyEventKind.Down, 10));
@@ -103,7 +139,7 @@ public sealed class SpaceImeRolloverTests
     [Fact]
     public void Ime_active_Space_non_alphabet_keeps_the_legacy_shift_layer()
     {
-        using var fixture = CreateRuntime(kanaInputActive: true);
+        using var fixture = CreateRuntime(kanaInputActive: true, compositionActive: true);
 
         Assert.Equal(KeyboardDisposition.Suppress, Dispatch(fixture, WindowsKeyMap.Space, KeyEventKind.Down, 0));
         Assert.Equal(KeyboardDisposition.Suppress, Dispatch(fixture, '5', KeyEventKind.Down, 10));
@@ -121,14 +157,14 @@ public sealed class SpaceImeRolloverTests
         Assert.Empty(fixture.Output.Text);
     }
 
-    private static RuntimeFixture CreateRuntime(bool kanaInputActive)
+    private static RuntimeFixture CreateRuntime(bool kanaInputActive, bool compositionActive)
     {
         var configuration = IKeydConfiguration.Load(ProfilePath) with { StartupMode = InputMode.R };
         var keyboardState = new KeyboardState();
         var output = new RecordingKeyboardOutput();
         var runtime = new IKeydRuntimeHandler(
             configuration,
-            new FixedInputMethod(kanaInputActive),
+            new FixedInputMethod(kanaInputActive, compositionActive),
             keyboardState,
             new LegacySendOutput(output),
             new NullDesktopBackend());
@@ -161,9 +197,10 @@ public sealed class SpaceImeRolloverTests
         public void Dispose() => Runtime.Dispose();
     }
 
-    private sealed class FixedInputMethod(bool active) : IInputMethod
+    private sealed class FixedInputMethod(bool active, bool compositionActive) : IInputMethod, IInputCompositionState
     {
         public bool IsKanaInputActive() => active;
+        public bool IsCompositionActive() => compositionActive;
     }
 
     private sealed class RecordingKeyboardOutput : IKeyboardOutput
