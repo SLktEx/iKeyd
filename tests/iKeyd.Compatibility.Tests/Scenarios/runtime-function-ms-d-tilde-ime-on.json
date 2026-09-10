@@ -1,0 +1,21 @@
+{
+  "id": "runtime-function-ms-d-tilde-ime-on",
+  "description": "IME-on M then Space plus D emits tilde through JIS Shift+Caret key events instead of Unicode text.",
+  "initialState": { "mode": "S", "ime": "on", "layers": ["M", "S"] },
+  "input": [
+    { "atMs": 10, "kind": "keyDown", "key": "D" },
+    { "atMs": 11, "kind": "keyUp", "key": "D" }
+  ],
+  "expected": {
+    "events": [
+      { "kind": "keyDown", "key": "VK_A0" },
+      { "kind": "keyDown", "key": "VK_DE" },
+      { "kind": "keyUp", "key": "VK_DE" },
+      { "kind": "keyUp", "key": "VK_A0" }
+    ]
+  },
+  "tags": ["legacy", "runtime-long-tail", "function-layer", "ime", "jis109", "hosted-windows"],
+  "inventoryIds": ["legacy-send-64cd1136f9"],
+  "requiredEnvironment": ["hosted-windows"],
+  "oracleTargets": ["ikeyd-runtime"]
+}

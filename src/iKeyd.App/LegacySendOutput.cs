@@ -11,6 +11,7 @@ internal sealed class LegacySendOutput : IMacroOutput
     private const ushort LegacyLeftShift = 0xA0;
     private const ushort LegacyLeftControl = 0xA2;
     private const ushort LegacyLeftAlt = 0xA4;
+    private static readonly ushort[] NoModifiers = [];
 
     private readonly IKeyboardOutput _keyboard;
     private readonly IDesktopBackend? _desktop;
@@ -36,7 +37,8 @@ internal sealed class LegacySendOutput : IMacroOutput
 
         if (!ContainsLegacySyntax(legacySendText))
         {
-            _keyboard.SendText(legacySendText);
+            if (!TrySendPlainJisSymbols(legacySendText))
+                _keyboard.SendText(legacySendText);
             return;
         }
 
@@ -325,6 +327,27 @@ internal sealed class LegacySendOutput : IMacroOutput
         }
 
         throw UnsupportedSyntax($"{{{token.ToString()}}}", "unsupported Click action");
+    }
+
+    private bool TrySendPlainJisSymbols(string text)
+    {
+        foreach (var character in text)
+        {
+            if (char.IsLetterOrDigit(character) ||
+                char.IsWhiteSpace(character) ||
+                !TryResolveJisCharacter(character, out _, out _))
+            {
+                return false;
+            }
+        }
+
+        foreach (var character in text)
+        {
+            if (!TrySendModifiedCharacter(character, NoModifiers))
+                throw new InvalidOperationException($"JIS symbol '{character}' passed preflight but could not be emitted.");
+        }
+
+        return true;
     }
 
     private bool TrySendModifiedCharacter(char character, IReadOnlyList<ushort> explicitModifiers)
