@@ -406,13 +406,20 @@ internal sealed class IKeydRuntimeHandler : IKeyboardEventHandler, IInputStateRe
         if (_spaceImeRolloverCommitted)
             return true;
 
-        if (_layers.Consumed || !_inputMethod.IsKanaInputActive() || !IsAlphabetKey(key.Code))
+        if (_layers.Consumed ||
+            !_inputMethod.IsKanaInputActive() ||
+            _inputMethod is not IInputCompositionState compositionState ||
+            !compositionState.IsCompositionActive() ||
+            !IsAlphabetKey(key.Code))
             return false;
 
         // Match the legacy chord boundary: only an alphabet key arriving within
         // the configured inclusive chord window is a fast Space -> letter rollover.
         // A longer hold is an intentional Space-as-Shift chord and must not emit a
-        // literal Space before the letter.
+        // literal Space before the letter. Even inside the fast window, emit Space
+        // only while an actual unconfirmed IME composition exists; IME-open state
+        // alone is insufficient because terminal-style apps surface the injected
+        // Space as a literal 0x20 byte.
         if (_spacePressedAtMs is not { } spacePressedAtMs ||
             timestampMs < spacePressedAtMs ||
             timestampMs - spacePressedAtMs > _configuration.ChordWindowMs)
