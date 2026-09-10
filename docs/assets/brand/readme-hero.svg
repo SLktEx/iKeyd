@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900" role="img">
+<title>iKeyd: real DSL and the number layer it defines</title>
+<rect width="1600" height="900" fill="#0A0A0A"/>
+<text x="88" y="81.38" fill="#999999" font-family="DejaVu Sans Mono, monospace" font-size="21" font-weight="400" text-anchor="start" xml:space="preserve">KEYBOARD BEHAVIOR IN CODE</text>
+<text x="88" y="185.16" fill="#F2F2F2" font-family="Nimbus Sans, Arial, sans-serif" font-size="72" font-weight="700" text-anchor="start" xml:space="preserve">Your keyboard,</text>
+<text x="88" y="270.16" fill="#F2F2F2" font-family="Nimbus Sans, Arial, sans-serif" font-size="72" font-weight="700" text-anchor="start" xml:space="preserve">defined in code.</text>
+<text x="88" y="366.62" fill="#F2F2F2" font-family="DejaVu Sans Mono, monospace" font-size="29" font-weight="400" text-anchor="start" xml:space="preserve"></text>
+<text x="88.0" y="366.62" fill="#2ED3D0" font-family="DejaVu Sans Mono, monospace" font-size="29" font-weight="400" text-anchor="start" xml:space="preserve">keymap</text>
+<text x="192.765625" y="366.62" fill="#F2F2F2" font-family="DejaVu Sans Mono, monospace" font-size="29" font-weight="400" text-anchor="start" xml:space="preserve"> S {</text>
+<text x="88" y="405.62" fill="#F2F2F2" font-family="DejaVu Sans Mono, monospace" font-size="29" font-weight="400" text-anchor="start" xml:space="preserve">    A = </text>
+<text x="227.6875" y="405.62" fill="#2ED3D0" font-family="DejaVu Sans Mono, monospace" font-size="29" font-weight="400" text-anchor="start" xml:space="preserve">LT</text>
+<text x="262.609375" y="405.62" fill="#F2F2F2" font-family="DejaVu Sans Mono, monospace" font-size="29" font-weight="400" text-anchor="start" xml:space="preserve">(NUM, Z)</text>
+<text x="88" y="444.62" fill="#F2F2F2" font-family="DejaVu Sans Mono, monospace" font-size="29" font-weight="400" text-anchor="start" xml:space="preserve">}</text>
+<text x="88" y="483.62" fill="#F2F2F2" font-family="DejaVu Sans Mono, monospace" font-size="29" font-weight="400" text-anchor="start" xml:space="preserve"></text>
+<text x="88" y="522.62" fill="#F2F2F2" font-family="DejaVu Sans Mono, monospace" font-size="29" font-weight="400" text-anchor="start" xml:space="preserve"></text>
+<text x="88.0" y="522.62" fill="#2ED3D0" font-family="DejaVu Sans Mono, monospace" font-size="29" font-weight="400" text-anchor="start" xml:space="preserve">keymap</text>
+<text x="192.765625" y="522.62" fill="#F2F2F2" font-family="DejaVu Sans Mono, monospace" font-size="29" font-weight="400" text-anchor="start" xml:space="preserve"> NUM {</text>
+<text x="88" y="561.62" fill="#F2F2F2" font-family="DejaVu Sans Mono, monospace" font-size="29" font-weight="400" text-anchor="start" xml:space="preserve">    Q = </text>
+<text x="227.6875" y="561.62" fill="#F2F2F2" font-family="DejaVu Sans Mono, monospace" font-size="29" font-weight="400" text-anchor="start" xml:space="preserve">&quot;1&quot;</text>
+<text x="280.0703125" y="561.62" fill="#F2F2F2" font-family="DejaVu Sans Mono, monospace" font-size="29" font-weight="400" text-anchor="start" xml:space="preserve"></text>
+<text x="88" y="600.62" fill="#F2F2F2" font-family="DejaVu Sans Mono, monospace" font-size="29" font-weight="400" text-anchor="start" xml:space="preserve">    W = </text>
+<text x="227.6875" y="600.62" fill="#F2F2F2" font-family="DejaVu Sans Mono, monospace" font-size="29" font-weight="400" text-anchor="start" xml:space="preserve">&quot;2&quot;</text>
+<text x="280.0703125" y="600.62" fill="#F2F2F2" font-family="DejaVu Sans Mono, monospace" font-size="29" font-weight="400" text-anchor="start" xml:space="preserve"></text>
+<text x="88" y="639.62" fill="#F2F2F2" font-family="DejaVu Sans Mono, monospace" font-size="29" font-weight="400" text-anchor="start" xml:space="preserve">    E = </text>
+<text x="227.6875" y="639.62" fill="#F2F2F2" font-family="DejaVu Sans Mono, monospace" font-size="29" font-weight="400" text-anchor="start" xml:space="preserve">&quot;3&quot;</text>
+<text x="280.0703125" y="639.62" fill="#F2F2F2" font-family="DejaVu Sans Mono, monospace" font-size="29" font-weight="400" text-anchor="start" xml:space="preserve"></text>
+<text x="88" y="678.62" fill="#F2F2F2" font-family="DejaVu Sans Mono, monospace" font-size="29" font-weight="400" text-anchor="start" xml:space="preserve">}</text>
+<text x="895" y="176.94" fill="#2ED3D0" font-family="DejaVu Sans Mono, monospace" font-size="23" font-weight="400" text-anchor="start" xml:space="preserve">HOLD A</text>
+<text x="895" y="231.54" fill="#F2F2F2" font-family="Nimbus Sans, Arial, sans-serif" font-size="43" font-weight="400" text-anchor="start" xml:space="preserve">Number layer</text>
+<rect x="877.0" y="300" width="162" height="162" rx="7" fill="#151515" stroke="#363636"/>
+<text x="891.0" y="327.1632" fill="#F2F2F2" font-family="DejaVu Sans Mono, monospace" font-size="19.439999999999998" font-weight="400" text-anchor="start" xml:space="preserve">Q</text>
+<text x="958.0" y="408.864" fill="#F2F2F2" font-family="DejaVu Sans Mono, monospace" font-size="64.8" font-weight="400" text-anchor="middle" xml:space="preserve">1</text>
+<rect x="1054.0" y="300" width="162" height="162" rx="7" fill="#151515" stroke="#363636"/>
+<text x="1068.0" y="327.1632" fill="#F2F2F2" font-family="DejaVu Sans Mono, monospace" font-size="19.439999999999998" font-weight="400" text-anchor="start" xml:space="preserve">W</text>
+<text x="1135.0" y="408.864" fill="#F2F2F2" font-family="DejaVu Sans Mono, monospace" font-size="64.8" font-weight="400" text-anchor="middle" xml:space="preserve">2</text>
+<rect x="1231.0" y="300" width="162" height="162" rx="7" fill="#151515" stroke="#363636"/>
+<text x="1245.0" y="327.1632" fill="#F2F2F2" font-family="DejaVu Sans Mono, monospace" font-size="19.439999999999998" font-weight="400" text-anchor="start" xml:space="preserve">E</text>
+<text x="1312.0" y="408.864" fill="#F2F2F2" font-family="DejaVu Sans Mono, monospace" font-size="64.8" font-weight="400" text-anchor="middle" xml:space="preserve">3</text>
+<rect x="915.88" y="477" width="162" height="162" rx="7" fill="#2ED3D0" stroke="#2ED3D0"/>
+<text x="996.88" y="577.764" fill="#0A0A0A" font-family="DejaVu Sans Mono, monospace" font-size="64.8" font-weight="400" text-anchor="middle" xml:space="preserve">A</text>
+<path d="M930.88 627 L1062.88 627" fill="none" stroke="#0A0A0A" stroke-width="2"/>
+<rect x="1092.88" y="477" width="162" height="162" rx="7" fill="#151515" stroke="#363636"/>
+<text x="1173.88" y="577.764" fill="#999999" font-family="DejaVu Sans Mono, monospace" font-size="64.8" font-weight="400" text-anchor="middle" xml:space="preserve">S</text>
+<rect x="1269.88" y="477" width="162" height="162" rx="7" fill="#151515" stroke="#363636"/>
+<text x="1350.88" y="577.764" fill="#999999" font-family="DejaVu Sans Mono, monospace" font-size="64.8" font-weight="400" text-anchor="middle" xml:space="preserve">D</text>
+<text x="895" y="724.5" fill="#F2F2F2" font-family="Nimbus Sans, Arial, sans-serif" font-size="25" font-weight="400" text-anchor="start" xml:space="preserve">Tap A: Z key</text>
+<text x="895" y="766.5" fill="#F2F2F2" font-family="Nimbus Sans, Arial, sans-serif" font-size="25" font-weight="400" text-anchor="start" xml:space="preserve">Hold A: NUM layer</text>
+<path d="M88 822 L1512 822" fill="none" stroke="#363636" stroke-width="1"/>
+<text x="88" y="871.5" fill="#F2F2F2" font-family="Nimbus Sans, Arial, sans-serif" font-size="25" font-weight="700" text-anchor="start" xml:space="preserve">iKeyd</text>
+<text x="1512" y="867.82" fill="#999999" font-family="DejaVu Sans Mono, monospace" font-size="19" font-weight="400" text-anchor="end" xml:space="preserve">Example: docs/examples/readme-demo.ikeyd</text>
+</svg>
