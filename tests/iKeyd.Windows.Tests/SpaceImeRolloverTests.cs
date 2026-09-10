@@ -34,6 +34,51 @@ public sealed class SpaceImeRolloverTests
         Assert.Empty(fixture.Output.Text);
     }
 
+    [Theory]
+    [InlineData(39)]
+    [InlineData(40)]
+    public void Ime_active_fast_Space_alphabet_rollover_is_inclusive_at_chord_boundary(long pressGapMs)
+    {
+        using var fixture = CreateRuntime(kanaInputActive: true);
+
+        Assert.Equal(KeyboardDisposition.Suppress, Dispatch(fixture, WindowsKeyMap.Space, KeyEventKind.Down, 0));
+        Assert.Equal(KeyboardDisposition.PassThrough, Dispatch(fixture, 'A', KeyEventKind.Down, pressGapMs));
+        Assert.Equal(KeyboardDisposition.PassThrough, Dispatch(fixture, 'A', KeyEventKind.Up, pressGapMs + 1));
+        Assert.Equal(KeyboardDisposition.Suppress, Dispatch(fixture, WindowsKeyMap.Space, KeyEventKind.Up, pressGapMs + 2));
+
+        Assert.Equal(
+        [
+            Event(WindowsKeyMap.Space, KeyEventKind.Down),
+            Event(WindowsKeyMap.Space, KeyEventKind.Up)
+        ],
+        fixture.Output.Events);
+        Assert.Empty(fixture.Output.Text);
+    }
+
+    [Theory]
+    [InlineData(41)]
+    [InlineData(100)]
+    [InlineData(500)]
+    public void Ime_active_long_held_Space_alphabet_preserves_legacy_thumb_shift(long pressGapMs)
+    {
+        using var fixture = CreateRuntime(kanaInputActive: true);
+
+        Assert.Equal(KeyboardDisposition.Suppress, Dispatch(fixture, WindowsKeyMap.Space, KeyEventKind.Down, 0));
+        Assert.Equal(KeyboardDisposition.Suppress, Dispatch(fixture, 'A', KeyEventKind.Down, pressGapMs));
+        Assert.Equal(KeyboardDisposition.Suppress, Dispatch(fixture, 'A', KeyEventKind.Up, pressGapMs + 1));
+        Assert.Equal(KeyboardDisposition.Suppress, Dispatch(fixture, WindowsKeyMap.Space, KeyEventKind.Up, pressGapMs + 2));
+
+        Assert.Equal(
+        [
+            Event(0xA0, KeyEventKind.Down),
+            Event('A', KeyEventKind.Down),
+            Event('A', KeyEventKind.Up),
+            Event(0xA0, KeyEventKind.Up)
+        ],
+        fixture.Output.Events);
+        Assert.Empty(fixture.Output.Text);
+    }
+
     [Fact]
     public void Ime_inactive_Space_alphabet_preserves_legacy_thumb_shift()
     {

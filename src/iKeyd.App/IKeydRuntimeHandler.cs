@@ -36,6 +36,7 @@ internal sealed class IKeydRuntimeHandler : IKeyboardEventHandler, IInputStateRe
     private LayerRuntimeState _layers = LayerRuntimeState.Empty;
     private KeymapMode? _timerMode;
     private long _timerDueAt;
+    private long? _spacePressedAtMs;
     private bool _spaceImeRolloverCommitted;
     private bool _disposed;
 
@@ -168,7 +169,7 @@ internal sealed class IKeydRuntimeHandler : IKeyboardEventHandler, IInputStateRe
 
         if (_layers.Layers.Count != 0)
         {
-            if (keyId is not null && TryHandleImeSpaceAlphabetRollover(keyId.Value))
+            if (keyId is not null && TryHandleImeSpaceAlphabetRollover(keyId.Value, keyboardEvent.TimestampMs))
             {
                 _layers = _layers.MarkConsumed();
                 return KeyboardDisposition.PassThrough;
@@ -298,6 +299,7 @@ internal sealed class IKeydRuntimeHandler : IKeyboardEventHandler, IInputStateRe
         _layers = LayerRuntimeState.Empty;
         _heldLayerPresses.Clear();
         _suppressedKeys.Clear();
+        _spacePressedAtMs = null;
         _spaceImeRolloverCommitted = false;
         _mouseMotion.Reset();
     }
@@ -320,6 +322,8 @@ internal sealed class IKeydRuntimeHandler : IKeyboardEventHandler, IInputStateRe
 
             var pressEvent = ResolveLayerPress(physicalCode);
             _heldLayerPresses.Add(physicalCode, pressEvent);
+            if (pressEvent == LayerEvent.SpaceDown)
+                _spacePressedAtMs = keyboardEvent.TimestampMs;
             ApplyLayerEvent(pressEvent);
             return true;
         }
@@ -329,6 +333,9 @@ internal sealed class IKeydRuntimeHandler : IKeyboardEventHandler, IInputStateRe
         // incorrectly becomes HUp instead of AltHUp and can leave A/H stuck.
         if (!_heldLayerPresses.Remove(physicalCode, out var originalPress))
             return true;
+
+        if (originalPress == LayerEvent.SpaceDown)
+            _spacePressedAtMs = null;
 
         var releaseEvent = ResolveLayerRelease(originalPress);
         if (releaseEvent is { } value)
@@ -387,7 +394,7 @@ internal sealed class IKeydRuntimeHandler : IKeyboardEventHandler, IInputStateRe
     private static bool IsLayerTrigger(KeyCode physicalCode)
         => physicalCode is KeyCode.NonConvert or KeyCode.Convert or KeyCode.Space or KeyCode.Kana;
 
-    private bool TryHandleImeSpaceAlphabetRollover(KeyId key)
+    private bool TryHandleImeSpaceAlphabetRollover(KeyId key, long timestampMs)
     {
         if (!_layers.Layers.IsExact(LayerKey.S))
             return false;
@@ -402,11 +409,15 @@ internal sealed class IKeydRuntimeHandler : IKeyboardEventHandler, IInputStateRe
         if (_layers.Consumed || !_inputMethod.IsKanaInputActive() || !IsAlphabetKey(key.Code))
             return false;
 
-        // During Japanese composition, a fast Space -> letter rollover is much
-        // more likely to mean "space, then the next letter" than an intentional
-        // Shift chord. Emit the deferred Space exactly once and let the physical
-        // letter continue through the normal Windows/IME path. IME-off behavior
-        // remains the legacy Space-as-Shift contract.
+        // Match the legacy chord boundary: only an alphabet key arriving within
+        // the configured inclusive chord window is a fast Space -> letter rollover.
+        // A longer hold is an intentional Space-as-Shift chord and must not emit a
+        // literal Space before the letter.
+        if (_spacePressedAtMs is not { } spacePressedAtMs ||
+            timestampMs < spacePressedAtMs ||
+            timestampMs - spacePressedAtMs > _configuration.ChordWindowMs)
+            return false;
+
         _send.SendKey(WindowsKeyMap.Space);
         _spaceImeRolloverCommitted = true;
         return true;
