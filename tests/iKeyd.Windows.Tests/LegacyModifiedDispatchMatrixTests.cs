@@ -106,12 +106,6 @@ public sealed class LegacyModifiedDispatchMatrixTests
         foreach (var layer in state)
             ApplyLayer(runtime, keyboardState, layer, ref timestamp);
 
-        // Layer setup is precondition construction, not part of the dispatch
-        // observation. This matters for A because the physical Alt+Kana setup
-        // intentionally reproduces AutoHotkey's Ctrl menu-mask tap.
-        output.Clear();
-        desktop.MediaCommands.Clear();
-
         Assert.True(TryResolvePhysicalKey(keyName, out var key), $"No physical key mapping for '{keyName}'.");
         Dispatch(runtime, keyboardState, key, KeyEventKind.Down, timestamp += 10);
         Dispatch(runtime, keyboardState, key, KeyEventKind.Up, timestamp += 10);
@@ -203,13 +197,6 @@ public sealed class LegacyModifiedDispatchMatrixTests
 
         public void SendText(string text) => _text.Append(text);
         public bool IsToggleOn(ushort virtualKey) => false;
-
-        public void Clear()
-        {
-            _text.Clear();
-            _events.Clear();
-        }
-
         public ObservedOutput Snapshot() => new(_text.ToString(), _events.ToArray());
     }
 

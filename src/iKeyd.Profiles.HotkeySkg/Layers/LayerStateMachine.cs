@@ -193,11 +193,7 @@ public static class LayerStateMachine
     }
 
     private static LayerTransition PressAltH(LayerRuntimeState state)
-        // AutoHotkey hook hotkeys which include Alt synthesize Ctrl by default to
-        // mask the Alt-up menu activation. Preserve that physical legacy output.
-        => Result(
-            state with { Layers = state.Layers.Press(LayerKey.A).Press(LayerKey.H) },
-            LayerAction.Ctrl);
+        => Result(state with { Layers = state.Layers.Press(LayerKey.A).Press(LayerKey.H) });
 
     private static LayerTransition ReleaseAltH(LayerRuntimeState state)
     {
@@ -269,18 +265,11 @@ public static class LayerStateMachine
     }
 
     private static LayerTransition PressAltSpace(LayerRuntimeState state)
-        // The physical Alt down used to select this legacy handler is not a
-        // modified-key dispatch and must not count as using the layer gesture.
-        // Reset the consumed flag here so a subsequent AltSpaceUp from AMS can
-        // still emit the pinned Alt+Space action. The Ctrl action reproduces
-        // AutoHotkey's Alt menu-mask key for the physical Alt+Space hotkey.
-        => Result(
-            state with
-            {
-                Layers = state.Layers.Press(LayerKey.A).Press(LayerKey.S),
-                Consumed = false
-            },
-            LayerAction.Ctrl);
+        => Result(state with
+        {
+            Layers = state.Layers.Press(LayerKey.A).Press(LayerKey.S),
+            Consumed = false
+        });
 
     private static LayerTransition ReleaseAltSpace(LayerRuntimeState state)
     {
@@ -316,8 +305,7 @@ public static class LayerStateMachine
     }
 
     private static LayerTransition PressAltKana(LayerRuntimeState state)
-        // Match AutoHotkey's default Alt menu-mask Ctrl tap for Alt+Kana.
-        => Result(state with { Layers = state.Layers.Press(LayerKey.A) }, LayerAction.Ctrl);
+        => Result(state with { Layers = state.Layers.Press(LayerKey.A) });
 
     private static LayerTransition Result(LayerRuntimeState state, LayerAction? action = null)
         => new(state, action is { } value ? new LayerActionList(value) : default);
