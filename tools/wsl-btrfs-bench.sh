@@ -8,12 +8,14 @@ export LC_ALL=C
 MODE=full
 ACTION=run
 INCLUDE_VHDX=0
+COMPARE_MOUNT_OPTIONS=0
 for arg in "$@"; do
   case "$arg" in
     --smoke) MODE=smoke ;;
     --cleanup) ACTION=cleanup ;;
     --vhdx) INCLUDE_VHDX=1 ;;
-    *) echo "Usage: bash $0 [--smoke] [--vhdx] | --cleanup" >&2; exit 2 ;;
+    --compare-mount-options) COMPARE_MOUNT_OPTIONS=1 ;;
+    *) echo "Usage: bash $0 [--smoke] [--vhdx] [--compare-mount-options] | --cleanup" >&2; exit 2 ;;
   esac
 done
 if [[ "$MODE" == smoke ]]; then
@@ -32,8 +34,15 @@ MNT_ROOT="/mnt/wsl-btrfs-bench-${UID}"
 SRC="$WORK/git-source"
 SCRIPT="$(readlink -f -- "$0")"
 VARIANTS=(ext4 sparse-ext4 fixed-ext4 sparse-none sparse-lzo sparse-zstd fixed-none fixed-lzo fixed-zstd)
-ALL_VARIANTS=("${VARIANTS[@]}" vhdx-ext4 vhdx-none vhdx-lzo vhdx-zstd)
-if [[ "$INCLUDE_VHDX" == 1 ]]; then VARIANTS=("${ALL_VARIANTS[@]}"); fi
+VHDX_VARIANTS=(vhdx-ext4 vhdx-none vhdx-lzo vhdx-zstd)
+OPTION_VARIANTS=(sparse-ssd-async-none sparse-ssd-async-lzo sparse-ssd-async-zstd fixed-ssd-async-none fixed-ssd-async-lzo fixed-ssd-async-zstd)
+VHDX_OPTION_VARIANTS=(vhdx-ssd-async-none vhdx-ssd-async-lzo vhdx-ssd-async-zstd)
+ALL_VARIANTS=("${VARIANTS[@]}" "${VHDX_VARIANTS[@]}" "${OPTION_VARIANTS[@]}" "${VHDX_OPTION_VARIANTS[@]}")
+if [[ "$INCLUDE_VHDX" == 1 ]]; then VARIANTS+=("${VHDX_VARIANTS[@]}"); fi
+if [[ "$COMPARE_MOUNT_OPTIONS" == 1 ]]; then
+  VARIANTS+=("${OPTION_VARIANTS[@]}")
+  if [[ "$INCLUDE_VHDX" == 1 ]]; then VARIANTS+=("${VHDX_OPTION_VARIANTS[@]}"); fi
+fi
 COUNT=${#VARIANTS[@]}
 RESULTS="$(mktemp -d "${HOME}/wsl-btrfs-bench-results-$(date +%Y%m%d-%H%M%S)-XXXXXX")"
 LOG="$RESULTS/run.log"
@@ -158,6 +167,9 @@ cleanup_resources() {
     fi
     no_mounts_under "$mnt" || return 1
     [[ ! -d "$mnt" ]] || root rmdir -- "$mnt" || return 1
+    if [[ -f "$img" ]]; then
+      printf 'allocated_after_detach_%s\t%s\n' "$(date +%s%N)" "$(( $(stat -c %b "$img")*512 ))" >> "$RESULTS/storage_$v.tsv" || return 1
+    fi
     rm -f -- "$img" "$WORK/$v.state" "$WORK/$v.uuid" || return 1
   done
   [[ "$1" == all ]] || return 0
@@ -176,7 +188,7 @@ print_preserved() {
   for v in "${ALL_VARIANTS[@]:1}"; do
     [[ ! -f "$WORK/$v.state" ]] || printf 'Retained %s: %s\n' "$v" "$(cat "$WORK/$v.state")"
   done
-  for v in vhdx-ext4 vhdx-none vhdx-lzo vhdx-zstd; do
+  for v in "${VHDX_VARIANTS[@]}" "${VHDX_OPTION_VARIANTS[@]}"; do
     [[ ! -f "$WORK/$v.vhdx-dir" ]] || printf 'Retained %s VHDX directory: %s\n' "$v" "$(cat "$WORK/$v.vhdx-dir")"
   done
   say "Ownership/recovery records: $WORK"
@@ -201,6 +213,45 @@ on_exit() {
 }
 trap on_exit EXIT
 variant_fs() { if [[ "$1" == *-ext4 ]]; then echo ext4; else echo btrfs; fi; }
+option_profile() { [[ "$1" == *-ssd-async-* ]]; }
+mount_options() {
+  local v=$1 opts=noatime,nodiscard
+  if option_profile "$v"; then opts=noatime,ssd,space_cache=v2,discard=async; fi
+  case "$v" in *-lzo) opts+=,compress=lzo ;; *-zstd) opts+=,compress=zstd:3 ;; esac
+  printf '%s\n' "$opts"
+}
+record_device_options() {
+  local v=$1 dev=$2 round=$3 queue="/sys/class/block/${2##*/}/queue" available
+  printf '%s\t%s\t%s\t%s\n' "$v" "$round" "$dev" "$(mount_options "$v")" >> "$RESULTS/requested-options.tsv"
+  {
+    printf 'device=%s\nrequested=%s\n' "$dev" "$(mount_options "$v")"
+    for available in rotational discard_granularity discard_max_bytes discard_zeroes_data; do
+      printf '%s=' "$available"
+      if [[ -r "$queue/$available" ]]; then cat "$queue/$available"; else echo unavailable; fi
+    done
+  } > "$RESULTS/device_${v}_round${round}.txt"
+  if option_profile "$v"; then
+    [[ -r "$queue/discard_max_bytes" ]] || die "Cannot inspect discard capability: $dev"
+    available=$(cat "$queue/discard_max_bytes")
+    [[ "$available" =~ ^[0-9]+$ && "$available" -gt 0 ]] || die "Requested async discard but device has no discard capability: $dev"
+  fi
+}
+record_discard_stats() {
+  local v=$1 phase=$2 uuid path attr
+  [[ "$(variant_fs "$v")" == btrfs ]] || return 0
+  uuid=$(cat "$WORK/$v.uuid")
+  path="/sys/fs/btrfs/$uuid/discard"
+  {
+    printf 'snapshot=%s\n' "$(date -Is)"
+    if [[ -d "$path" ]]; then
+      for attr in "$path"/*; do
+        [[ -f "$attr" && -r "$attr" ]] || continue
+        printf '%s=' "${attr##*/}"
+        cat "$attr"
+      done
+    else echo 'discard_sysfs=unavailable'; fi
+  } > "$RESULTS/discard_${v}_${phase}.txt"
+}
 # shellcheck source=tools/wsl-btrfs-bench-vhdx.sh
 source "$(dirname "$SCRIPT")/wsl-btrfs-bench-vhdx.sh"
 
@@ -269,9 +320,9 @@ capture_env() {
     findmnt -rn -T /var/tmp -o SOURCE,FSTYPE,OPTIONS
     fio --version; btrfs --version; git --version
     printf '%s\n' "mode=$MODE" "image_gib=$IMAGE_GIB" "fio_size=$FIO_SIZE" "runtime=$RUNTIME" "small_files=$SMALL_FILES" "small_runs=$SMALL_RUNS" "git_files=$GIT_FILES" "git_runs=$GIT_RUNS" "compress_pct=$COMPRESS_PCT" "drop_caches=$DROP_CACHES" "keep_mounts=$KEEP_MOUNTS" "host_free_gib=${HOST_FREE_GIB:-unchecked}" "wsl_distro=${WSL_DISTRO_NAME:-unknown}"
-    echo 'fio_seed=20260915; mkfs discard disabled; mount nodiscard; Git source on ext4'
+    echo 'fio_seed=20260915; mkfs discard disabled; mount options per requested-options.tsv and mount-checks.tsv; Git source on ext4'
     mkfs.ext4 -V 2>&1
-    printf '%s\n' "variants=${VARIANTS[*]}" "mount_namespace=$(readlink /proc/self/ns/mnt)"
+    printf '%s\n' "variants=${VARIANTS[*]}" "compare_mount_options=$COMPARE_MOUNT_OPTIONS" "mount_namespace=$(readlink /proc/self/ns/mnt)"
     if [[ "$INCLUDE_VHDX" == 1 ]]; then qemu-img --version; printf 'vhdx_root=%s\n' "$VHDX_ROOT"; fi
     if command -v wsl.exe >/dev/null 2>&1; then
       echo '--- optional wsl.exe --version (10s limit) ---'
@@ -332,9 +383,14 @@ setup_variant() {
   [[ -n "$uuid" ]] || die "No UUID on new filesystem $loop"
   printf '%s\n' "$uuid" > "$WORK/$v.uuid"
   sync -f "$WORK/$v.uuid"
-  # mkfs discard is disabled to preserve preallocation; nodiscard prevents subsequent hole punching.
-  opts=noatime,nodiscard
-  case "$v" in *-lzo) opts+=,compress=lzo ;; *-zstd) opts+=,compress=zstd:3 ;; esac
+  # Verify initial preallocation before mount, even for the discard comparison.
+  if [[ "$v" == fixed-* ]]; then
+    local allocated_after_mkfs=$(( $(stat -c %b "$img")*512 ))
+    printf 'round_%s_allocated_after_mkfs\t%s\n' "$round" "$allocated_after_mkfs" >> "$RESULTS/storage_$v.tsv"
+    (( allocated_after_mkfs >= $(stat -c %s "$img") )) || die "Initial preallocation lost during mkfs: $v"
+  fi
+  opts=$(mount_options "$v")
+  record_device_options "$v" "$loop" "$round"
   root mkdir "$mnt"
   root mount -t "$(variant_fs "$v")" -o "$opts" "$loop" "$mnt"
   printf '%s\t%s\t%s\t%s\t%s\n' "$v" "$mnt" "$img" "$loop" "$round" >> "$WORK/mounts.tsv"
@@ -360,7 +416,14 @@ assert_mount() {
   if ! read -r source fs uuid opts < <(findmnt -rn -M "$dir" -o SOURCE,FSTYPE,UUID,OPTIONS); then die "Expected benchmark mount absent: $dir"; fi
   saved_uuid=$(cat "$WORK/$v.uuid")
   [[ "$source" == "$loop" && "$fs" == "$(variant_fs "$v")" && "$uuid" == "$saved_uuid" ]] || die "Expected benchmark mount absent or wrong: $dir"
-  [[ ! "$opts" =~ (^|,)discard(=|,|$) ]] || die "Discard unexpectedly enabled: $dir"
+  if option_profile "$v"; then
+    local expected_option
+    for expected_option in noatime ssd space_cache=v2 discard=async; do
+      [[ ",$opts," == *",$expected_option,"* ]] || die "Requested option $expected_option not active: $dir ($opts)"
+    done
+  else
+    [[ ! "$opts" =~ (^|,)discard(=|,|$) ]] || die "Discard unexpectedly enabled: $dir"
+  fi
   case "$v" in
     *-none) [[ "$opts" != *compress* ]] || die "Unexpected compression: $opts" ;;
     *-lzo) [[ ",$opts," == *,compress=lzo,* ]] || die "LZO not active: $opts" ;;
@@ -372,11 +435,19 @@ record_storage() {
   local v=$1 phase=$2 allocated logical
   [[ "$v" != ext4 ]] || return 0
   sync
+  record_discard_stats "$v" "$phase"
   if [[ "$v" == vhdx-* ]]; then record_vhdx_storage "$v" "$phase"; return 0; fi
   allocated=$(( $(stat -c %b "$WORK/$v.img")*512 ))
   logical=$(stat -c %s "$WORK/$v.img")
   printf 'allocated_%s\t%s\n' "$phase" "$allocated" >> "$RESULTS/storage_$v.tsv"
-  if [[ "$v" == fixed-* ]]; then (( allocated >= logical )) || die "Preallocation lost: $v allocated=$allocated logical=$logical"; fi
+  if [[ "$v" == fixed-* ]]; then
+    if option_profile "$v"; then
+      printf 'preallocation_remaining_%s\t%s\n' "$phase" "$allocated" >> "$RESULTS/storage_$v.tsv"
+      say "Initially preallocated async-discard case: $v phase=$phase allocated=$allocated logical=$logical (discard may punch holes)"
+    else
+      (( allocated >= logical )) || die "Preallocation lost: $v allocated=$allocated logical=$logical"
+    fi
+  fi
   if [[ "$(variant_fs "$v")" == btrfs ]]; then
     root btrfs filesystem usage -b "$MNT_ROOT/$v" > "$RESULTS/usage_${v}_${phase}.txt"
   else

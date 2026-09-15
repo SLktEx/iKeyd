@@ -119,8 +119,8 @@ setup_vhdx() {
   check_vhdx_device "$v" || die "Cannot uniquely identify attached VHDX: $v"
   no_mounts_under "$MNT_ROOT/$v" || die 'Unexpected mount before VHDX setup'
   if findmnt -rn -S "$dev" >/dev/null; then die "New VHDX already mounted elsewhere: $dev"; fi
-  opts=noatime,nodiscard
-  case "$v" in *-lzo) opts+=,compress=lzo ;; *-zstd) opts+=,compress=zstd:3 ;; esac
+  opts=$(mount_options "$v")
+  record_device_options "$v" "$dev" "$round"
   root mkdir "$MNT_ROOT/$v"
   root mount -t "$(variant_fs "$v")" -o "$opts" "$dev" "$MNT_ROOT/$v"
   printf '%s\t%s\t%s\t%s\t%s\n' "$v" "$MNT_ROOT/$v" "$win" "$dev" "$round" >> "$WORK/mounts.tsv"

@@ -97,12 +97,13 @@ Ext4 mkfs uses `-m 0` and `-E nodiscard,lazy_itable_init=0,lazy_journal_init=0`:
 no reserved blocks, no hole punching, and initialization completed before timing.
 VHDX ext4 uses the same ext4 formatting options on its owned seed and the same
 dynamic VHDX capacity/block size as the three VHDX Btrfs conditions.
-Loop and VHDX ext4 use `noatime,nodiscard`, as do the Btrfs mounts; direct ext4 retains
+Without `--compare-mount-options`, loop and VHDX ext4 use `noatime,nodiscard`, as do the Btrfs mounts; direct ext4 retains
 its distribution mount options, recorded in `environment.txt`. ZSTD remains `zstd:3`. Sparse images use
 `truncate`; preallocated images use `fallocate`. Btrfs mkfs calls use `-K` to prevent
-discard from punching holes in preallocated images. All loop mounts explicitly
-request `nodiscard`. Logical size and actual allocated bytes are recorded before
-mkfs, after each round's setup and workload; losing preallocation fails the run.
+discard from punching holes in preallocated images. The original loop cases explicitly
+request `nodiscard`; the opt-in comparison below requests async discard. Logical size and actual allocated bytes are recorded before
+mkfs, after each round's setup and workload; losing preallocation fails the original fixed-case run. The added async-discard
+cases enforce initial preallocation and record later reclamation separately.
 Only newly created, exclusively owned image/loop identities can reach mkfs.
 
 Before every workload the script checks the expected ext4/Btrfs mountpoint, loop backing image or owned VHDX disk,
@@ -363,3 +364,93 @@ Full-size simultaneous retention remains untested because of host capacity;
 the twelve mounts were retained together at smoke size. Signal handling was
 tested on the earlier seven-condition path; no separate VHDX Ctrl+C test was run.
 No automated regression/test files were added.
+
+## Compare the requested Btrfs mount options
+
+Add `--compare-mount-options` to retain all existing cases and add Btrfs cases
+using `noatime,ssd,space_cache=v2,discard=async`, with the same compression levels.
+There are 15 conditions without VHDX or **22 with `--vhdx`**. The added variant
+names contain `-ssd-async-`. Ext4 controls are unchanged. Full mode still uses
+300,000 files x 3 per condition, now 19.8 million file creations for 22 conditions.
+
+```bash
+# In the same elevated private-namespace WSL shell described above:
+HOST_FREE_GIB=28 bash tools/wsl-btrfs-bench.sh --smoke --vhdx --compare-mount-options
+HOST_FREE_GIB=28 bash tools/wsl-btrfs-bench.sh --vhdx --compare-mount-options
+```
+
+Check actual Windows free space before setting that budget. Normal mode still
+keeps only one active image; full simultaneous retention needs roughly 346 GiB
+and is a separate capacity decision. Smoke keep mode retains 21 images/mounts.
+
+The existing loop attachment is created explicitly by `losetup`, so there is no
+second loop layer and no need to pass the mount helper's `loop` option again.
+Native VHDX cases remain native virtual disks. The original validation already
+showed `noatime` and `space_cache=v2`; the main requested changes are forced
+`ssd` and replacing `nodiscard` with `discard=async`. This comparison evaluates
+the option set together, not the independent causal effect of each option.
+
+The original preallocated cases continue to require full allocation throughout.
+Added `fixed-ssd-async-*` cases mean **initially preallocated**: full allocation
+is required before mounting, but async discard may then punch holes. A lower
+allocation is explicitly recorded for those cases rather than mislabeled as
+preserved preallocation. `storage_*.tsv` records allocation after mkfs, setup,
+each workload round and loop detach. Existing images and ownership checks are
+not relaxed.
+
+Every added case requires positive device discard capability and the actual
+mount flags `noatime,ssd,space_cache=v2,discard=async`; otherwise it fails instead
+of silently measuring different options. `requested-options.tsv`,
+`device_*_round*.txt` and `mount-checks.tsv` record requested/actual flags,
+rotational status and discard limits. `discard_*.txt` snapshots available kernel
+Btrfs discard counters after setup/workloads. Async discard can continue after
+a snapshot; no forced trim or artificial discard wait is inserted into the
+workloads. Capability and enabled options alone do not prove nonzero reclaimed
+bytes; inspect counters and allocation changes.
+
+See the [Btrfs mount option reference](https://btrfs.readthedocs.io/en/latest/ch-mount-options.html)
+and [trim/discard documentation](https://btrfs.readthedocs.io/en/latest/Trim.html).
+
+The option-comparison smoke completed in **351 seconds**, exit **0**, run ID
+`20260915-125001-3najXy`. It produced 66 small-file JSONs, 66 Git JSONs and
+154 fio JSONs without fio errors. All 21 retained mounts were recorded, and the
+nine added Btrfs mounts had all four requested flags. A busy
+`vhdx-ssd-async-none` mount caused cleanup to fail and preserve the mount;
+released cleanup then completed successfully. No automated test files were added.
+The measured loop device reported `rotational=1`, so explicit `ssd` changed
+the effective mount configuration. Smoke discard counters recorded reclaimable
+bytes but zero bytes issued at the workload snapshots; enabled discard must not
+be confused with completed reclamation.
+
+The 22-condition full run completed in **5,235 seconds (87 min 15 sec)**,
+exit **0**, run ID `20260915-125648-gIDz8C`. The command was
+`HOST_FREE_GIB=28 bash tools/wsl-btrfs-bench.sh --vhdx --compare-mount-options`
+in the elevated private namespace. Validation found 66 small-file JSONs (all
+300,000 files of 1,024 bytes), 66 Git JSONs, 154 successful fio JSONs and 176
+summary rows. Baseline positions were 1, 12 and 22. All nine added cases had the
+requested actual flags and issued nonzero discard extent bytes in round 1.
+Owned mounts, loops, work directories and VHDX files were absent after cleanup.
+
+Small-file median seconds (original -> requested options) were:
+
+| Image | None | LZO | ZSTD:3 |
+|---|---:|---:|---:|
+| Sparse loop | 20.72 -> 21.70 | 33.03 -> 31.23 | 51.81 -> 48.39 |
+| Initially preallocated loop | 34.90 -> 56.47 | 38.99 -> 32.14 | 34.84 -> 31.49 |
+| VHDX | 27.56 -> 22.88 | 29.53 -> 35.75 | 29.70 -> 32.53 |
+
+The option bundle did not improve every condition. Variance is substantial:
+for example, the added preallocated-none samples ranged from 25.67 to 67.42
+seconds. Raw samples, min/max and population standard deviation remain in
+`summary.tsv`; fio still has one sample per job. This is not an isolated causal
+comparison of each individual option.
+
+Original preallocated cases remained fully allocated. Added preallocated
+none/LZO/ZSTD cases fell from 16 GiB to 8.26/6.99/7.99 GiB after round 1.
+Shorter later rounds could finish before asynchronous reclamation and remain
+fully allocated at their snapshots. Discard counters count issued ranges;
+they are not equivalent to Windows host bytes freed. Full-size simultaneous
+retention and an additional VHDX-specific Ctrl+C check remain untested.
+The post-run source change only corrected the environment log's general
+`mount nodiscard` sentence to reference the per-case option records; measured
+workload, mounting and cleanup code was unchanged.
