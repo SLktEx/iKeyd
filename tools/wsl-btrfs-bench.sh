@@ -3,17 +3,19 @@ set -Eeuo pipefail
 umask 077
 export LC_ALL=C
 
-# Bash entry point for the seven-condition WSL ext4 / loop-Btrfs comparison.
+# Bash entry point for the WSL direct/loop ext4 and loop/VHDX Btrfs comparison.
 # See docs/wsl-btrfs-bench.md. --smoke changes sizes, never the processing path.
 MODE=full
 ACTION=run
-case "${1:-}" in
-  --smoke) MODE=smoke ;;
-  --cleanup) ACTION=cleanup ;;
-  '') ;;
-  *) echo "Usage: bash $0 [--smoke|--cleanup]" >&2; exit 2 ;;
-esac
-[[ $# -le 1 ]] || { echo 'Too many arguments' >&2; exit 2; }
+INCLUDE_VHDX=0
+for arg in "$@"; do
+  case "$arg" in
+    --smoke) MODE=smoke ;;
+    --cleanup) ACTION=cleanup ;;
+    --vhdx) INCLUDE_VHDX=1 ;;
+    *) echo "Usage: bash $0 [--smoke] [--vhdx] | --cleanup" >&2; exit 2 ;;
+  esac
+done
 if [[ "$MODE" == smoke ]]; then
   RUNTIME=1 IMAGE_GIB=1 FIO_SIZE=16M SMALL_FILES=1000 SMALL_RUNS=3 GIT_FILES=100 GIT_RUNS=3
 else
@@ -29,7 +31,10 @@ BASE="$WORK/ext4"
 MNT_ROOT="/mnt/wsl-btrfs-bench-${UID}"
 SRC="$WORK/git-source"
 SCRIPT="$(readlink -f -- "$0")"
-VARIANTS=(ext4 sparse-none sparse-lzo sparse-zstd fixed-none fixed-lzo fixed-zstd)
+VARIANTS=(ext4 sparse-ext4 fixed-ext4 sparse-none sparse-lzo sparse-zstd fixed-none fixed-lzo fixed-zstd)
+ALL_VARIANTS=("${VARIANTS[@]}" vhdx-ext4 vhdx-none vhdx-lzo vhdx-zstd)
+if [[ "$INCLUDE_VHDX" == 1 ]]; then VARIANTS=("${ALL_VARIANTS[@]}"); fi
+COUNT=${#VARIANTS[@]}
 RESULTS="$(mktemp -d "${HOME}/wsl-btrfs-bench-results-$(date +%Y%m%d-%H%M%S)-XXXXXX")"
 LOG="$RESULTS/run.log"
 STAGE=startup
@@ -80,6 +85,35 @@ check_loop() {
   attached="$(root losetup -j "$img" --noheadings --output NAME)" || return 1
   [[ "$attached" == "$loop" ]] || return 1
 }
+wait_loop_detached() {
+  local loop=$1 img=$2 attached attempt
+  # LOOP_CLR_FD may complete asynchronously while udev releases its references.
+  # Wait for positive absence; never delete an image merely because detach ran.
+  for ((attempt=0; attempt<50; attempt++)); do
+    attached="$(root losetup -j "$img" --noheadings --output NAME)" || return 1
+    [[ -n "$attached" ]] || return 0
+    [[ "$attached" == "$loop" ]] || return 1
+    sleep 0.1
+  done
+  say "Loop detach still pending after 5s: $loop; preserving image"
+  # Read-only diagnostics: do not unmount another process's namespace automatically.
+  root python3 - "$loop" <<'PYDIAG' || say 'Namespace diagnostics unavailable'
+import pathlib, sys
+seen = set()
+for p in pathlib.Path('/proc').glob('[0-9]*'):
+    try:
+        ns = str((p/'ns/mnt').readlink())
+        if ns in seen: continue
+        seen.add(ns)
+        for line in (p/'mountinfo').read_text().splitlines():
+            left, right = line.split(' - ', 1)
+            if right.split()[1] == sys.argv[1]:
+                print(f'Loop mount retained: pid={p.name} namespace={ns} mountpoint={left.split()[4]}', flush=True)
+    except (FileNotFoundError, PermissionError, ProcessLookupError):
+        continue
+PYDIAG
+  return 1
+}
 no_mounts_under() {
   # Include bind mounts, descendants, and exact mountpoints; do not infer absence
   # from findmnt failure. Fixed paths contain no mountinfo escaping characters.
@@ -88,9 +122,10 @@ no_mounts_under() {
 cleanup_resources() {
   validate_work || { say "Refusing cleanup: missing/invalid ownership marker at $WORK (legacy data requires manual inspection)"; return 1; }
   local v img mnt loop expected attached source fs uuid saved_uuid
-  local selected=("${VARIANTS[@]:1}")
+  local selected=("${ALL_VARIANTS[@]:1}")
   [[ "$1" == all ]] || selected=("$1")
   for v in "${selected[@]}"; do
+    if [[ "$v" == vhdx-* ]]; then cleanup_vhdx "$v" || return 1; continue; fi
     img="$WORK/$v.img"; mnt="$MNT_ROOT/$v"
     [[ ! -L "$mnt" && ! -L "$img" && ! -L "$WORK/$v.state" ]] || return 1
     if [[ -f "$WORK/$v.state" ]]; then
@@ -103,15 +138,14 @@ cleanup_resources() {
           if mountpoint -q -- "$mnt"; then
             read -r source fs uuid < <(findmnt -rn -M "$mnt" -o SOURCE,FSTYPE,UUID)
             saved_uuid="$(cat "$WORK/$v.uuid")" || return 1
-            [[ "$source" == "$loop" && "$fs" == btrfs && "$uuid" == "$saved_uuid" ]] || { say "Mount identity mismatch: $mnt"; return 1; }
+            [[ "$source" == "$loop" && "$fs" == "$(variant_fs "$v")" && "$uuid" == "$saved_uuid" ]] || { say "Mount identity mismatch: $mnt"; return 1; }
             root umount -- "$mnt" || { say "Unmount failed: preserving mount, loop, image and work directory: $mnt"; return 1; }
           fi
           no_mounts_under "$mnt" || return 1
           # A mount elsewhere (including an investigation bind mount) prevents detach.
           if findmnt -rn -S "$loop" >/dev/null; then say "Loop still mounted elsewhere: $loop"; return 1; fi
           root losetup -d "$loop" || return 1
-          attached="$(root losetup -j "$img" --noheadings --output NAME)" || return 1
-          [[ -z "$attached" ]] || { say "Loop detach still pending: $loop"; return 1; }
+          wait_loop_detached "$loop" "$img" || return 1
         fi
       else
         # Never detach a reused device based only on an old device number.
@@ -139,8 +173,11 @@ print_preserved() {
   say "Historical mount mappings (round column; only still-journaled entries are retained):"
   [[ ! -f "$WORK/mounts.tsv" ]] || cat "$WORK/mounts.tsv"
   local v
-  for v in "${VARIANTS[@]:1}"; do
+  for v in "${ALL_VARIANTS[@]:1}"; do
     [[ ! -f "$WORK/$v.state" ]] || printf 'Retained %s: %s\n' "$v" "$(cat "$WORK/$v.state")"
+  done
+  for v in vhdx-ext4 vhdx-none vhdx-lzo vhdx-zstd; do
+    [[ ! -f "$WORK/$v.vhdx-dir" ]] || printf 'Retained %s VHDX directory: %s\n' "$v" "$(cat "$WORK/$v.vhdx-dir")"
   done
   say "Ownership/recovery records: $WORK"
   printf 'Cleanup as the same user in this distro: bash %q --cleanup\n' "$SCRIPT"
@@ -163,11 +200,16 @@ on_exit() {
   exit "$rc"
 }
 trap on_exit EXIT
+variant_fs() { if [[ "$1" == *-ext4 ]]; then echo ext4; else echo btrfs; fi; }
+# shellcheck source=tools/wsl-btrfs-bench-vhdx.sh
+source "$(dirname "$SCRIPT")/wsl-btrfs-bench-vhdx.sh"
 
 install_deps() {
   local pkgs=() cmd
   command -v fio >/dev/null || pkgs+=(fio)
   command -v mkfs.btrfs >/dev/null || pkgs+=(btrfs-progs)
+  command -v mkfs.ext4 >/dev/null || pkgs+=(e2fsprogs)
+  if [[ "$INCLUDE_VHDX" == 1 ]]; then command -v qemu-img >/dev/null || pkgs+=(qemu-utils); fi
   command -v git >/dev/null || pkgs+=(git)
   command -v python3 >/dev/null || pkgs+=(python3)
   if ((${#pkgs[@]})); then
@@ -175,7 +217,7 @@ install_deps() {
     root apt-get update
     root env DEBIAN_FRONTEND=noninteractive apt-get install -y "${pkgs[@]}"
   fi
-  for cmd in fio mkfs.btrfs btrfs git python3 losetup fallocate truncate findmnt mountpoint flock timeout stat sync; do
+  for cmd in fio mkfs.ext4 mkfs.btrfs btrfs git python3 losetup fallocate truncate findmnt mountpoint flock timeout stat sync; do
     command -v "$cmd" >/dev/null || die "Missing required command: $cmd"
   done
   [[ $(fio --version) == fio-* ]] || die 'fio must be the Flexible I/O Tester'
@@ -202,8 +244,10 @@ check_environment() {
   working_bytes=$((fio_bytes + SMALL_FILES*24576 + GIT_FILES*8192 + 512*1024*1024))
   (( image_bytes > working_bytes )) || die "Image too small: need >$working_bytes bytes per image including metadata/headroom"
   # Each round starts with a fresh image. Keep only the last round on request.
-  [[ "$KEEP_MOUNTS" != 1 ]] || image_count=6
+  [[ "$KEEP_MOUNTS" != 1 ]] || image_count=$((COUNT-1))
   need=$((image_count*image_bytes + working_bytes + 1024*1024*1024))
+  # Conversion also keeps a sparse mkfs-only raw seed, without benchmark data.
+  if [[ "$INCLUDE_VHDX" == 1 ]]; then need=$((need + 512*1024*1024)); fi
   free=$(df -B1 --output=avail /var/tmp | tail -n 1)
   inodes=$(df --output=iavail /var/tmp | tail -n 1)
   say "Capacity: ext4 free=$free required=$need bytes; free inodes=$inodes"
@@ -215,6 +259,7 @@ check_environment() {
   else
     say 'Windows VHDX host free space is not inferable from ext4 df. Check its host drive; set HOST_FREE_GIB to enforce that budget.'
   fi
+  if [[ "$INCLUDE_VHDX" == 1 ]]; then check_vhdx_environment; fi
   [[ ! -e "$WORK" && ! -L "$WORK" ]] || die "Existing work retained untouched: $WORK; inspect, then use --cleanup as the same user"
   [[ ! -e "$MNT_ROOT" && ! -L "$MNT_ROOT" ]] || die "Existing mount directory retained untouched: $MNT_ROOT"
 }
@@ -224,10 +269,13 @@ capture_env() {
     findmnt -rn -T /var/tmp -o SOURCE,FSTYPE,OPTIONS
     fio --version; btrfs --version; git --version
     printf '%s\n' "mode=$MODE" "image_gib=$IMAGE_GIB" "fio_size=$FIO_SIZE" "runtime=$RUNTIME" "small_files=$SMALL_FILES" "small_runs=$SMALL_RUNS" "git_files=$GIT_FILES" "git_runs=$GIT_RUNS" "compress_pct=$COMPRESS_PCT" "drop_caches=$DROP_CACHES" "keep_mounts=$KEEP_MOUNTS" "host_free_gib=${HOST_FREE_GIB:-unchecked}" "wsl_distro=${WSL_DISTRO_NAME:-unknown}"
-    echo 'fio_seed=20260915; all images: mkfs -K, mount nodiscard; Git source on ext4'
+    echo 'fio_seed=20260915; mkfs discard disabled; mount nodiscard; Git source on ext4'
+    mkfs.ext4 -V 2>&1
+    printf '%s\n' "variants=${VARIANTS[*]}" "mount_namespace=$(readlink /proc/self/ns/mnt)"
+    if [[ "$INCLUDE_VHDX" == 1 ]]; then qemu-img --version; printf 'vhdx_root=%s\n' "$VHDX_ROOT"; fi
     if command -v wsl.exe >/dev/null 2>&1; then
       echo '--- optional wsl.exe --version (10s limit) ---'
-      timeout --kill-after=2s 10s wsl.exe --version || echo 'Optional WSL version capture failed/timed out'
+      timeout --kill-after=2s 10s wsl.exe --version 2>&1 | decode_windows_output || echo 'Optional WSL version capture failed/timed out'
     else
       echo 'Optional wsl.exe absent from PATH; continuing'
     fi
@@ -265,6 +313,7 @@ PY
 setup_variant() {
   local v=$1 round=$2 img="$WORK/$1.img" mnt="$MNT_ROOT/$1" loop identity uuid opts
   [[ "$v" != ext4 ]] || { mkdir "$BASE"; return 0; }
+  if [[ "$v" == vhdx-* ]]; then setup_vhdx "$v" "$round"; return 0; fi
   # Noclobber + private fresh work directory: never format an existing image.
   (set -C; : > "$img")
   if [[ "$v" == sparse-* ]]; then truncate -s "${IMAGE_GIB}G" "$img";
@@ -276,16 +325,18 @@ setup_variant() {
   printf '%s %s\n' "$loop" "$identity" > "$WORK/$v.state"
   sync -f "$WORK/$v.state"
   check_loop "$loop" "$img" "$identity" || die "New loop ownership validation failed: $loop"
-  root mkfs.btrfs -q -K -L "bench-$v" "$loop"
+  if [[ "$(variant_fs "$v")" == ext4 ]]; then
+    root mkfs.ext4 -q -m 0 -E nodiscard,lazy_itable_init=0,lazy_journal_init=0 "$loop"
+  else root mkfs.btrfs -q -K -L "bench-$v" "$loop"; fi
   uuid=$(root blkid -s UUID -o value "$loop")
   [[ -n "$uuid" ]] || die "No UUID on new filesystem $loop"
   printf '%s\n' "$uuid" > "$WORK/$v.uuid"
   sync -f "$WORK/$v.uuid"
-  # mkfs -K preserves preallocation; nodiscard prevents subsequent hole punching.
+  # mkfs discard is disabled to preserve preallocation; nodiscard prevents subsequent hole punching.
   opts=noatime,nodiscard
   case "$v" in *-lzo) opts+=,compress=lzo ;; *-zstd) opts+=,compress=zstd:3 ;; esac
   root mkdir "$mnt"
-  root mount -t btrfs -o "$opts" "$loop" "$mnt"
+  root mount -t "$(variant_fs "$v")" -o "$opts" "$loop" "$mnt"
   printf '%s\t%s\t%s\t%s\t%s\n' "$v" "$mnt" "$img" "$loop" "$round" >> "$WORK/mounts.tsv"
   cp "$WORK/mounts.tsv" "$RESULTS/mounts.tsv"
   assert_mount "$v"
@@ -299,11 +350,16 @@ assert_mount() {
     return 0
   fi
   dir="$MNT_ROOT/$v"
+  if [[ "$v" == vhdx-* ]]; then
+    check_vhdx_device "$v" || die "VHDX device ownership changed: $v"
+    loop=$(cat "$WORK/$v.device")
+  else
   read -r loop expected < "$WORK/$v.state"
   check_loop "$loop" "$WORK/$v.img" "$expected" || die "Loop ownership changed: $v"
-  if ! read -r source fs uuid opts < <(findmnt -rn -M "$dir" -o SOURCE,FSTYPE,UUID,OPTIONS); then die "Expected Btrfs mount absent: $dir"; fi
+  fi
+  if ! read -r source fs uuid opts < <(findmnt -rn -M "$dir" -o SOURCE,FSTYPE,UUID,OPTIONS); then die "Expected benchmark mount absent: $dir"; fi
   saved_uuid=$(cat "$WORK/$v.uuid")
-  [[ "$source" == "$loop" && "$fs" == btrfs && "$uuid" == "$saved_uuid" ]] || die "Expected Btrfs mount absent or wrong: $dir"
+  [[ "$source" == "$loop" && "$fs" == "$(variant_fs "$v")" && "$uuid" == "$saved_uuid" ]] || die "Expected benchmark mount absent or wrong: $dir"
   [[ ! "$opts" =~ (^|,)discard(=|,|$) ]] || die "Discard unexpectedly enabled: $dir"
   case "$v" in
     *-none) [[ "$opts" != *compress* ]] || die "Unexpected compression: $opts" ;;
@@ -316,11 +372,17 @@ record_storage() {
   local v=$1 phase=$2 allocated logical
   [[ "$v" != ext4 ]] || return 0
   sync
+  if [[ "$v" == vhdx-* ]]; then record_vhdx_storage "$v" "$phase"; return 0; fi
   allocated=$(( $(stat -c %b "$WORK/$v.img")*512 ))
   logical=$(stat -c %s "$WORK/$v.img")
   printf 'allocated_%s\t%s\n' "$phase" "$allocated" >> "$RESULTS/storage_$v.tsv"
   if [[ "$v" == fixed-* ]]; then (( allocated >= logical )) || die "Preallocation lost: $v allocated=$allocated logical=$logical"; fi
-  root btrfs filesystem usage -b "$MNT_ROOT/$v" > "$RESULTS/usage_${v}_${phase}.txt"
+  if [[ "$(variant_fs "$v")" == btrfs ]]; then
+    root btrfs filesystem usage -b "$MNT_ROOT/$v" > "$RESULTS/usage_${v}_${phase}.txt"
+  else
+    df -B1 "$MNT_ROOT/$v" > "$RESULTS/usage_${v}_${phase}.txt"
+    df -i "$MNT_ROOT/$v" >> "$RESULTS/usage_${v}_${phase}.txt"
+  fi
 }
 fio_one() {
   local v=$1 dir=$2 test=$3 rw=$4 bs=$5 direct=$6 fsync=$7 cache=$8
@@ -414,10 +476,10 @@ PY
   sync
 }
 summary() {
-  python3 - "$RESULTS" "$SMALL_FILES" "$SMALL_RUNS" "$GIT_RUNS" "$DROP_CACHES" "$MODE" <<'PY'
+  python3 - "$RESULTS" "$SMALL_FILES" "$SMALL_RUNS" "$GIT_RUNS" "$DROP_CACHES" "$MODE" "${VARIANTS[@]}" <<'PY'
 import csv, json, math, os, statistics, sys
-r, files, runs, git_runs, drop, mode = sys.argv[1:]
-vs = ['ext4','sparse-none','sparse-lzo','sparse-zstd','fixed-none','fixed-lzo','fixed-zstd']
+r, files, runs, git_runs, drop, mode = sys.argv[1:7]
+vs = sys.argv[7:]
 def read(name):
     with open(os.path.join(r,name)) as f: return json.load(f)
 def positive(x):
@@ -443,7 +505,7 @@ for v in vs:
         rows.append([v,test,unit,x,x,x,0,str(x)])
 with open(os.path.join(r,'summary.tsv'),'x') as f:
     w=csv.writer(f,delimiter='\t'); w.writerow(['variant','test','unit','median','min','max','population_stddev','runs']); w.writerows(rows)
-lines=[f'WSL ext4 / loop-Btrfs comparison ({mode})',f'Small files: {files} x {runs} per condition; Git: {git_runs} runs', 'All 7 conditions validated; raw results and execution order retained.', 'Values: median [min, max], population standard deviation']
+lines=[f'WSL direct/loop ext4 and loop/VHDX Btrfs comparison ({mode})',f'Small files: {files} x {runs} per condition; Git: {git_runs} runs', f'All {len(vs)} conditions validated; raw results and execution order retained.', 'Values: median [min, max], population standard deviation']
 for v,test,unit,med,lo,hi,sd,_ in rows:
     lines.append(f'{v:12} {test:23} {med:.3f} [{lo:.3f}, {hi:.3f}] sd={sd:.3f} {unit}')
 text='\n'.join(lines)+'\n'
@@ -452,8 +514,8 @@ print(text)
 PY
 }
 main() {
-  say "WSL ext4 / loop-Btrfs: action=$ACTION mode=$MODE"
-  say "7 conditions; image=${IMAGE_GIB}GiB (one active, six retained only with KEEP_MOUNTS=1); small files=$SMALL_FILES x$SMALL_RUNS; Git=$GIT_FILES x$GIT_RUNS; fio=$FIO_SIZE/${RUNTIME}s; DROP_CACHES=$DROP_CACHES KEEP_MOUNTS=$KEEP_MOUNTS"
+  say "WSL direct/loop ext4 and loop/VHDX Btrfs: action=$ACTION mode=$MODE"
+  say "$COUNT conditions; image=${IMAGE_GIB}GiB (one active, $((COUNT-1)) retained only with KEEP_MOUNTS=1); small files=$SMALL_FILES x$SMALL_RUNS; Git=$GIT_FILES x$GIT_RUNS; fio=$FIO_SIZE/${RUNTIME}s; DROP_CACHES=$DROP_CACHES KEEP_MOUNTS=$KEEP_MOUNTS"
   say "Work=$WORK; mounts=$MNT_ROOT; results=$RESULTS; log=$LOG"
   say 'Preallocated images consume actual ext4 space; VHDX host allocation may remain after cleanup.'
   begin '[prepare] sudo authentication (enter password here if requested)'
@@ -498,26 +560,34 @@ main() {
   rounds=$SMALL_RUNS
   (( GIT_RUNS <= rounds )) || rounds=$GIT_RUNS
   for ((round=1; round<=rounds; round++)); do
-    # Baseline first, middle, last; reverse/rotate Btrfs order between rounds.
+    # Baseline first, middle, last; reverse/rotate all image-backed conditions.
+    local others=("${VARIANTS[@]:1}") arranged=() i offset slot
+    offset=$(( (round-1)*3 % ${#others[@]} ))
+    for ((i=0; i<${#others[@]}; i++)); do
+      if (( round%2 == 0 )); then slot=$(( (${#others[@]}-1-i+offset)%${#others[@]} ));
+      else slot=$(( (i+offset)%${#others[@]} )); fi
+      arranged+=("${others[$slot]}")
+    done
     case $(( (round-1)%3 )) in
-      0) order='ext4 sparse-none fixed-lzo sparse-zstd fixed-none sparse-lzo fixed-zstd' ;;
-      1) order='fixed-zstd sparse-lzo fixed-none ext4 sparse-zstd fixed-lzo sparse-none' ;;
-      2) order='fixed-lzo sparse-zstd sparse-none fixed-zstd sparse-lzo fixed-none ext4' ;;
+      0) arranged=(ext4 "${arranged[@]}") ;;
+      1) slot=$((COUNT/2)); arranged=("${arranged[@]:0:slot}" ext4 "${arranged[@]:slot}") ;;
+      2) arranged+=(ext4) ;;
     esac
+    order="${arranged[*]}"
     index=0
     for v in $order; do
       index=$((index+1))
       dir="$MNT_ROOT/$v"; [[ "$v" != ext4 ]] || dir="$BASE"
       printf '%s\t%s\t%s\tfio_round1;small<=%s;git<=%s\n' "$round" "$index" "$v" "$SMALL_RUNS" "$GIT_RUNS" >> "$RESULTS/order.tsv"
-      if [[ "$v" != ext4 ]]; then step "[$index/7 $v] image / loop / mkfs / mount round $round" setup_variant "$v" "$round"; fi
-      step "[$index/7 $v] verify mount round $round" assert_mount "$v"
+      if [[ "$v" != ext4 ]]; then step "[$index/$COUNT $v] image / loop / mkfs / mount round $round" setup_variant "$v" "$round"; fi
+      step "[$index/$COUNT $v] verify mount round $round" assert_mount "$v"
       if (( round == 1 )); then run_fio_suite "$v" "$dir"; fi
-      if (( round <= SMALL_RUNS )); then step "[$index/7 $v] small files $round/$SMALL_RUNS" smallfiles_one "$v" "$dir" "$round"; fi
-      if (( round <= GIT_RUNS )); then step "[$index/7 $v] Git $round/$GIT_RUNS" git_one "$v" "$dir" "$round"; fi
+      if (( round <= SMALL_RUNS )); then step "[$index/$COUNT $v] small files $round/$SMALL_RUNS" smallfiles_one "$v" "$dir" "$round"; fi
+      if (( round <= GIT_RUNS )); then step "[$index/$COUNT $v] Git $round/$GIT_RUNS" git_one "$v" "$dir" "$round"; fi
       record_storage "$v" "round_$round"
       if [[ "$v" != ext4 ]]; then
         if [[ "$KEEP_MOUNTS" == 1 && "$round" == "$rounds" ]]; then mkdir "$dir/investigate";
-        else step "[$index/7 $v] cleanup round $round" cleanup_resources "$v"; fi
+        else step "[$index/$COUNT $v] cleanup round $round" cleanup_resources "$v"; fi
       fi
     done
   done
