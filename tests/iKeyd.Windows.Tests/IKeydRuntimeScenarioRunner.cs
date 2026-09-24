@@ -38,7 +38,7 @@ public sealed class IKeydRuntimeScenarioRunner : ICompatibilityScenarioRunner
         var desktop = new RecordingDesktopBackend();
         var inputMethod = new FixedInputMethod(
             string.Equals(scenario.InitialState.Ime, "on", StringComparison.OrdinalIgnoreCase));
-        var send = new LegacySendOutput(keyboard);
+        var send = new LegacySendOutput(keyboard, inputMethod: inputMethod);
 
         using var runtime = new IKeydRuntimeHandler(
             configuration,
