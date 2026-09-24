@@ -9,17 +9,31 @@ public sealed class LegacySendOutputImeSymbolTests
     private const ushort LeftShift = 0xA0;
 
     [Fact]
-    public void Japanese_input_normalizes_ascii_letters_digits_and_symbols_to_fullwidth_text()
+    public void Japanese_text_output_normalizes_ascii_letters_digits_and_symbols_to_fullwidth()
     {
         var keyboard = new RecordingKeyboardOutput();
         var output = new LegacySendOutput(
             keyboard,
             inputMethod: new FixedInputMethod(true));
 
-        output.Send("Az09!~");
+        output.SendText("Az09!~");
 
         Assert.Empty(keyboard.Events);
         Assert.Equal(["Ａｚ０９！～"], keyboard.Text);
+    }
+
+    [Fact]
+    public void Japanese_input_plain_tilde_is_emitted_as_fullwidth_text()
+    {
+        var keyboard = new RecordingKeyboardOutput();
+        var output = new LegacySendOutput(
+            keyboard,
+            inputMethod: new FixedInputMethod(true));
+
+        output.Send("~");
+
+        Assert.Empty(keyboard.Events);
+        Assert.Equal(["～"], keyboard.Text);
     }
 
     [Fact]
