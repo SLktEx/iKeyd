@@ -209,10 +209,15 @@ internal sealed class BehaviorWindowsInputRouter : IKeyboardEventHandler, IInput
                     break;
 
                 case BehaviorActionKind.SendUnicode:
-                case BehaviorActionKind.SendText:
                     if (action.Text is null)
                         throw new InvalidOperationException($"Behavior {action.Kind} action is missing its text payload.");
                     _keyboard.SendText(action.Text);
+                    break;
+
+                case BehaviorActionKind.SendText:
+                    if (action.Text is null)
+                        throw new InvalidOperationException($"Behavior {action.Kind} action is missing its text payload.");
+                    _send.SendText(action.Text);
                     break;
 
                 case BehaviorActionKind.LayerOn:
