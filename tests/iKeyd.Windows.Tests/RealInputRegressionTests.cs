@@ -48,6 +48,20 @@ public sealed class RealInputRegressionTests
     }
 
     [Fact]
+    public void Function_layer_text_output_uses_fullwidth_when_japanese_input_is_active()
+    {
+        using var fixture = CreateRuntime(InputMode.R, kanaInputActive: true);
+
+        Dispatch(fixture, WindowsKeyMap.NonConvert, KeyEventKind.Down, 0);
+        Dispatch(fixture, WindowsKeyMap.Space, KeyEventKind.Down, 10);
+        Dispatch(fixture, 'D', KeyEventKind.Down, 20);
+        Dispatch(fixture, 'D', KeyEventKind.Up, 21);
+
+        Assert.Empty(fixture.Output.Events);
+        Assert.Equal(["～"], fixture.Output.Text);
+    }
+
+    [Fact]
     public void Repeated_layer_down_does_not_reopen_a_consumed_SM_transition()
     {
         using var fixture = CreateRuntime(InputMode.R);
@@ -228,11 +242,12 @@ public sealed class RealInputRegressionTests
         var keyboardState = new KeyboardState();
         var output = new RecordingKeyboardOutput();
         var desktop = new RecordingDesktopBackend();
+        var inputMethod = new FixedInputMethod(kanaInputActive);
         var runtime = new IKeydRuntimeHandler(
             configuration,
-            new FixedInputMethod(kanaInputActive),
+            inputMethod,
             keyboardState,
-            new LegacySendOutput(output),
+            new LegacySendOutput(output, inputMethod: inputMethod),
             desktop);
         return new RuntimeFixture(runtime, keyboardState, output, desktop);
     }
