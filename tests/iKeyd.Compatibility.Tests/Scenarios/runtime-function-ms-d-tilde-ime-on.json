@@ -1,44 +1,16 @@
 {
   "id": "runtime-function-ms-d-tilde-ime-on",
   "description": "IME-on M then Space plus D emits a fullwidth tilde as text.",
-  "initialState": {
-    "mode": "S",
-    "ime": "on",
-    "layers": [
-      "M",
-      "S"
-    ]
-  },
+  "initialState": { "mode": "S", "ime": "on", "layers": ["M", "S"] },
   "input": [
-    {
-      "atMs": 10,
-      "kind": "keyDown",
-      "key": "D"
-    },
-    {
-      "atMs": 11,
-      "kind": "keyUp",
-      "key": "D"
-    }
+    { "atMs": 10, "kind": "keyDown", "key": "D" },
+    { "atMs": 11, "kind": "keyUp", "key": "D" }
   ],
   "expected": {
     "text": "～"
   },
-  "tags": [
-    "legacy",
-    "runtime-long-tail",
-    "function-layer",
-    "ime",
-    "jis109",
-    "hosted-windows"
-  ],
-  "inventoryIds": [
-    "legacy-send-64cd1136f9"
-  ],
-  "requiredEnvironment": [
-    "hosted-windows"
-  ],
-  "oracleTargets": [
-    "ikeyd-runtime"
-  ]
+  "tags": ["legacy", "runtime-long-tail", "function-layer", "ime", "jis109", "hosted-windows"],
+  "inventoryIds": ["legacy-send-64cd1136f9"],
+  "requiredEnvironment": ["hosted-windows"],
+  "oracleTargets": ["ikeyd-runtime"]
 }
