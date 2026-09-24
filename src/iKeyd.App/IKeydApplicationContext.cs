@@ -45,7 +45,8 @@ internal sealed class IKeydApplicationContext : ApplicationContext
 
         _keyboard = new WindowsKeyboardBackend();
         var desktop = new WindowsDesktopBackend();
-        var send = new LegacySendOutput(_keyboard, desktop);
+        var inputMethod = new WindowsInputMethod();
+        var send = new LegacySendOutput(_keyboard, desktop, inputMethod);
 
         var clipboardSettings = configuration.Profile.Clipboard;
         _clipboardService = new WindowsClipboardService();
@@ -66,7 +67,6 @@ internal sealed class IKeydApplicationContext : ApplicationContext
             clipboardSettings.History,
             clipboardSettings.Images);
 
-        var inputMethod = new WindowsInputMethod();
         _commandActions = new WindowsCommandActionQueue();
         var systemQueryProvider = new WindowsSystemQueryProvider(inputMethod);
         _systemQueryCache = new WindowsSystemQueryCache(

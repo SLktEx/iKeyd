@@ -9,6 +9,48 @@ public sealed class LegacySendOutputImeSymbolTests
     private const ushort LeftShift = 0xA0;
 
     [Fact]
+    public void Japanese_text_output_normalizes_ascii_letters_digits_and_symbols_to_fullwidth()
+    {
+        var keyboard = new RecordingKeyboardOutput();
+        var output = new LegacySendOutput(
+            keyboard,
+            inputMethod: new FixedInputMethod(true));
+
+        output.SendText("Az09!~");
+
+        Assert.Empty(keyboard.Events);
+        Assert.Equal(["Ａｚ０９！～"], keyboard.Text);
+    }
+
+    [Fact]
+    public void Japanese_input_plain_tilde_is_emitted_as_fullwidth_text()
+    {
+        var keyboard = new RecordingKeyboardOutput();
+        var output = new LegacySendOutput(
+            keyboard,
+            inputMethod: new FixedInputMethod(true));
+
+        output.Send("~");
+
+        Assert.Empty(keyboard.Events);
+        Assert.Equal(["～"], keyboard.Text);
+    }
+
+    [Fact]
+    public void Non_japanese_text_output_normalizes_fullwidth_ascii_back_to_halfwidth()
+    {
+        var keyboard = new RecordingKeyboardOutput();
+        var output = new LegacySendOutput(
+            keyboard,
+            inputMethod: new FixedInputMethod(false));
+
+        output.SendText("Ａｚ０９！～");
+
+        Assert.Empty(keyboard.Events);
+        Assert.Equal(["Az09!~"], keyboard.Text);
+    }
+
+    [Fact]
     public void Plain_tilde_is_emitted_as_jis_shift_caret_instead_of_unicode_text()
     {
         var keyboard = new RecordingKeyboardOutput();
@@ -87,6 +129,11 @@ public sealed class LegacySendOutputImeSymbolTests
 
         public void SendText(string text) => Text.Add(text);
         public bool IsToggleOn(ushort virtualKey) => false;
+    }
+
+    private sealed class FixedInputMethod(bool active) : IInputMethod
+    {
+        public bool IsKanaInputActive() => active;
     }
 
     private readonly record struct RecordedKeyboardEvent(KeyboardKey Key, KeyEventKind Kind);

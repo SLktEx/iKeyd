@@ -15,11 +15,16 @@ internal sealed class LegacySendOutput : IMacroOutput
 
     private readonly IKeyboardOutput _keyboard;
     private readonly IDesktopBackend? _desktop;
+    private readonly IInputMethod? _inputMethod;
 
-    public LegacySendOutput(IKeyboardOutput keyboard, IDesktopBackend? desktop = null)
+    public LegacySendOutput(
+        IKeyboardOutput keyboard,
+        IDesktopBackend? desktop = null,
+        IInputMethod? inputMethod = null)
     {
         _keyboard = keyboard ?? throw new ArgumentNullException(nameof(keyboard));
         _desktop = desktop;
+        _inputMethod = inputMethod;
     }
 
     public ValueTask SendAsync(string legacySendText, CancellationToken cancellationToken)
@@ -27,6 +32,15 @@ internal sealed class LegacySendOutput : IMacroOutput
         cancellationToken.ThrowIfCancellationRequested();
         Send(legacySendText);
         return ValueTask.CompletedTask;
+    }
+
+    public void SendText(string text)
+    {
+        ArgumentNullException.ThrowIfNull(text);
+        if (text.Length == 0)
+            return;
+
+        _keyboard.SendText(NormalizeTextWidth(text, GetFullWidthTextMode()));
     }
 
     public void Send(string legacySendText)
@@ -37,8 +51,9 @@ internal sealed class LegacySendOutput : IMacroOutput
 
         if (!ContainsLegacySyntax(legacySendText))
         {
-            if (!TrySendPlainJisSymbols(legacySendText))
-                _keyboard.SendText(legacySendText);
+            var normalizedText = NormalizeTextWidth(legacySendText, GetFullWidthTextMode());
+            if (!TrySendPlainJisSymbols(normalizedText))
+                _keyboard.SendText(normalizedText);
             return;
         }
 
@@ -58,7 +73,7 @@ internal sealed class LegacySendOutput : IMacroOutput
         {
             if (plain.Length == 0)
                 return;
-            _keyboard.SendText(plain.ToString());
+            SendText(plain.ToString());
             plain.Clear();
         }
 
@@ -268,7 +283,7 @@ internal sealed class LegacySendOutput : IMacroOutput
         if (trimmed.Length == 1 && trimmed[0] is '{' or '}' or '!' or '#' or '^' or '+')
         {
             if (modifiers.Count == 0)
-                _keyboard.SendText(trimmed.ToString());
+                SendText(trimmed.ToString());
             else if (!TrySendModifiedCharacter(trimmed[0], modifiers))
                 throw UnsupportedSyntax($"{{{trimmed.ToString()}}}", "escaped literal cannot be mapped to a JIS keyboard key");
             return true;
@@ -418,6 +433,35 @@ internal sealed class LegacySendOutput : IMacroOutput
 
         key = WindowsKeyMap.Keyboard(virtualKey);
         return true;
+    }
+
+    private bool? GetFullWidthTextMode()
+        => _inputMethod is null ? null : _inputMethod.IsKanaInputActive();
+
+    private static string NormalizeTextWidth(string text, bool? fullWidth)
+    {
+        if (fullWidth is null || text.Length == 0)
+            return text;
+
+        char[]? normalized = null;
+        for (var index = 0; index < text.Length; index++)
+        {
+            var character = text[index];
+            var replacement = character;
+
+            if (fullWidth.Value && character is >= '!' and <= '~')
+                replacement = (char)(character + 0xFEE0);
+            else if (!fullWidth.Value && character is >= '\uFF01' and <= '\uFF5E')
+                replacement = (char)(character - 0xFEE0);
+
+            if (replacement == character)
+                continue;
+
+            normalized ??= text.ToCharArray();
+            normalized[index] = replacement;
+        }
+
+        return normalized is null ? text : new string(normalized);
     }
 
     private static bool RequiresJisShift(char character)
