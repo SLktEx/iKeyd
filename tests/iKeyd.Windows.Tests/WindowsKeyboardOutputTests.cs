@@ -43,6 +43,31 @@ public sealed class WindowsKeyboardOutputTests
     }
 
     [Fact]
+    public void Chord_batch_keeps_modifier_and_extended_navigation_key_in_one_ordered_buffer()
+    {
+        var modifiers = new[] { new KeyboardKey(0xA2, 0) };
+        var key = new KeyboardKey(0x27, 0, true);
+        var inputs = new WindowsKeyboardOutput.NativeInput[4];
+
+        WindowsKeyboardOutput.FillChordInputs(modifiers, key, inputs);
+
+        Assert.Equal((ushort)0xA2, inputs[0].Data.Keyboard.VirtualKey);
+        Assert.Equal(0u, inputs[0].Data.Keyboard.Flags & 0x0002u);
+
+        Assert.Equal((ushort)0x27, inputs[1].Data.Keyboard.VirtualKey);
+        Assert.NotEqual(0u, inputs[1].Data.Keyboard.Flags & 0x0001u);
+        Assert.Equal(0u, inputs[1].Data.Keyboard.Flags & 0x0002u);
+
+        Assert.Equal((ushort)0x27, inputs[2].Data.Keyboard.VirtualKey);
+        Assert.NotEqual(0u, inputs[2].Data.Keyboard.Flags & 0x0001u);
+        Assert.NotEqual(0u, inputs[2].Data.Keyboard.Flags & 0x0002u);
+
+        Assert.Equal((ushort)0xA2, inputs[3].Data.Keyboard.VirtualKey);
+        Assert.NotEqual(0u, inputs[3].Data.Keyboard.Flags & 0x0002u);
+        Assert.All(inputs, input => Assert.Equal(WindowsKeyboardOutput.InjectionMarker, input.Data.Keyboard.ExtraInfo));
+    }
+
+    [Fact]
     public void Unicode_output_uses_unicode_flag_and_utf16_code_unit()
     {
         var input = WindowsKeyboardOutput.BuildUnicodeInput('あ', KeyEventKind.Down);
