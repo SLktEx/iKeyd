@@ -209,6 +209,27 @@ internal sealed class LegacySendOutput : IMacroOutput
 
     private void SendKeyWithModifiers(KeyboardKey key, IReadOnlyList<ushort> modifiers)
     {
+        if (modifiers.Count == 0)
+        {
+            _keyboard.SendKeyPress(key);
+            return;
+        }
+
+        if (_keyboard is IKeyboardChordOutput chordOutput)
+        {
+            Span<KeyboardKey> normalizedModifiers = modifiers.Count <= 8
+                ? stackalloc KeyboardKey[modifiers.Count]
+                : new KeyboardKey[modifiers.Count];
+            for (var index = 0; index < modifiers.Count; index++)
+            {
+                normalizedModifiers[index] = WindowsKeyMap.Keyboard(
+                    NormalizeLegacyModifier(modifiers[index]));
+            }
+
+            chordOutput.SendChord(normalizedModifiers, key);
+            return;
+        }
+
         foreach (var modifier in modifiers)
             SendModifier(modifier, KeyEventKind.Down);
 
