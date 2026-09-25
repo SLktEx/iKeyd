@@ -48,6 +48,29 @@ public sealed class RealInputRegressionTests
     }
 
     [Fact]
+    public void Convert_then_NonConvert_L_emits_Ctrl_Right_from_the_physical_HM_sequence()
+    {
+        using var fixture = CreateRuntime(InputMode.R);
+
+        Assert.Equal(KeyboardDisposition.Suppress, Dispatch(fixture, WindowsKeyMap.Convert, KeyEventKind.Down, 0));
+        Assert.Equal(KeyboardDisposition.Suppress, Dispatch(fixture, WindowsKeyMap.NonConvert, KeyEventKind.Down, 10));
+        Assert.Equal(KeyboardDisposition.Suppress, Dispatch(fixture, 'L', KeyEventKind.Down, 20));
+        Assert.Equal(KeyboardDisposition.Suppress, Dispatch(fixture, 'L', KeyEventKind.Up, 21));
+        Assert.Equal(KeyboardDisposition.Suppress, Dispatch(fixture, WindowsKeyMap.NonConvert, KeyEventKind.Up, 30));
+        Assert.Equal(KeyboardDisposition.Suppress, Dispatch(fixture, WindowsKeyMap.Convert, KeyEventKind.Up, 40));
+
+        Assert.Equal(
+        [
+            new RecordedKeyboardEvent(WindowsKeyMap.Keyboard(WindowsKeyMap.LeftControl), KeyEventKind.Down),
+            new RecordedKeyboardEvent(WindowsKeyMap.Keyboard(WindowsKeyMap.Right), KeyEventKind.Down),
+            new RecordedKeyboardEvent(WindowsKeyMap.Keyboard(WindowsKeyMap.Right), KeyEventKind.Up),
+            new RecordedKeyboardEvent(WindowsKeyMap.Keyboard(WindowsKeyMap.LeftControl), KeyEventKind.Up)
+        ],
+        fixture.Output.Events);
+        Assert.Empty(fixture.Output.Text);
+    }
+
+    [Fact]
     public void Function_layer_text_output_uses_fullwidth_when_japanese_input_is_active()
     {
         using var fixture = CreateRuntime(InputMode.R, kanaInputActive: true);
