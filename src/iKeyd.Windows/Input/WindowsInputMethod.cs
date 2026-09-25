@@ -62,7 +62,7 @@ public sealed class WindowsInputMethod : IInputMethod, IInputCompositionState
     }
 
     public static bool IsRomaKanaConversionMode(int conversionMode)
-        => conversionMode is 9 or 19 or 25 or 27 or 16;
+        => conversionMode is 9 or 19 or 25 or 27;
 
     private static nint GetFocusedWindow()
     {
