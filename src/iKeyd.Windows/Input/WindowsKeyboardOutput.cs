@@ -5,7 +5,7 @@ using iKeyd.Core.Input;
 
 namespace iKeyd.Windows.Input;
 
-public sealed class WindowsKeyboardOutput : IKeyboardOutput
+public sealed class WindowsKeyboardOutput : IKeyboardOutput, IKeyboardChordOutput
 {
     private const uint InputKeyboard = 1;
     private const uint KeyEventExtended = 0x0001;
@@ -44,6 +44,46 @@ public sealed class WindowsKeyboardOutput : IKeyboardOutput
         inputs[0] = BuildKeyInput(key, KeyEventKind.Down);
         inputs[1] = BuildKeyInput(key, KeyEventKind.Up);
         Send(inputs);
+    }
+
+    public void SendChord(ReadOnlySpan<KeyboardKey> modifiers, KeyboardKey key)
+    {
+        if (UsesCombinedVirtualScanPath(key) || ContainsCombinedVirtualScanPath(modifiers))
+        {
+            foreach (var modifier in modifiers)
+                SendKey(modifier, KeyEventKind.Down);
+            try
+            {
+                SendKeyPress(key);
+            }
+            finally
+            {
+                foreach (var modifier in modifiers)
+                    SendKey(modifier, KeyEventKind.Up);
+            }
+            return;
+        }
+
+        var inputCount = checked(modifiers.Length * 2 + 2);
+        if (inputCount <= 16)
+        {
+            Span<NativeInput> inputs = stackalloc NativeInput[inputCount];
+            FillChordInputs(modifiers, key, inputs);
+            Send(inputs);
+            return;
+        }
+
+        var rented = ArrayPool<NativeInput>.Shared.Rent(inputCount);
+        try
+        {
+            var inputs = rented.AsSpan(0, inputCount);
+            FillChordInputs(modifiers, key, inputs);
+            Send(inputs);
+        }
+        finally
+        {
+            ArrayPool<NativeInput>.Shared.Return(rented, clearArray: false);
+        }
     }
 
     public void SendText(string text)
@@ -119,6 +159,38 @@ public sealed class WindowsKeyboardOutput : IKeyboardOutput
             inputs[index++] = BuildUnicodeInput(codeUnit, KeyEventKind.Down);
             inputs[index++] = BuildUnicodeInput(codeUnit, KeyEventKind.Up);
         }
+    }
+
+    internal static void FillChordInputs(
+        ReadOnlySpan<KeyboardKey> modifiers,
+        KeyboardKey key,
+        Span<NativeInput> inputs)
+    {
+        var expectedLength = checked(modifiers.Length * 2 + 2);
+        if (inputs.Length != expectedLength)
+            throw new ArgumentException("Chord input buffer has the wrong length.", nameof(inputs));
+
+        var index = 0;
+        foreach (var modifier in modifiers)
+            inputs[index++] = BuildKeyInput(modifier, KeyEventKind.Down);
+
+        inputs[index++] = BuildKeyInput(key, KeyEventKind.Down);
+        inputs[index++] = BuildKeyInput(key, KeyEventKind.Up);
+
+        // Match the legacy Send ordering: modifiers are released in the same order
+        // in which they were pressed.
+        foreach (var modifier in modifiers)
+            inputs[index++] = BuildKeyInput(modifier, KeyEventKind.Up);
+    }
+
+    private static bool ContainsCombinedVirtualScanPath(ReadOnlySpan<KeyboardKey> keys)
+    {
+        foreach (var key in keys)
+        {
+            if (UsesCombinedVirtualScanPath(key))
+                return true;
+        }
+        return false;
     }
 
     private static void SendCombinedVirtualScanKey(KeyboardKey key, KeyEventKind kind)

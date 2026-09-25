@@ -177,6 +177,14 @@ internal sealed class LegacySendOutput : IMacroOutput
     public void SendChord(ushort modifier, ushort virtualKey)
     {
         var key = WindowsKeyMap.Keyboard(virtualKey);
+        if (_keyboard is IKeyboardChordOutput chordOutput)
+        {
+            Span<KeyboardKey> modifiers = stackalloc KeyboardKey[1];
+            modifiers[0] = WindowsKeyMap.Keyboard(NormalizeLegacyModifier(modifier));
+            chordOutput.SendChord(modifiers, key);
+            return;
+        }
+
         SendModifier(modifier, KeyEventKind.Down);
         try
         {
@@ -191,6 +199,15 @@ internal sealed class LegacySendOutput : IMacroOutput
     public void SendChord(ushort modifier1, ushort modifier2, ushort virtualKey)
     {
         var key = WindowsKeyMap.Keyboard(virtualKey);
+        if (_keyboard is IKeyboardChordOutput chordOutput)
+        {
+            Span<KeyboardKey> modifiers = stackalloc KeyboardKey[2];
+            modifiers[0] = WindowsKeyMap.Keyboard(NormalizeLegacyModifier(modifier1));
+            modifiers[1] = WindowsKeyMap.Keyboard(NormalizeLegacyModifier(modifier2));
+            chordOutput.SendChord(modifiers, key);
+            return;
+        }
+
         SendModifier(modifier1, KeyEventKind.Down);
         SendModifier(modifier2, KeyEventKind.Down);
         try
@@ -209,6 +226,27 @@ internal sealed class LegacySendOutput : IMacroOutput
 
     private void SendKeyWithModifiers(KeyboardKey key, IReadOnlyList<ushort> modifiers)
     {
+        if (modifiers.Count == 0)
+        {
+            _keyboard.SendKeyPress(key);
+            return;
+        }
+
+        if (_keyboard is IKeyboardChordOutput chordOutput)
+        {
+            Span<KeyboardKey> normalizedModifiers = modifiers.Count <= 8
+                ? stackalloc KeyboardKey[modifiers.Count]
+                : new KeyboardKey[modifiers.Count];
+            for (var index = 0; index < modifiers.Count; index++)
+            {
+                normalizedModifiers[index] = WindowsKeyMap.Keyboard(
+                    NormalizeLegacyModifier(modifiers[index]));
+            }
+
+            chordOutput.SendChord(normalizedModifiers, key);
+            return;
+        }
+
         foreach (var modifier in modifiers)
             SendModifier(modifier, KeyEventKind.Down);
 

@@ -2,7 +2,7 @@ using iKeyd.Core.Input;
 
 namespace iKeyd.Windows.Input;
 
-public sealed class WindowsKeyboardBackend : IKeyboardInputSource, IKeyboardOutput, IDisposable
+public sealed class WindowsKeyboardBackend : IKeyboardInputSource, IKeyboardOutput, IKeyboardChordOutput, IDisposable
 {
     private readonly WindowsKeyboardHook _hook;
     private readonly WindowsKeyboardOutput _output = new();
@@ -23,6 +23,7 @@ public sealed class WindowsKeyboardBackend : IKeyboardInputSource, IKeyboardOutp
 
     public void SendKey(KeyboardKey key, KeyEventKind kind) => _output.SendKey(key, kind);
     public void SendKeyPress(KeyboardKey key) => _output.SendKeyPress(key);
+    public void SendChord(ReadOnlySpan<KeyboardKey> modifiers, KeyboardKey key) => _output.SendChord(modifiers, key);
     public void SendText(string text) => _output.SendText(text);
     public bool IsToggleOn(ushort virtualKey) => _output.IsToggleOn(virtualKey);
 
