@@ -13,6 +13,7 @@ public sealed class WindowsKeyboardOutput : IKeyboardOutput, IKeyboardChordOutpu
     private const uint KeyEventUnicode = 0x0004;
     private const uint KeyEventScanCode = 0x0008;
     private const int MaxStackTextLength = 128;
+    private static readonly int NativeInputSize = Marshal.SizeOf<NativeInput>();
 
     public static nuint InjectionMarker { get; } = IntPtr.Size == 8
         ? unchecked((nuint)0x694B657964UL)
@@ -318,12 +319,18 @@ public sealed class WindowsKeyboardOutput : IKeyboardOutput, IKeyboardChordOutpu
             throw new Win32Exception(Marshal.GetLastWin32Error(), $"SendInput sent {sent} of {inputs.Length} events.");
     }
 
-    private static unsafe uint SendNative(ReadOnlySpan<NativeInput> inputs)
+    private static uint SendNative(ReadOnlySpan<NativeInput> inputs)
     {
-        fixed (NativeInput* pointer = inputs)
-        {
-            return NativeMethods.SendInput((uint)inputs.Length, pointer, sizeof(NativeInput));
-        }
+        if (inputs.IsEmpty)
+            return 0;
+
+        // NativeInput is blittable. Passing its first element by reference pins
+        // the contiguous span for the native call without an unsafe pointer or
+        // allocating/copying a managed array on the keyboard hot path.
+        return NativeMethods.SendInput(
+            (uint)inputs.Length,
+            ref MemoryMarshal.GetReference(inputs),
+            NativeInputSize);
     }
 
     [StructLayout(LayoutKind.Sequential)]
@@ -378,7 +385,7 @@ public sealed class WindowsKeyboardOutput : IKeyboardOutput, IKeyboardChordOutpu
     private static class NativeMethods
     {
         [DllImport("user32.dll", SetLastError = true)]
-        public static extern unsafe uint SendInput(uint inputCount, NativeInput* inputs, int inputSize);
+        public static extern uint SendInput(uint inputCount, ref NativeInput inputs, int inputSize);
 
         [DllImport("user32.dll")]
         public static extern void keybd_event(byte virtualKey, byte scanCode, uint flags, nuint extraInfo);
