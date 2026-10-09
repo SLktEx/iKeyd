@@ -26,6 +26,7 @@ internal sealed class IKeydRuntimeHandler : IKeyboardEventHandler, IInputStateRe
     private readonly ChordEngine<string> _sEngine;
     private readonly ChordEngine<string> _kEngine;
     private readonly HashSet<KeyboardKey> _suppressedKeys = new(64);
+    private readonly HashSet<KeyboardKey> _passthroughKeys = new(64);
     private readonly Dictionary<KeyCode, LayerEvent> _heldLayerPresses = new(4);
     private readonly Timer _chordTimer;
     private readonly KeyboardMouseMotion _mouseMotion;
@@ -128,6 +129,18 @@ internal sealed class IKeydRuntimeHandler : IKeyboardEventHandler, IInputStateRe
             try
             {
                 var disposition = HandlePhysicalKeyboardEventCore(keyboardEvent);
+                // A repeat may change routes when a layer or mode changes during
+                // the hold. Once any physical down reaches the target, its up
+                // must also reach it, even if another repeat was suppressed.
+                if (keyboardEvent.Kind == KeyEventKind.Down)
+                {
+                    if (disposition == KeyboardDisposition.PassThrough)
+                        _passthroughKeys.Add(keyboardEvent.Key);
+                }
+                else if (_passthroughKeys.Remove(keyboardEvent.Key))
+                {
+                    disposition = KeyboardDisposition.PassThrough;
+                }
                 var after = CaptureDiagnosticState();
                 _diagnostics.RecordEvent(keyboardEvent, before, after, disposition);
                 RecoverIfInvariantBroken(keyboardEvent.TimestampMs);
@@ -299,6 +312,8 @@ internal sealed class IKeydRuntimeHandler : IKeyboardEventHandler, IInputStateRe
         _layers = LayerRuntimeState.Empty;
         _heldLayerPresses.Clear();
         _suppressedKeys.Clear();
+        // Logical recovery does not release physical keys in the target. Keep
+        // their release ownership until the matching physical up arrives.
         _spacePressedAtMs = null;
         _spaceImeRolloverCommitted = false;
         _mouseMotion.Reset();

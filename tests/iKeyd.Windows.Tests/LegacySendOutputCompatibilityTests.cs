@@ -73,6 +73,21 @@ public sealed class LegacySendOutputCompatibilityTests
         keyboard.Events);
     }
 
+    [Theory]
+    [InlineData("^{RIGHT}", LeftControl)]
+    [InlineData("!{RIGHT}", LeftAlt)]
+    public void Modified_navigation_uses_atomic_chord_capability_when_available(string send, ushort modifier)
+    {
+        var keyboard = new AtomicRecordingKeyboardOutput();
+        var output = new LegacySendOutput(keyboard);
+
+        output.Send(send);
+
+        Assert.Equal([WindowsKeyMap.Keyboard(modifier)], keyboard.Modifiers);
+        Assert.Equal(WindowsKeyMap.Keyboard(WindowsKeyMap.Right), keyboard.Key);
+        Assert.Empty(keyboard.FallbackEvents);
+    }
+
     [Fact]
     public void AHK_backtick_escapes_reachable_default_key_punctuation_as_key_events()
     {
@@ -250,6 +265,31 @@ public sealed class LegacySendOutputCompatibilityTests
     private sealed class FixedInputMethod(bool active) : IInputMethod
     {
         public bool IsKanaInputActive() => active;
+    }
+
+    private sealed class AtomicRecordingKeyboardOutput : IKeyboardOutput, IKeyboardChordOutput
+    {
+        public KeyboardKey[] Modifiers { get; private set; } = [];
+        public KeyboardKey Key { get; private set; }
+        public List<RecordedKeyboardEvent> FallbackEvents { get; } = [];
+
+        public void SendChord(ReadOnlySpan<KeyboardKey> modifiers, KeyboardKey key)
+        {
+            Modifiers = modifiers.ToArray();
+            Key = key;
+        }
+
+        public void SendKey(KeyboardKey key, KeyEventKind kind)
+            => FallbackEvents.Add(new RecordedKeyboardEvent(key, kind));
+
+        public void SendKeyPress(KeyboardKey key)
+        {
+            SendKey(key, KeyEventKind.Down);
+            SendKey(key, KeyEventKind.Up);
+        }
+
+        public void SendText(string text) { }
+        public bool IsToggleOn(ushort virtualKey) => false;
     }
 
     private sealed class RecordingKeyboardOutput : IKeyboardOutput

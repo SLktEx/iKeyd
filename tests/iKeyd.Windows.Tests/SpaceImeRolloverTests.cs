@@ -11,6 +11,46 @@ public sealed class SpaceImeRolloverTests
 {
     private static string ProfilePath => Path.Combine(AppContext.BaseDirectory, "Fixtures", "hotkeySKG.behavior.json");
 
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public void Roman_only_Space_A_uses_one_Shift_chord_without_literal_Space_even_with_composition(
+        bool repeatSpace, bool releaseSpaceFirst)
+    {
+        var kanaInputActive = WindowsInputMethod.IsRomaKanaConversionMode(0x10);
+        using var fixture = CreateRuntime(kanaInputActive, compositionActive: true);
+
+        Assert.False(kanaInputActive);
+        Assert.Equal(KeyboardDisposition.Suppress, Dispatch(fixture, WindowsKeyMap.Space, KeyEventKind.Down, 0));
+        if (repeatSpace)
+            Assert.Equal(KeyboardDisposition.Suppress, Dispatch(fixture, WindowsKeyMap.Space, KeyEventKind.Down, 5));
+        Assert.Equal(KeyboardDisposition.Suppress, Dispatch(fixture, 'A', KeyEventKind.Down, 10));
+        if (releaseSpaceFirst)
+        {
+            Assert.Equal(KeyboardDisposition.Suppress, Dispatch(fixture, WindowsKeyMap.Space, KeyEventKind.Up, 11));
+            Assert.Equal(KeyboardDisposition.Suppress, Dispatch(fixture, 'A', KeyEventKind.Up, 12));
+        }
+        else
+        {
+            Assert.Equal(KeyboardDisposition.Suppress, Dispatch(fixture, 'A', KeyEventKind.Up, 11));
+            Assert.Equal(KeyboardDisposition.Suppress, Dispatch(fixture, WindowsKeyMap.Space, KeyEventKind.Up, 12));
+        }
+
+        Assert.Equal(
+        [
+            Event(0xA0, KeyEventKind.Down),
+            Event('A', KeyEventKind.Down),
+            Event('A', KeyEventKind.Up),
+            Event(0xA0, KeyEventKind.Up)
+        ],
+        fixture.Output.Events);
+        Assert.Equal(1, fixture.Output.ChordCount);
+        Assert.DoesNotContain(fixture.Output.Events, item => item.Key.VirtualKey == WindowsKeyMap.Space);
+        Assert.Empty(fixture.Output.Text);
+    }
+
     [Fact]
     public void Ime_active_composition_Space_alphabet_rollover_commits_Space_once_and_passes_letters_through()
     {
@@ -203,8 +243,20 @@ public sealed class SpaceImeRolloverTests
         public bool IsCompositionActive() => compositionActive;
     }
 
-    private sealed class RecordingKeyboardOutput : IKeyboardOutput
+    private sealed class RecordingKeyboardOutput : IKeyboardOutput, IKeyboardChordOutput
     {
+        public int ChordCount { get; private set; }
+
+        public void SendChord(ReadOnlySpan<KeyboardKey> modifiers, KeyboardKey key)
+        {
+            ChordCount++;
+            foreach (var modifier in modifiers)
+                SendKey(modifier, KeyEventKind.Down);
+            SendKeyPress(key);
+            foreach (var modifier in modifiers)
+                SendKey(modifier, KeyEventKind.Up);
+        }
+
         public List<RecordedKeyboardEvent> Events { get; } = [];
         public List<string> Text { get; } = [];
 

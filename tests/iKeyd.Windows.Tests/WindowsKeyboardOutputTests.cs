@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Runtime.InteropServices;
 using iKeyd.App;
 using iKeyd.Core.Chords;
@@ -110,6 +111,138 @@ public sealed class WindowsKeyboardOutputTests
 
         Assert.NotEqual(0u, input.Data.Keyboard.Flags & 0x0001u);
         Assert.NotEqual(0u, input.Data.Keyboard.Flags & 0x0002u);
+    }
+
+    [Theory]
+    [InlineData((ushort)0xA2)] // Left Control
+    [InlineData((ushort)0xA4)] // Left Alt
+    public void Chord_batch_keeps_modifier_and_extended_navigation_key_in_one_ordered_buffer(ushort modifier)
+    {
+        var modifiers = new[] { new KeyboardKey(modifier, 0) };
+        var key = new KeyboardKey(0x27, 0, true);
+        var inputs = new WindowsKeyboardOutput.NativeInput[4];
+
+        WindowsKeyboardOutput.FillChordInputs(modifiers, key, inputs);
+
+        Assert.Equal(modifier, inputs[0].Data.Keyboard.VirtualKey);
+        Assert.Equal(0u, inputs[0].Data.Keyboard.Flags & 0x0002u);
+
+        Assert.Equal((ushort)0x27, inputs[1].Data.Keyboard.VirtualKey);
+        Assert.NotEqual(0u, inputs[1].Data.Keyboard.Flags & 0x0001u);
+        Assert.Equal(0u, inputs[1].Data.Keyboard.Flags & 0x0002u);
+
+        Assert.Equal((ushort)0x27, inputs[2].Data.Keyboard.VirtualKey);
+        Assert.NotEqual(0u, inputs[2].Data.Keyboard.Flags & 0x0001u);
+        Assert.NotEqual(0u, inputs[2].Data.Keyboard.Flags & 0x0002u);
+
+        Assert.Equal(modifier, inputs[3].Data.Keyboard.VirtualKey);
+        Assert.NotEqual(0u, inputs[3].Data.Keyboard.Flags & 0x0002u);
+        Assert.All(inputs, input => Assert.Equal(WindowsKeyboardOutput.InjectionMarker, input.Data.Keyboard.ExtraInfo));
+    }
+
+    [Theory]
+    [InlineData((ushort)0xDE, (ushort)0x0D)] // JIS caret / tilde
+    [InlineData((ushort)'1', (ushort)0x02)]
+    [InlineData((ushort)0x70, (ushort)0x3B)] // F1
+    public void Chord_batch_preserves_v1_physical_identity_replay(ushort virtualKey, ushort scanCode)
+    {
+        var modifiers = new[] { new KeyboardKey(0xA0, 0) };
+        var inputs = new WindowsKeyboardOutput.NativeInput[4];
+
+        WindowsKeyboardOutput.FillChordInputs(modifiers, new KeyboardKey(virtualKey, 0), inputs);
+
+        Assert.Equal((ushort)0xA0, inputs[0].Data.Keyboard.VirtualKey);
+        Assert.Equal((ushort)0, inputs[1].Data.Keyboard.VirtualKey);
+        Assert.Equal(scanCode, inputs[1].Data.Keyboard.ScanCode);
+        Assert.NotEqual(0u, inputs[1].Data.Keyboard.Flags & 0x0008u);
+        Assert.Equal((ushort)0, inputs[2].Data.Keyboard.VirtualKey);
+        Assert.Equal(scanCode, inputs[2].Data.Keyboard.ScanCode);
+        Assert.NotEqual(0u, inputs[2].Data.Keyboard.Flags & 0x0008u);
+        Assert.NotEqual(0u, inputs[2].Data.Keyboard.Flags & 0x0002u);
+        Assert.Equal((ushort)0xA0, inputs[3].Data.Keyboard.VirtualKey);
+    }
+
+    [Fact]
+    public void Successful_chord_is_one_native_call_with_two_modifiers()
+    {
+        var modifiers = new[] { new KeyboardKey(0xA2, 0), new KeyboardKey(0xA0, 0) };
+        var inputs = new WindowsKeyboardOutput.NativeInput[6];
+        WindowsKeyboardOutput.FillChordInputs(modifiers, new KeyboardKey(0x27, 0, true), inputs);
+        var calls = new List<WindowsKeyboardOutput.NativeInput[]>();
+
+        WindowsKeyboardOutput.SendChordInputs(inputs, batch =>
+        {
+            calls.Add(batch.ToArray());
+            return (uint)batch.Length;
+        });
+
+        Assert.Single(calls);
+        Assert.Equal(new ushort[] { 0xA2, 0xA0, 0x27, 0x27, 0xA2, 0xA0 },
+            calls[0].Select(input => input.Data.Keyboard.VirtualKey));
+    }
+
+    [Theory]
+    [InlineData(1u)]
+    [InlineData(2u)]
+    [InlineData(3u)]
+    public void Partially_sent_chord_attempts_only_key_up_cleanup(uint accepted)
+    {
+        var inputs = new WindowsKeyboardOutput.NativeInput[4];
+        WindowsKeyboardOutput.FillChordInputs([new KeyboardKey(0xA4, 0)], new KeyboardKey(0x27, 0, true), inputs);
+        var calls = new List<WindowsKeyboardOutput.NativeInput[]>();
+
+        var error = Assert.Throws<Win32Exception>(() => WindowsKeyboardOutput.SendChordInputs(inputs, batch =>
+        {
+            calls.Add(batch.ToArray());
+            return calls.Count == 1 ? accepted : (uint)batch.Length;
+        }));
+
+        Assert.Contains($"{accepted} of 4", error.Message);
+        Assert.Equal(2, calls.Count);
+        Assert.Equal(new ushort[] { 0x27, 0xA4 }, calls[1].Select(input => input.Data.Keyboard.VirtualKey));
+        Assert.All(calls[1], input => Assert.NotEqual(0u, input.Data.Keyboard.Flags & 0x0002u));
+        Assert.All(calls[1], input => Assert.Equal(WindowsKeyboardOutput.InjectionMarker, input.Data.Keyboard.ExtraInfo));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Partial_chord_preserves_original_error_when_cleanup_fails(bool cleanupThrows)
+    {
+        var inputs = new WindowsKeyboardOutput.NativeInput[4];
+        WindowsKeyboardOutput.FillChordInputs([new KeyboardKey(0xA4, 0)], new KeyboardKey(0x27, 0, true), inputs);
+        var calls = 0;
+        var error = Assert.Throws<Win32Exception>(() => WindowsKeyboardOutput.SendChordInputs(inputs, batch =>
+        {
+            calls++;
+            if (calls == 1)
+            {
+                Marshal.SetLastPInvokeError(5);
+                return 2;
+            }
+
+            Marshal.SetLastPInvokeError(6);
+            if (cleanupThrows)
+                throw new InvalidOperationException("Cleanup failed");
+            return 0;
+        }));
+
+        Assert.Equal(5, error.NativeErrorCode);
+        Assert.Equal(2, calls);
+    }
+
+    [Fact]
+    public void Completely_blocked_chord_does_not_inject_cleanup_or_retry()
+    {
+        var inputs = new WindowsKeyboardOutput.NativeInput[4];
+        WindowsKeyboardOutput.FillChordInputs([new KeyboardKey(0xA4, 0)], new KeyboardKey(0x27, 0, true), inputs);
+        var calls = 0;
+        Assert.Throws<Win32Exception>(() => WindowsKeyboardOutput.SendChordInputs(inputs, batch =>
+        {
+            calls++;
+            return 0;
+        }));
+        Assert.Equal(1, calls);
     }
 
     [Fact]

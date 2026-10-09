@@ -63,7 +63,10 @@ public sealed class WindowsClipboardController : IClipboardHistoryActions, IDisp
                 if ((uint)selectedPayloadIndex.Value >= (uint)payloadSnapshot.Count)
                     throw new InvalidOperationException("Clipboard payload picker returned an invalid index.");
 
-                PastePayload(_payloadHistory.Promote(selectedPayloadIndex.Value));
+                // The modal picker displays this snapshot while clipboard-change
+                // events can reorder or evict entries in the live history. Resolve
+                // the selection against what was shown; PastePayload promotes it.
+                PastePayload(payloadSnapshot[selectedPayloadIndex.Value]);
                 return true;
             }
         }
