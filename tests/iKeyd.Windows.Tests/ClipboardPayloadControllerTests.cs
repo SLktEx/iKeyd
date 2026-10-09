@@ -7,6 +7,66 @@ namespace iKeyd.Windows.Tests;
 
 public sealed class ClipboardPayloadControllerTests
 {
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public void Picker_selection_preserves_displayed_payload_when_live_history_changes(
+        bool selectImage, bool evictSelected)
+    {
+        var clipboard = new FakePayloadClipboardService();
+        var persistence = new RecordingHistoryPersistence();
+        var history = new ClipboardPayloadHistory(evictSelected ? 2 : 3, persistence);
+        var selected = selectImage
+            ? ClipboardPayload.FromImage([1, 2, 3, 4], "image/png")
+            : ClipboardPayload.FromText("selected text");
+        history.Record(selected);
+        history.Record(ClipboardPayload.FromText("latest before opening"));
+        var keyboard = new RecordingKeyboardOutput();
+        var picker = new FakePayloadPicker(1, () =>
+        {
+            clipboard.Payload = ClipboardPayload.FromText("copied while picker is open");
+            clipboard.RaiseChanged();
+        });
+
+        using var controller = new WindowsClipboardController(
+            clipboard, new ClipboardHistory(), new FakeTextPicker(), keyboard, history, picker);
+
+        Assert.True(controller.ShowPickerAndPaste());
+
+        Assert.Same(selected, picker.SeenItems[1]);
+        Assert.Same(selected, clipboard.Payload);
+        Assert.Same(selected, history.Items[0]);
+        Assert.Same(selected, persistence.SavedItems[0]);
+        Assert.Equal(history.Items, persistence.SavedItems);
+        Assert.Equal(history.Capacity, history.Count);
+        Assert.Single(keyboard.Presses);
+    }
+
+    [Fact]
+    public void Cancelling_payload_picker_after_history_changes_does_not_paste_a_different_entry()
+    {
+        var clipboard = new FakePayloadClipboardService();
+        var history = new ClipboardPayloadHistory();
+        history.Record(ClipboardPayload.FromText("visible entry"));
+        var incoming = ClipboardPayload.FromText("copied while picker is open");
+        var keyboard = new RecordingKeyboardOutput();
+        var picker = new FakePayloadPicker(null, () =>
+        {
+            clipboard.Payload = incoming;
+            clipboard.RaiseChanged();
+        });
+        using var controller = new WindowsClipboardController(
+            clipboard, new ClipboardHistory(), new FakeTextPicker(), keyboard, history, picker);
+
+        Assert.False(controller.ShowPickerAndPaste());
+
+        Assert.Same(incoming, clipboard.Payload);
+        Assert.Empty(keyboard.Events);
+        Assert.Empty(keyboard.Presses);
+    }
+
     [Fact]
     public void Image_history_selection_is_restored_and_pasted()
     {
@@ -142,9 +202,24 @@ public sealed class ClipboardPayloadControllerTests
         public int? Pick(IReadOnlyList<string> items) => null;
     }
 
-    private sealed class FakePayloadPicker(int? result) : IClipboardPayloadPicker
+    private sealed class FakePayloadPicker(int? result, Action? beforeSelection = null) : IClipboardPayloadPicker
     {
-        public int? Pick(IReadOnlyList<ClipboardPayload> items) => result;
+        public IReadOnlyList<ClipboardPayload> SeenItems { get; private set; } = [];
+
+        public int? Pick(IReadOnlyList<ClipboardPayload> items)
+        {
+            SeenItems = items;
+            beforeSelection?.Invoke();
+            return result;
+        }
+    }
+
+    private sealed class RecordingHistoryPersistence : IClipboardHistoryPersistence
+    {
+        public IReadOnlyList<ClipboardPayload> SavedItems { get; private set; } = [];
+        public IReadOnlyList<ClipboardPayload> Load() => [];
+        public void Save(IReadOnlyList<ClipboardPayload> items) => SavedItems = items.ToArray();
+        public void Clear() => SavedItems = [];
     }
 
     private sealed class RecordingKeyboardOutput : IKeyboardOutput
