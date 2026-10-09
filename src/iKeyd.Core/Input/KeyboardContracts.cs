@@ -55,3 +55,13 @@ public interface IKeyboardOutput
     void SendText(string text);
     bool IsToggleOn(ushort virtualKey);
 }
+
+/// <summary>
+/// Optional capability for backends that can emit a modifier chord as one native
+/// input transaction. This keeps modifier state and the target key contiguous for
+/// consumers such as terminal emulators that inspect the modifier snapshot.
+/// </summary>
+public interface IKeyboardChordOutput
+{
+    void SendChord(ReadOnlySpan<KeyboardKey> modifiers, KeyboardKey key);
+}

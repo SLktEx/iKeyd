@@ -5,7 +5,7 @@ using iKeyd.Core.Input;
 
 namespace iKeyd.Windows.Input;
 
-public sealed class WindowsKeyboardOutput : IKeyboardOutput
+public sealed class WindowsKeyboardOutput : IKeyboardOutput, IKeyboardChordOutput
 {
     private const uint InputKeyboard = 1;
     private const uint KeyEventExtended = 0x0001;
@@ -46,6 +46,46 @@ public sealed class WindowsKeyboardOutput : IKeyboardOutput
         inputs[0] = BuildKeyInput(key, KeyEventKind.Down);
         inputs[1] = BuildKeyInput(key, KeyEventKind.Up);
         Send(inputs);
+    }
+
+    public void SendChord(ReadOnlySpan<KeyboardKey> modifiers, KeyboardKey key)
+    {
+        if (UsesCombinedVirtualScanPath(key) || ContainsCombinedVirtualScanPath(modifiers))
+        {
+            foreach (var modifier in modifiers)
+                SendKey(modifier, KeyEventKind.Down);
+            try
+            {
+                SendKeyPress(key);
+            }
+            finally
+            {
+                foreach (var modifier in modifiers)
+                    SendKey(modifier, KeyEventKind.Up);
+            }
+            return;
+        }
+
+        var inputCount = checked(modifiers.Length * 2 + 2);
+        if (inputCount <= 16)
+        {
+            Span<NativeInput> inputs = stackalloc NativeInput[inputCount];
+            FillChordInputs(modifiers, key, inputs);
+            SendChordInputs(inputs, SendNative);
+            return;
+        }
+
+        var rented = ArrayPool<NativeInput>.Shared.Rent(inputCount);
+        try
+        {
+            var inputs = rented.AsSpan(0, inputCount);
+            FillChordInputs(modifiers, key, inputs);
+            SendChordInputs(inputs, SendNative);
+        }
+        finally
+        {
+            ArrayPool<NativeInput>.Shared.Return(rented, clearArray: false);
+        }
     }
 
     public void SendText(string text)
@@ -144,6 +184,38 @@ public sealed class WindowsKeyboardOutput : IKeyboardOutput
         }
     }
 
+    internal static void FillChordInputs(
+        ReadOnlySpan<KeyboardKey> modifiers,
+        KeyboardKey key,
+        Span<NativeInput> inputs)
+    {
+        var expectedLength = checked(modifiers.Length * 2 + 2);
+        if (inputs.Length != expectedLength)
+            throw new ArgumentException("Chord input buffer has the wrong length.", nameof(inputs));
+
+        var index = 0;
+        foreach (var modifier in modifiers)
+            inputs[index++] = BuildKeyInput(NormalizeIdentityReplayKey(modifier), KeyEventKind.Down);
+
+        inputs[index++] = BuildKeyInput(NormalizeIdentityReplayKey(key), KeyEventKind.Down);
+        inputs[index++] = BuildKeyInput(NormalizeIdentityReplayKey(key), KeyEventKind.Up);
+
+        // Match the legacy Send ordering: modifiers are released in the same order
+        // in which they were pressed.
+        foreach (var modifier in modifiers)
+            inputs[index++] = BuildKeyInput(NormalizeIdentityReplayKey(modifier), KeyEventKind.Up);
+    }
+
+    private static bool ContainsCombinedVirtualScanPath(ReadOnlySpan<KeyboardKey> keys)
+    {
+        foreach (var key in keys)
+        {
+            if (UsesCombinedVirtualScanPath(key))
+                return true;
+        }
+        return false;
+    }
+
     private static ushort IdentityReplayScanCode(ushort virtualKey)
     {
         if (virtualKey is >= '1' and <= '9')
@@ -208,16 +280,49 @@ public sealed class WindowsKeyboardOutput : IKeyboardOutput
             }
         };
 
-    private static unsafe void Send(ReadOnlySpan<NativeInput> inputs)
+    internal delegate uint NativeInputSender(ReadOnlySpan<NativeInput> inputs);
+
+    internal static void SendChordInputs(ReadOnlySpan<NativeInput> inputs, NativeInputSender send)
+    {
+        var sent = send(inputs);
+        if (sent == (uint)inputs.Length)
+            return;
+
+        var error = Marshal.GetLastWin32Error();
+        if (sent > 0)
+        {
+            // A partial SendInput result can leave a modifier or the target key
+            // down. Preserve the old sequential path's best-effort release, but
+            // never retry the key-down portion of a partially emitted chord.
+            var modifierCount = (inputs.Length - 2) / 2;
+            try
+            {
+                _ = send(inputs[(modifierCount + 1)..]);
+            }
+            catch
+            {
+                // Report the original injection failure even if cleanup fails.
+            }
+        }
+
+        throw new Win32Exception(error, $"SendInput sent {sent} of {inputs.Length} events.");
+    }
+
+    private static void Send(ReadOnlySpan<NativeInput> inputs)
     {
         if (inputs.Length == 0)
             return;
 
+        var sent = SendNative(inputs);
+        if (sent != (uint)inputs.Length)
+            throw new Win32Exception(Marshal.GetLastWin32Error(), $"SendInput sent {sent} of {inputs.Length} events.");
+    }
+
+    private static unsafe uint SendNative(ReadOnlySpan<NativeInput> inputs)
+    {
         fixed (NativeInput* pointer = inputs)
         {
-            var sent = NativeMethods.SendInput((uint)inputs.Length, pointer, sizeof(NativeInput));
-            if (sent != (uint)inputs.Length)
-                throw new Win32Exception(Marshal.GetLastWin32Error(), $"SendInput sent {sent} of {inputs.Length} events.");
+            return NativeMethods.SendInput((uint)inputs.Length, pointer, sizeof(NativeInput));
         }
     }
 

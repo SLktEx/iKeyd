@@ -48,6 +48,53 @@ public sealed class RealInputRegressionTests
     }
 
     [Theory]
+    [InlineData(false, false)]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public void Function_navigation_emits_one_atomic_chord_and_no_trailing_layer_tap(
+        bool altRight, bool releaseFirstLayerFirst)
+    {
+        using var fixture = CreateRuntime(InputMode.R);
+        var first = altRight ? WindowsKeyMap.NonConvert : WindowsKeyMap.Convert;
+        var second = altRight ? WindowsKeyMap.Convert : WindowsKeyMap.NonConvert;
+        var target = (ushort)(altRight ? 'N' : 'L');
+        var modifier = altRight ? WindowsKeyMap.LeftAlt : WindowsKeyMap.LeftControl;
+
+        Assert.Equal(KeyboardDisposition.Suppress, Dispatch(fixture, first, KeyEventKind.Down, 0));
+        Assert.Equal(KeyboardDisposition.Suppress, Dispatch(fixture, second, KeyEventKind.Down, 10));
+        Assert.Equal(KeyboardDisposition.Suppress, Dispatch(fixture, target, KeyEventKind.Down, 20));
+        Assert.Equal(KeyboardDisposition.Suppress, Dispatch(fixture, target, KeyEventKind.Up, 21));
+        Assert.Equal(KeyboardDisposition.Suppress, Dispatch(fixture, releaseFirstLayerFirst ? first : second, KeyEventKind.Up, 30));
+        Assert.Equal(KeyboardDisposition.Suppress, Dispatch(fixture, releaseFirstLayerFirst ? second : first, KeyEventKind.Up, 40));
+
+        Assert.Equal(
+        [
+            new RecordedKeyboardEvent(WindowsKeyMap.Keyboard(modifier), KeyEventKind.Down),
+            new RecordedKeyboardEvent(WindowsKeyMap.Keyboard(WindowsKeyMap.Right), KeyEventKind.Down),
+            new RecordedKeyboardEvent(WindowsKeyMap.Keyboard(WindowsKeyMap.Right), KeyEventKind.Up),
+            new RecordedKeyboardEvent(WindowsKeyMap.Keyboard(modifier), KeyEventKind.Up)
+        ],
+        fixture.Output.Events);
+        Assert.Equal(1, fixture.Output.ChordCount);
+        Assert.Empty(fixture.Output.Text);
+    }
+
+    [Theory]
+    [InlineData(WindowsKeyMap.LeftAlt)]
+    [InlineData(WindowsKeyMap.RightAlt)]
+    public void Physical_Alt_Right_remains_transparent(ushort alt)
+    {
+        using var fixture = CreateRuntime(InputMode.R);
+        Assert.Equal(KeyboardDisposition.PassThrough, Dispatch(fixture, alt, KeyEventKind.Down, 0));
+        Assert.Equal(KeyboardDisposition.PassThrough, Dispatch(fixture, WindowsKeyMap.Right, KeyEventKind.Down, 10));
+        Assert.Equal(KeyboardDisposition.PassThrough, Dispatch(fixture, WindowsKeyMap.Right, KeyEventKind.Up, 20));
+        Assert.Equal(KeyboardDisposition.PassThrough, Dispatch(fixture, alt, KeyEventKind.Up, 30));
+        Assert.Empty(fixture.Output.Events);
+        Assert.Empty(fixture.Output.Text);
+    }
+
+    [Theory]
     [InlineData(true, "～")]
     [InlineData(false, "~")]
     public void Function_layer_text_output_follows_japanese_input_width(bool kanaInputActive, string expected)
@@ -286,8 +333,20 @@ public sealed class RealInputRegressionTests
         public bool IsKanaInputActive() => kanaInputActive;
     }
 
-    private sealed class RecordingKeyboardOutput : IKeyboardOutput
+    private sealed class RecordingKeyboardOutput : IKeyboardOutput, IKeyboardChordOutput
     {
+        public int ChordCount { get; private set; }
+
+        public void SendChord(ReadOnlySpan<KeyboardKey> modifiers, KeyboardKey key)
+        {
+            ChordCount++;
+            foreach (var modifier in modifiers)
+                SendKey(modifier, KeyEventKind.Down);
+            SendKeyPress(key);
+            foreach (var modifier in modifiers)
+                SendKey(modifier, KeyEventKind.Up);
+        }
+
         public List<RecordedKeyboardEvent> Events { get; } = [];
         public List<string> Text { get; } = [];
 
