@@ -148,6 +148,13 @@ internal sealed class IKeydRuntimeHandler : IKeyboardEventHandler, IInputStateRe
             }
             catch (Exception error)
             {
+                // WindowsKeyboardHook fails open when this handler throws. Track
+                // that physical event too, so a later remapped repeat cannot
+                // suppress the release of a down delivered during recovery.
+                if (keyboardEvent.Kind == KeyEventKind.Down)
+                    _passthroughKeys.Add(keyboardEvent.Key);
+                else
+                    _passthroughKeys.Remove(keyboardEvent.Key);
                 var failed = CaptureDiagnosticState();
                 ResetInputStateCore();
                 var recovered = CaptureDiagnosticState();
