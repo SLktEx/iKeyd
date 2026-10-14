@@ -51,12 +51,22 @@ jobs:
       - name: Create release archive
         shell: pwsh
         run: Compress-Archive -Path artifacts/iKeyd-win-x64/* -DestinationPath artifacts/iKeyd-win-x64.zip -Force
+      - name: Create release checksums
+        shell: pwsh
+        run: |
+          $files = @('artifacts/iKeyd-win-x64.zip', 'artifacts/iKeyd-win-x64/iKeyd.exe')
+          $checksums = foreach ($file in $files) {
+            $hash = (Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash.ToLowerInvariant()
+            '{0}  {1}' -f $hash, [IO.Path]::GetFileName($file)
+          }
+          $checksums | Set-Content -LiteralPath artifacts/SHA256SUMS -Encoding ascii
       - uses: actions/upload-artifact@v4
         with:
           name: iKeyd-win-x64
           path: |
             artifacts/iKeyd-win-x64/**
             artifacts/iKeyd-win-x64.zip
+            artifacts/SHA256SUMS
           if-no-files-found: error
 
   release:
@@ -98,9 +108,14 @@ jobs:
             "$RELEASE_TAG"
             artifacts/iKeyd-win-x64.zip
             artifacts/iKeyd-win-x64/iKeyd.exe
+            artifacts/SHA256SUMS
             --generate-notes
             --title "iKeyd $RELEASE_TAG"
           )
+          notes="docs/releases/$RELEASE_TAG.md"
+          if [[ -f "$notes" ]]; then
+            args+=(--notes-file "$notes")
+          fi
           if [[ "$VERIFY_TAG" == "true" ]]; then
             args+=(--verify-tag)
           else

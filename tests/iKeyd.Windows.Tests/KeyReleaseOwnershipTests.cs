@@ -1,5 +1,6 @@
 using iKeyd.App;
 using iKeyd.Core.Chords;
+using iKeyd.Core.Configuration;
 using iKeyd.Core.Desktop;
 using iKeyd.Core.Input;
 using iKeyd.Profiles.HotkeySkg.Modes;
@@ -36,6 +37,130 @@ public sealed class KeyReleaseOwnershipTests
         Assert.Equal(KeyboardDisposition.PassThrough, fixture.Up(KeyCode.J));
         Assert.Equal(KeyboardDisposition.Suppress, fixture.Up(KeyCode.NonConvert));
 
+        Assert.Empty(fixture.Output.DownKeys);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Remapped_repeat_preserves_release_after_a_failed_down_passes_through(bool layerFirst)
+    {
+        using var fixture = new RuntimeFixture();
+        fixture.Output.Events = [];
+        var failure = new InvalidOperationException("Simulated output failure.");
+
+        fixture.Down(KeyCode.NonConvert);
+        fixture.Output.NextKeyPressFailure = failure;
+        // WindowsKeyboardHook resets the handler and passes this physical down
+        // through after an exception. Model that contract without a native hook.
+        Assert.Equal(KeyboardDisposition.PassThrough, fixture.DownWithHookRecovery(KeyCode.J));
+        Assert.Same(failure, fixture.HookFailure);
+        Assert.Contains((ushort)'J', fixture.Output.DownKeys);
+        fixture.Up(KeyCode.NonConvert);
+
+        fixture.Down(KeyCode.NonConvert);
+        Assert.Equal(KeyboardDisposition.Suppress, fixture.Down(KeyCode.J));
+        if (layerFirst)
+            fixture.Up(KeyCode.NonConvert);
+        Assert.Equal(KeyboardDisposition.PassThrough, fixture.Up(KeyCode.J));
+        if (!layerFirst)
+            fixture.Up(KeyCode.NonConvert);
+        Assert.Empty(fixture.Output.DownKeys);
+
+        // The recovery ownership ends at key-up and must not leak to a new hold.
+        fixture.Down(KeyCode.NonConvert);
+        fixture.Down(KeyCode.J);
+        Assert.Equal(KeyboardDisposition.Suppress, fixture.Up(KeyCode.J));
+        fixture.Up(KeyCode.NonConvert);
+        Assert.Empty(fixture.Output.DownKeys);
+        Assert.Single(fixture.Output.Events.Where(e => e.Key.VirtualKey == 'J' && e.Kind == KeyEventKind.Up));
+    }
+
+    [Fact]
+    public void Failed_keyup_clears_recovery_ownership_before_the_next_hold()
+    {
+        // Keep pending chord output deterministic; no timer should flush it first.
+        using var fixture = new RuntimeFixture(chordWindowMs: 60_000);
+        fixture.Output.Events = [];
+        fixture.SetMode(InputMode.S);
+        fixture.SetMode(InputMode.T);
+        Assert.Equal(KeyboardDisposition.Suppress, fixture.Down(KeyCode.J));
+        var downFailure = new InvalidOperationException("Pending output failed.");
+        fixture.Output.NextKeyPressFailure = downFailure;
+        Assert.Equal(KeyboardDisposition.PassThrough, fixture.DownWithHookRecovery(KeyCode.Space));
+        Assert.Same(downFailure, fixture.HookFailure);
+
+        fixture.SetMode(InputMode.R);
+        fixture.Down(KeyCode.Space);
+        var upFailure = new InvalidOperationException("Layer tap output failed.");
+        fixture.Output.NextKeyPressFailure = upFailure;
+        Assert.Equal(KeyboardDisposition.PassThrough, fixture.UpWithHookRecovery(KeyCode.Space));
+        Assert.Same(upFailure, fixture.HookFailure);
+
+        fixture.Down(KeyCode.Space);
+        fixture.Down(KeyCode.A);
+        Assert.Equal(KeyboardDisposition.Suppress, fixture.Up(KeyCode.Space));
+        Assert.Equal(KeyboardDisposition.Suppress, fixture.Up(KeyCode.A));
+        fixture.Up(KeyCode.J);
+        Assert.Single(fixture.Output.Events.Where(e => e.Key.VirtualKey == WindowsKeyMap.Space && e.Kind == KeyEventKind.Up));
+        Assert.Empty(fixture.Output.DownKeys);
+    }
+
+    [Theory]
+    [InlineData(KeyEventOrigin.Injected)]
+    [InlineData(KeyEventOrigin.OwnInjected)]
+    public void Injected_down_does_not_create_physical_release_ownership(KeyEventOrigin origin)
+    {
+        using var fixture = new RuntimeFixture();
+        fixture.Output.Events = [];
+        Assert.Equal(KeyboardDisposition.PassThrough, fixture.Injected(KeyCode.J, KeyEventKind.Down, origin));
+        fixture.Down(KeyCode.NonConvert);
+        fixture.Down(KeyCode.J);
+        Assert.Equal(KeyboardDisposition.Suppress, fixture.Up(KeyCode.J));
+        Assert.Equal(KeyboardDisposition.PassThrough, fixture.Injected(KeyCode.J, KeyEventKind.Up, origin));
+        fixture.Up(KeyCode.NonConvert);
+        Assert.DoesNotContain(fixture.Output.Events, e => e.Key.VirtualKey == 'J');
+        Assert.Empty(fixture.Output.DownKeys);
+    }
+
+    [Theory]
+    [InlineData(KeyEventOrigin.Injected, false)]
+    [InlineData(KeyEventOrigin.OwnInjected, false)]
+    [InlineData(KeyEventOrigin.Injected, true)]
+    [InlineData(KeyEventOrigin.OwnInjected, true)]
+    public void Injected_up_does_not_clear_physical_release_ownership(KeyEventOrigin origin, bool recover)
+    {
+        using var fixture = new RuntimeFixture();
+        fixture.Output.Events = [];
+        if (recover)
+        {
+            fixture.Down(KeyCode.NonConvert);
+            fixture.Output.NextKeyPressFailure = new InvalidOperationException("Simulated output failure.");
+            Assert.Equal(KeyboardDisposition.PassThrough, fixture.DownWithHookRecovery(KeyCode.J));
+            fixture.Up(KeyCode.NonConvert);
+        }
+        else
+        {
+            Assert.Equal(KeyboardDisposition.PassThrough, fixture.Down(KeyCode.J));
+        }
+        fixture.Down(KeyCode.NonConvert);
+        Assert.Equal(KeyboardDisposition.Suppress, fixture.Down(KeyCode.J));
+        Assert.Equal(KeyboardDisposition.PassThrough, fixture.Injected(KeyCode.J, KeyEventKind.Up, origin));
+        Assert.Equal(KeyboardDisposition.PassThrough, fixture.Up(KeyCode.J));
+        fixture.Up(KeyCode.NonConvert);
+        Assert.Single(fixture.Output.Events.Where(e => e.Key.VirtualKey == 'J' && e.Kind == KeyEventKind.Up));
+        Assert.Empty(fixture.Output.DownKeys);
+    }
+
+    [Fact]
+    public void Ordinary_passthrough_repeats_deliver_exactly_one_keyup()
+    {
+        using var fixture = new RuntimeFixture();
+        fixture.Output.Events = [];
+        for (var repeat = 0; repeat < 3; repeat++)
+            Assert.Equal(KeyboardDisposition.PassThrough, fixture.Down(KeyCode.J));
+        Assert.Equal(KeyboardDisposition.PassThrough, fixture.Up(KeyCode.J));
+        Assert.Single(fixture.Output.Events.Where(e => e.Key.VirtualKey == 'J' && e.Kind == KeyEventKind.Up));
         Assert.Empty(fixture.Output.DownKeys);
     }
 
@@ -163,9 +288,11 @@ public sealed class KeyReleaseOwnershipTests
         private readonly BehaviorWindowsInputRouter _router;
         private long _timestamp;
 
-        public RuntimeFixture()
+        public RuntimeFixture(int? chordWindowMs = null)
         {
             var configuration = GeneratedProfile.Create() with { StartupMode = InputMode.R };
+            if (chordWindowMs is { } window)
+                configuration = configuration with { Profile = new AutomationProfile(window, configuration.Profile.Keymaps.Values) };
             var inputMethod = new FixedInputMethod();
             var send = new LegacySendOutput(Output);
             _runtime = new IKeydRuntimeHandler(configuration, inputMethod, _state, send, new NullDesktopBackend());
@@ -178,22 +305,46 @@ public sealed class KeyReleaseOwnershipTests
         }
 
         public RecordingKeyboardOutput Output { get; } = new();
+        public Exception? HookFailure { get; private set; }
         public KeyboardDisposition Down(KeyCode code) => Dispatch(code, KeyEventKind.Down);
+        public KeyboardDisposition DownWithHookRecovery(KeyCode code) => Dispatch(code, KeyEventKind.Down, recover: true);
+        public KeyboardDisposition UpWithHookRecovery(KeyCode code) => Dispatch(code, KeyEventKind.Up, recover: true);
         public KeyboardDisposition Up(KeyCode code) => Dispatch(code, KeyEventKind.Up);
         public void SetMode(InputMode mode) => _runtime.SetMode(mode);
         public void Reset() => _router.ResetInputState();
 
-        private KeyboardDisposition Dispatch(KeyCode code, KeyEventKind kind)
+        public KeyboardDisposition Injected(KeyCode code, KeyEventKind kind, KeyEventOrigin origin)
         {
             var key = WindowsKeyMap.Jis109PhysicalBindings.Single(binding => binding.Code == code).WindowsKey;
-            return Dispatch(key, kind);
+            var keyboardEvent = new KeyboardEvent(key, kind, origin, _timestamp++);
+            if (origin != KeyEventOrigin.OwnInjected)
+                _state.Apply(keyboardEvent);
+            // Deliver only to the routing code: injected events already exist
+            // downstream and must not be re-emitted by the handler under test.
+            return _router.OnKeyboardEvent(keyboardEvent);
         }
 
-        public KeyboardDisposition Dispatch(KeyboardKey key, KeyEventKind kind)
+        private KeyboardDisposition Dispatch(KeyCode code, KeyEventKind kind, bool recover = false)
+        {
+            var key = WindowsKeyMap.Jis109PhysicalBindings.Single(binding => binding.Code == code).WindowsKey;
+            return Dispatch(key, kind, recover);
+        }
+
+        public KeyboardDisposition Dispatch(KeyboardKey key, KeyEventKind kind, bool recover = false)
         {
             var keyboardEvent = new KeyboardEvent(key, kind, KeyEventOrigin.Physical, _timestamp++);
             _state.Apply(keyboardEvent);
-            var disposition = _router.OnKeyboardEvent(keyboardEvent);
+            KeyboardDisposition disposition;
+            try
+            {
+                disposition = _router.OnKeyboardEvent(keyboardEvent);
+            }
+            catch (Exception error) when (recover)
+            {
+                HookFailure = error;
+                _router.ResetInputState();
+                disposition = KeyboardDisposition.PassThrough;
+            }
             if (disposition == KeyboardDisposition.PassThrough)
                 Output.SendKey(key, kind);
             return disposition;
@@ -216,8 +367,11 @@ public sealed class KeyReleaseOwnershipTests
     private sealed class RecordingKeyboardOutput : IKeyboardOutput
     {
         public HashSet<ushort> DownKeys { get; } = [];
+        public List<(KeyboardKey Key, KeyEventKind Kind)>? Events { get; set; }
+        public Exception? NextKeyPressFailure { get; set; }
         public void SendKey(KeyboardKey key, KeyEventKind kind)
         {
+            Events?.Add((key, kind));
             if (kind == KeyEventKind.Down)
                 DownKeys.Add(key.VirtualKey);
             else
@@ -225,6 +379,11 @@ public sealed class KeyReleaseOwnershipTests
         }
         public void SendKeyPress(KeyboardKey key)
         {
+            if (NextKeyPressFailure is { } failure)
+            {
+                NextKeyPressFailure = null;
+                throw failure;
+            }
             SendKey(key, KeyEventKind.Down);
             SendKey(key, KeyEventKind.Up);
         }
