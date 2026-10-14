@@ -73,7 +73,7 @@ public sealed class KeyReleaseOwnershipTests
         Assert.Equal(KeyboardDisposition.Suppress, fixture.Up(KeyCode.J));
         fixture.Up(KeyCode.NonConvert);
         Assert.Empty(fixture.Output.DownKeys);
-        Assert.Single(fixture.Output.Events.Where(e => e.Key.VirtualKey == 'J' && e.Kind == KeyEventKind.Up));
+        Assert.Single(fixture.Output.Events, e => e.Key.VirtualKey == 'J' && e.Kind == KeyEventKind.Up);
     }
 
     [Fact]
@@ -102,7 +102,7 @@ public sealed class KeyReleaseOwnershipTests
         Assert.Equal(KeyboardDisposition.Suppress, fixture.Up(KeyCode.Space));
         Assert.Equal(KeyboardDisposition.Suppress, fixture.Up(KeyCode.A));
         fixture.Up(KeyCode.J);
-        Assert.Single(fixture.Output.Events.Where(e => e.Key.VirtualKey == WindowsKeyMap.Space && e.Kind == KeyEventKind.Up));
+        Assert.Single(fixture.Output.Events, e => e.Key.VirtualKey == WindowsKeyMap.Space && e.Kind == KeyEventKind.Up);
         Assert.Empty(fixture.Output.DownKeys);
     }
 
@@ -148,7 +148,7 @@ public sealed class KeyReleaseOwnershipTests
         Assert.Equal(KeyboardDisposition.PassThrough, fixture.Injected(KeyCode.J, KeyEventKind.Up, origin));
         Assert.Equal(KeyboardDisposition.PassThrough, fixture.Up(KeyCode.J));
         fixture.Up(KeyCode.NonConvert);
-        Assert.Single(fixture.Output.Events.Where(e => e.Key.VirtualKey == 'J' && e.Kind == KeyEventKind.Up));
+        Assert.Single(fixture.Output.Events, e => e.Key.VirtualKey == 'J' && e.Kind == KeyEventKind.Up);
         Assert.Empty(fixture.Output.DownKeys);
     }
 
@@ -160,7 +160,7 @@ public sealed class KeyReleaseOwnershipTests
         for (var repeat = 0; repeat < 3; repeat++)
             Assert.Equal(KeyboardDisposition.PassThrough, fixture.Down(KeyCode.J));
         Assert.Equal(KeyboardDisposition.PassThrough, fixture.Up(KeyCode.J));
-        Assert.Single(fixture.Output.Events.Where(e => e.Key.VirtualKey == 'J' && e.Kind == KeyEventKind.Up));
+        Assert.Single(fixture.Output.Events, e => e.Key.VirtualKey == 'J' && e.Kind == KeyEventKind.Up);
         Assert.Empty(fixture.Output.DownKeys);
     }
 
