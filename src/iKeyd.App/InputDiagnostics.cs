@@ -217,7 +217,12 @@ internal sealed class InputDiagnosticsBuffer
         return text.ToString();
     }
 
-    private static char QueryResult(bool? value) => value is { } observed ? (observed ? '1' : '0') : '?';
+    private static char QueryResult(bool? value) => value switch
+    {
+        true => '1',
+        false => '0',
+        null => '?'
+    };
 
     internal static ulong Fingerprint(string value)
     {
