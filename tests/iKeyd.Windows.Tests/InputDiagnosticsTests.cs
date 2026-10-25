@@ -29,13 +29,42 @@ public sealed class InputDiagnosticsTests
                     index),
                 state,
                 state,
-                KeyboardDisposition.PassThrough);
+                KeyboardDisposition.PassThrough,
+                new SpaceImeRolloverDiagnostic(SpaceImeRolloverDecision.Committed, index, 40, true, true, SpaceImeSendStatus.Returned));
         }
 
         var snapshot = diagnostics.Snapshot();
         Assert.Equal(InputDiagnosticsBuffer.Capacity, snapshot.Length);
         Assert.Equal(8, snapshot[0].Sequence);
         Assert.Equal(InputDiagnosticsBuffer.Capacity + 7, snapshot[^1].Sequence);
+        Assert.Equal(7, snapshot[0].Rollover.ElapsedMs);
+        Assert.Equal(InputDiagnosticsBuffer.Capacity + 6, snapshot[^1].Rollover.ElapsedMs);
+        Assert.Equal(InputDiagnosticsBuffer.Capacity, diagnostics.ExportText().Split('\n').Count(line => line.Contains("/elapsedMs=", StringComparison.Ordinal)));
+    }
+
+    [Fact]
+    public void Rollover_export_uses_only_structured_observations_and_explicit_unknowns()
+    {
+        var diagnostics = new InputDiagnosticsBuffer();
+        var state = EmptyState();
+        foreach (var decision in Enum.GetValues<SpaceImeRolloverDecision>())
+            diagnostics.RecordEvent(new KeyboardEvent(new KeyboardKey('A', 0), KeyEventKind.Down, KeyEventOrigin.Physical, 10),
+                state, state, KeyboardDisposition.PassThrough,
+                new SpaceImeRolloverDiagnostic(decision, KanaActive: false));
+        diagnostics.RecordEvent(new KeyboardEvent(new KeyboardKey('A', 0), KeyEventKind.Down, KeyEventOrigin.Physical, 20),
+            state, state, KeyboardDisposition.PassThrough,
+            new SpaceImeRolloverDiagnostic(SpaceImeRolloverDecision.Committed, 10, 40, true, true, SpaceImeSendStatus.Returned));
+        diagnostics.RecordOutput(21, InputDiagnosticKind.KeymapOutputKeys, state, "fa");
+        var text = diagnostics.ExportText();
+        Assert.Contains("/elapsedMs=?/thresholdMs=?/kana=0/composition=?/send=NotAttempted", text, StringComparison.Ordinal);
+        Assert.Contains("Committed/elapsedMs=10/thresholdMs=40/kana=1/composition=1/send=Returned", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("fa", text, StringComparison.OrdinalIgnoreCase);
+        // The record cannot accept private payload strings, handles or native objects.
+        Assert.All(typeof(SpaceImeRolloverDiagnostic).GetProperties(), property =>
+        {
+            var type = Nullable.GetUnderlyingType(property.PropertyType) ?? property.PropertyType;
+            Assert.True(type.IsEnum || type == typeof(bool) || type == typeof(int) || type == typeof(long));
+        });
     }
 
     [Fact]

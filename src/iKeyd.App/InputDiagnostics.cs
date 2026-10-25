@@ -17,6 +17,39 @@ internal enum InputDiagnosticKind : byte
     InvariantViolation
 }
 
+internal enum SpaceImeRolloverDecision : byte
+{
+    NotApplicable,
+    Committed,
+    Continuation,
+    Consumed,
+    NotKana,
+    CompositionUnavailable,
+    NoComposition,
+    NotAlphabet,
+    MissingPress,
+    TimestampReversed,
+    LongHold,
+    Interrupted
+}
+
+internal enum SpaceImeSendStatus : byte
+{
+    NotAttempted,
+    Attempted,
+    Returned
+}
+
+// Event-local observations only. Null means the short-circuit path did not obtain
+// that value. Returned means the output call completed, not proof of OS delivery.
+internal readonly record struct SpaceImeRolloverDiagnostic(
+    SpaceImeRolloverDecision Decision,
+    long? ElapsedMs = null,
+    int? ThresholdMs = null,
+    bool? KanaActive = null,
+    bool? CompositionActive = null,
+    SpaceImeSendStatus SpaceSend = SpaceImeSendStatus.NotAttempted);
+
 internal readonly record struct InputDiagnosticState(
     LayerModifiers LayerModifiers,
     byte LayerCount,
@@ -44,7 +77,8 @@ internal readonly record struct InputDiagnosticEntry(
     InputDiagnosticState After,
     int PayloadLength,
     ulong PayloadFingerprint,
-    int DetailCode);
+    int DetailCode,
+    SpaceImeRolloverDiagnostic Rollover = default);
 
 /// <summary>
 /// Fixed-size in-memory trace of recent input state transitions. It deliberately
@@ -66,7 +100,8 @@ internal sealed class InputDiagnosticsBuffer
         KeyboardEvent keyboardEvent,
         InputDiagnosticState before,
         InputDiagnosticState after,
-        KeyboardDisposition disposition)
+        KeyboardDisposition disposition,
+        SpaceImeRolloverDiagnostic rollover = default)
         => Add(new InputDiagnosticEntry(
             ++_sequence,
             keyboardEvent.TimestampMs,
@@ -81,7 +116,8 @@ internal sealed class InputDiagnosticsBuffer
             after,
             0,
             0,
-            0));
+            0,
+            rollover));
 
     public void RecordOutput(
         long timestampMs,
@@ -142,7 +178,8 @@ internal sealed class InputDiagnosticsBuffer
         var text = new StringBuilder(entries.Length * 196 + 256);
         text.AppendLine("iKeyd input diagnostics");
         text.AppendLine("Privacy: no literal keymap output text is stored; payloads are length + fingerprint only.");
-        text.AppendLine("seq\tts\tkind\tkey\tevent\tdisposition\tbefore\tafter\tpayload\tdetail");
+        text.AppendLine("Rollover: ? = not obtained on this path; kana/composition = 1/0 query result; send Returned = call completed, delivery unverified.");
+        text.AppendLine("seq\tts\tkind\tkey\tevent\tdisposition\tbefore\tafter\tpayload\tdetail\trollover");
 
         foreach (var entry in entries)
         {
@@ -161,12 +198,31 @@ internal sealed class InputDiagnosticsBuffer
                 .Append("len=").Append(entry.PayloadLength)
                 .Append("/fp=").Append(entry.PayloadFingerprint.ToString("X16"))
                 .Append('\t')
-                .Append(entry.DetailCode)
-                .AppendLine();
+                .Append(entry.DetailCode).Append('\t');
+            if (entry.DiagnosticKind == InputDiagnosticKind.Event)
+            {
+                var rollover = entry.Rollover;
+                text.Append(rollover.Decision)
+                    .Append("/elapsedMs=").Append(rollover.ElapsedMs?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "?")
+                    .Append("/thresholdMs=").Append(rollover.ThresholdMs?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "?")
+                    .Append("/kana=").Append(QueryResult(rollover.KanaActive))
+                    .Append("/composition=").Append(QueryResult(rollover.CompositionActive))
+                    .Append("/send=").Append(rollover.SpaceSend);
+            }
+            else
+                text.Append('-');
+            text.AppendLine();
         }
 
         return text.ToString();
     }
+
+    private static char QueryResult(bool? value) => value switch
+    {
+        true => '1',
+        false => '0',
+        null => '?'
+    };
 
     internal static ulong Fingerprint(string value)
     {

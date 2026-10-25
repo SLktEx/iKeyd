@@ -126,9 +126,10 @@ internal sealed class IKeydRuntimeHandler : IKeyboardEventHandler, IInputStateRe
                 return KeyboardDisposition.PassThrough;
 
             var before = CaptureDiagnosticState();
+            SpaceImeRolloverDiagnostic rollover = default;
             try
             {
-                var disposition = HandlePhysicalKeyboardEventCore(keyboardEvent);
+                var disposition = HandlePhysicalKeyboardEventCore(keyboardEvent, ref rollover);
                 // A repeat may change routes when a layer or mode changes during
                 // the hold. Once any physical down reaches the target, its up
                 // must also reach it, even if another repeat was suppressed.
@@ -142,7 +143,7 @@ internal sealed class IKeydRuntimeHandler : IKeyboardEventHandler, IInputStateRe
                     disposition = KeyboardDisposition.PassThrough;
                 }
                 var after = CaptureDiagnosticState();
-                _diagnostics.RecordEvent(keyboardEvent, before, after, disposition);
+                _diagnostics.RecordEvent(keyboardEvent, before, after, disposition, rollover);
                 RecoverIfInvariantBroken(keyboardEvent.TimestampMs);
                 return disposition;
             }
@@ -156,6 +157,9 @@ internal sealed class IKeydRuntimeHandler : IKeyboardEventHandler, IInputStateRe
                 else
                     _passthroughKeys.Remove(keyboardEvent.Key);
                 var failed = CaptureDiagnosticState();
+                // Preserve observations even when an IME query or Space output
+                // throws. The hook's existing exception path passes this event on.
+                _diagnostics.RecordEvent(keyboardEvent, before, failed, KeyboardDisposition.PassThrough, rollover);
                 ResetInputStateCore();
                 var recovered = CaptureDiagnosticState();
                 _diagnostics.RecordMarker(
@@ -169,7 +173,8 @@ internal sealed class IKeydRuntimeHandler : IKeyboardEventHandler, IInputStateRe
         }
     }
 
-    private KeyboardDisposition HandlePhysicalKeyboardEventCore(KeyboardEvent keyboardEvent)
+    private KeyboardDisposition HandlePhysicalKeyboardEventCore(
+        KeyboardEvent keyboardEvent, ref SpaceImeRolloverDiagnostic rollover)
     {
         if (TryHandleLayerKey(keyboardEvent))
             return KeyboardDisposition.Suppress;
@@ -189,7 +194,7 @@ internal sealed class IKeydRuntimeHandler : IKeyboardEventHandler, IInputStateRe
 
         if (_layers.Layers.Count != 0)
         {
-            if (keyId is not null && TryHandleImeSpaceAlphabetRollover(keyId.Value, keyboardEvent.TimestampMs))
+            if (keyId is not null && TryHandleImeSpaceAlphabetRollover(keyId.Value, keyboardEvent.TimestampMs, ref rollover))
             {
                 _layers = _layers.MarkConsumed();
                 return KeyboardDisposition.PassThrough;
@@ -416,7 +421,8 @@ internal sealed class IKeydRuntimeHandler : IKeyboardEventHandler, IInputStateRe
     private static bool IsLayerTrigger(KeyCode physicalCode)
         => physicalCode is KeyCode.NonConvert or KeyCode.Convert or KeyCode.Space or KeyCode.Kana;
 
-    private bool TryHandleImeSpaceAlphabetRollover(KeyId key, long timestampMs)
+    private bool TryHandleImeSpaceAlphabetRollover(
+        KeyId key, long timestampMs, ref SpaceImeRolloverDiagnostic diagnostic)
     {
         if (!_layers.Layers.IsExact(LayerKey.S))
             return false;
@@ -426,14 +432,40 @@ internal sealed class IKeydRuntimeHandler : IKeyboardEventHandler, IInputStateRe
         // prevents auto-repeat or a following letter from falling back to the
         // legacy Space-as-Shift path and corrupting IME composition again.
         if (_spaceImeRolloverCommitted)
+        {
+            diagnostic = new(SpaceImeRolloverDecision.Continuation);
             return true;
+        }
 
-        if (_layers.Consumed ||
-            !_inputMethod.IsKanaInputActive() ||
-            _inputMethod is not IInputCompositionState compositionState ||
-            !compositionState.IsCompositionActive() ||
-            !IsAlphabetKey(key.Code))
+        // Keep the original short-circuit order; never query the IME for logging.
+        if (_layers.Consumed)
+        {
+            diagnostic = new(SpaceImeRolloverDecision.Consumed);
             return false;
+        }
+        diagnostic = new(SpaceImeRolloverDecision.Interrupted);
+        diagnostic = diagnostic with { KanaActive = _inputMethod.IsKanaInputActive() };
+        if (diagnostic.KanaActive == false)
+        {
+            diagnostic = diagnostic with { Decision = SpaceImeRolloverDecision.NotKana };
+            return false;
+        }
+        if (_inputMethod is not IInputCompositionState compositionState)
+        {
+            diagnostic = diagnostic with { Decision = SpaceImeRolloverDecision.CompositionUnavailable };
+            return false;
+        }
+        diagnostic = diagnostic with { CompositionActive = compositionState.IsCompositionActive() };
+        if (diagnostic.CompositionActive == false)
+        {
+            diagnostic = diagnostic with { Decision = SpaceImeRolloverDecision.NoComposition };
+            return false;
+        }
+        if (!IsAlphabetKey(key.Code))
+        {
+            diagnostic = diagnostic with { Decision = SpaceImeRolloverDecision.NotAlphabet };
+            return false;
+        }
 
         // Match the legacy chord boundary: only an alphabet key arriving within
         // the configured inclusive chord window is a fast Space -> letter rollover.
@@ -442,13 +474,31 @@ internal sealed class IKeydRuntimeHandler : IKeyboardEventHandler, IInputStateRe
         // only while an actual unconfirmed IME composition exists; IME-open state
         // alone is insufficient because terminal-style apps surface the injected
         // Space as a literal 0x20 byte.
-        if (_spacePressedAtMs is not { } spacePressedAtMs ||
-            timestampMs < spacePressedAtMs ||
-            timestampMs - spacePressedAtMs > _configuration.ChordWindowMs)
+        if (_spacePressedAtMs is not { } spacePressedAtMs)
+        {
+            diagnostic = diagnostic with { Decision = SpaceImeRolloverDecision.MissingPress };
             return false;
+        }
+        if (timestampMs < spacePressedAtMs)
+        {
+            diagnostic = diagnostic with { Decision = SpaceImeRolloverDecision.TimestampReversed };
+            return false;
+        }
+        diagnostic = diagnostic with
+        {
+            ElapsedMs = timestampMs - spacePressedAtMs,
+            ThresholdMs = _configuration.ChordWindowMs
+        };
+        if (diagnostic.ElapsedMs > diagnostic.ThresholdMs)
+        {
+            diagnostic = diagnostic with { Decision = SpaceImeRolloverDecision.LongHold };
+            return false;
+        }
 
+        diagnostic = diagnostic with { SpaceSend = SpaceImeSendStatus.Attempted };
         _send.SendKey(WindowsKeyMap.Space);
         _spaceImeRolloverCommitted = true;
+        diagnostic = diagnostic with { Decision = SpaceImeRolloverDecision.Committed, SpaceSend = SpaceImeSendStatus.Returned };
         return true;
     }
 
